@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.sp
 fun LetterHomeScreen(
     onWrite: () -> Unit,
     onHistory: () -> Unit,
+    onReflection: () -> Unit,
     onProfile: () -> Unit,
     onTab: (MainTab) -> Unit,
     showBottomBar: Boolean = true
@@ -86,7 +87,7 @@ fun LetterHomeScreen(
                     TodayLetterCard(onWrite = onWrite)
                 }
                 item {
-                    ReflectionReportCard(onClick = onHistory)
+                    ReflectionReportCard(onClick = onReflection)
                 }
             }
         }

@@ -16,6 +16,8 @@ sealed interface Screen {
     data object Profile : Screen
     data object EditProfile : Screen
     data object Interests : Screen
+    data object WriteReflection : Screen
+    data class ReflectionDetail(val title: String) : Screen
 }
 
 data class FeedPost(

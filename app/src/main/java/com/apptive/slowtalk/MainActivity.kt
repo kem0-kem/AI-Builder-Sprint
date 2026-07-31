@@ -144,6 +144,8 @@ private fun ApptiveApp() {
                 is Screen.Chat, Screen.CreateGroup -> Screen.Conversations
                 Screen.WriteLetter, Screen.LetterHistory -> Screen.LetterHome
                 is Screen.LetterDetail -> Screen.LetterHistory
+                Screen.WriteReflection -> Screen.LetterHome
+                is Screen.ReflectionDetail -> Screen.LetterHome
                 Screen.Profile -> profileReturnScreen
                 Screen.EditProfile -> Screen.Profile
                 Screen.Interests -> Screen.Profile
@@ -211,6 +213,7 @@ private fun ApptiveApp() {
                         else -> LetterHomeScreen(
                             onWrite = { screen = Screen.WriteLetter },
                             onHistory = { screen = Screen.LetterHistory },
+                            onReflection = { screen = Screen.WriteReflection },
                             onProfile = {
                                 profileReturnScreen = Screen.LetterHome
                                 screen = Screen.Profile
@@ -276,6 +279,22 @@ private fun ApptiveApp() {
             is Screen.LetterDetail -> LetterDetailScreen(
                 letter = letters.firstOrNull { it.title == current.title } ?: letters.first(),
                 onBack = { screen = Screen.LetterHistory }
+            )
+            Screen.WriteReflection -> WriteReflectionScreen(
+                onBack = { screen = Screen.LetterHome },
+                onFinish = { screen = Screen.ReflectionDetail("천천히 걸었던 하루") },
+                onProfile = {
+                    profileReturnScreen = Screen.WriteReflection
+                    screen = Screen.Profile
+                }
+            )
+            is Screen.ReflectionDetail -> ReflectionDetailScreen(
+                title = current.title,
+                onBack = { screen = Screen.LetterHome },
+                onProfile = {
+                    profileReturnScreen = current
+                    screen = Screen.Profile
+                }
             )
             Screen.Profile -> ProfileOverviewScreen(
                 location = profileLocation,
