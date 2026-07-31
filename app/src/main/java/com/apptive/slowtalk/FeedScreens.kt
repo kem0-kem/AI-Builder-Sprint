@@ -387,7 +387,11 @@ fun WriteFeedScreen(
                 item {
                     Card(
                         shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(PurpleSoft.copy(alpha = 0.72f)),
+                        colors = CardDefaults.cardColors(BlockSurface),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            Purple.copy(alpha = 0.16f)
+                        ),
                         elevation = CardDefaults.cardElevation(2.dp)
                     ) {
                         Column(Modifier.padding(16.dp)) {
@@ -421,14 +425,10 @@ fun WriteFeedScreen(
                                 color = SubtleInk,
                                 fontSize = 12.sp
                             )
-                            Spacer(Modifier.height(13.dp))
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(16.dp),
-                                color = BlockSurface,
-                                border = androidx.compose.foundation.BorderStroke(1.dp, LineColor)
-                            ) {
-                                Column(Modifier.padding(14.dp)) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 14.dp),
+                                color = Purple.copy(alpha = 0.12f)
+                            )
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
                                             Icons.Outlined.CheckCircle,
@@ -459,7 +459,7 @@ fun WriteFeedScreen(
                                     }
                                     HorizontalDivider(
                                         modifier = Modifier.padding(vertical = 13.dp),
-                                        color = LineColor
+                                        color = Purple.copy(alpha = 0.12f)
                                     )
                                     Row(modifier = Modifier.fillMaxWidth()) {
                                         Column(Modifier.weight(1f)) {
@@ -501,8 +501,6 @@ fun WriteFeedScreen(
                                             )
                                         }
                                     }
-                                }
-                            }
                         }
                     }
                 }

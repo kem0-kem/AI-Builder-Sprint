@@ -45,6 +45,7 @@ private fun ApptiveApp() {
     val context = LocalContext.current
     val activity = context as? Activity
     var screen by remember { mutableStateOf<Screen>(Screen.Feed) }
+    var profileReturnScreen by remember { mutableStateOf<Screen>(Screen.Feed) }
     var lastBackPressTime by remember { mutableLongStateOf(0L) }
     var profileLocation by remember { mutableStateOf("서울 마포구") }
     val likedFeeds = remember { mutableStateMapOf<Int, Boolean>() }
@@ -143,7 +144,7 @@ private fun ApptiveApp() {
                 is Screen.Chat, Screen.CreateGroup -> Screen.Conversations
                 Screen.WriteLetter, Screen.LetterHistory -> Screen.LetterHome
                 is Screen.LetterDetail -> Screen.LetterHistory
-                Screen.Profile -> Screen.Feed
+                Screen.Profile -> profileReturnScreen
                 Screen.EditProfile -> Screen.Profile
                 Screen.Interests -> Screen.Profile
                 else -> Screen.Feed
@@ -185,7 +186,10 @@ private fun ApptiveApp() {
                             groups = groupConversations,
                             onOpen = { screen = Screen.Chat(it.title, it.isGroup) },
                             onCreateGroup = { screen = Screen.CreateGroup },
-                            onProfile = { screen = Screen.Profile },
+                            onProfile = {
+                                profileReturnScreen = Screen.Conversations
+                                screen = Screen.Profile
+                            },
                             onTab = { screen = it.toScreen() },
                             showBottomBar = false
                         )
@@ -197,14 +201,20 @@ private fun ApptiveApp() {
                                 likedFeeds[id] = likedFeeds[id] != true
                             },
                             onWrite = { screen = Screen.WriteFeed },
-                            onProfile = { screen = Screen.Profile },
+                            onProfile = {
+                                profileReturnScreen = Screen.Feed
+                                screen = Screen.Profile
+                            },
                             onTab = { screen = it.toScreen() },
                             showBottomBar = false
                         )
                         else -> LetterHomeScreen(
                             onWrite = { screen = Screen.WriteLetter },
                             onHistory = { screen = Screen.LetterHistory },
-                            onProfile = { screen = Screen.Profile },
+                            onProfile = {
+                                profileReturnScreen = Screen.LetterHome
+                                screen = Screen.Profile
+                            },
                             onTab = { screen = it.toScreen() },
                             showBottomBar = false
                         )
@@ -213,7 +223,10 @@ private fun ApptiveApp() {
             }
             Screen.WriteFeed -> WriteFeedScreen(
                 onBack = { screen = Screen.Feed },
-                onProfile = { screen = Screen.Profile },
+                onProfile = {
+                    profileReturnScreen = Screen.WriteFeed
+                    screen = Screen.Profile
+                },
                 onPublish = { category, title, body ->
                     feeds.add(
                         0,
@@ -265,6 +278,7 @@ private fun ApptiveApp() {
             )
             Screen.Profile -> ProfileOverviewScreen(
                 location = profileLocation,
+                onBack = { screen = profileReturnScreen },
                 onEdit = { screen = Screen.EditProfile },
                 onInterests = { screen = Screen.Interests }
             )

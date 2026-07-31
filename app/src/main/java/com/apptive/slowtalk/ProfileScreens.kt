@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.LocationOn
@@ -49,6 +50,7 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun ProfileOverviewScreen(
     location: String,
+    onBack: () -> Unit,
     onEdit: () -> Unit,
     onInterests: () -> Unit
 ) {
@@ -67,6 +69,12 @@ fun ProfileOverviewScreen(
                         .padding(top = 12.dp, bottom = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.Outlined.ArrowBack,
+                            contentDescription = "뒤로"
+                        )
+                    }
                     Text(
                         "내 프로필",
                         modifier = Modifier.weight(1f),
