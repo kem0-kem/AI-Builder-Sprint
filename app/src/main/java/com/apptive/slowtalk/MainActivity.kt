@@ -235,7 +235,8 @@ private fun ApptiveApp() {
                             category = category,
                             title = title,
                             body = body,
-                            accent = Purple
+                            accent = Purple,
+                            isMine = true
                         )
                     )
                     screen = Screen.Feed

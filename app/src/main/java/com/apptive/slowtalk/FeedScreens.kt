@@ -1,6 +1,7 @@
 package com.apptive.slowtalk
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -70,7 +71,9 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+private enum class FeedIndex { ALL, MINE }
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun FeedScreen(
     feeds: List<FeedPost>,
@@ -83,7 +86,12 @@ fun FeedScreen(
     showBottomBar: Boolean = true
 ) {
     var isRefreshing by remember { mutableStateOf(false) }
+    var selectedIndex by remember { mutableStateOf(FeedIndex.ALL) }
     val refreshScope = rememberCoroutineScope()
+    val visibleFeeds = when (selectedIndex) {
+        FeedIndex.ALL -> feeds.filterNot { it.isMine }
+        FeedIndex.MINE -> feeds.filter { it.isMine }
+    }
 
     PaperBackground {
         Scaffold(
@@ -120,7 +128,18 @@ fun FeedScreen(
                     item {
                         PageHeader("피드", "서로의 이야기를 천천히 만나보세요.", onProfile)
                     }
-                    items(feeds) { post ->
+                    stickyHeader {
+                        FeedIndexSelector(
+                            selected = selectedIndex,
+                            onSelected = { selectedIndex = it }
+                        )
+                    }
+                    if (visibleFeeds.isEmpty()) {
+                        item {
+                            EmptyMyFeedMessage()
+                        }
+                    }
+                    items(visibleFeeds, key = { it.id }) { post ->
                         FeedCard(
                             post = post,
                             onOpenFeed = onOpenFeed,
@@ -131,6 +150,104 @@ fun FeedScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun FeedIndexSelector(
+    selected: FeedIndex,
+    onSelected: (FeedIndex) -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = Paper
+    ) {
+        Surface(
+            modifier = Modifier.padding(horizontal = 22.dp, vertical = 8.dp),
+            shape = RoundedCornerShape(24.dp),
+            color = Color(0xFFF3F0EE)
+        ) {
+            Row(Modifier.padding(4.dp)) {
+                FeedIndex.entries.forEach { index ->
+                    val isSelected = selected == index
+                    Surface(
+                        onClick = { onSelected(index) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(20.dp),
+                        color = if (isSelected) BlockSurface else Color.Transparent,
+                        border = if (isSelected) {
+                            androidx.compose.foundation.BorderStroke(1.dp, LineColor)
+                        } else {
+                            null
+                        },
+                        shadowElevation = if (isSelected) 1.dp else 0.dp
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 9.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (index == FeedIndex.MINE) {
+                                Icon(
+                                    Icons.Outlined.AccountCircle,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(17.dp),
+                                    tint = if (isSelected) Purple else SubtleInk
+                                )
+                                Spacer(Modifier.size(5.dp))
+                            }
+                            Text(
+                                text = if (index == FeedIndex.ALL) "전체 피드" else "내가 쓴 피드",
+                                color = if (isSelected) Purple else SubtleInk,
+                                fontSize = 13.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyMyFeedMessage() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 36.dp, vertical = 54.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Surface(
+            modifier = Modifier.size(52.dp),
+            shape = CircleShape,
+            color = PurpleSoft
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.Outlined.AutoAwesome,
+                    contentDescription = null,
+                    tint = Purple,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        Text(
+            "아직 내가 쓴 피드가 없어요.",
+            color = Ink,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "피드를 작성하면 이곳에서 모아볼 수 있어요.",
+            color = SubtleInk,
+            fontSize = 13.sp,
+            textAlign = TextAlign.Center
+        )
     }
 }
 
@@ -178,7 +295,11 @@ private fun FeedCard(
                 Spacer(Modifier.height(5.dp))
                 Text(post.body, color = SubtleInk, lineHeight = 20.sp, fontSize = 13.sp)
                 Spacer(Modifier.height(8.dp))
-                Text("익명의 이웃", color = SubtleInk, fontSize = 12.sp)
+                Text(
+                    if (post.isMine) "내가 쓴 익명 피드" else "익명의 이웃",
+                    color = SubtleInk,
+                    fontSize = 12.sp
+                )
             }
             HorizontalDivider(Modifier.padding(vertical = 10.dp), color = LineColor)
             Row(

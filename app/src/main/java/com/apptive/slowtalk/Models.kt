@@ -24,7 +24,8 @@ data class FeedPost(
     val title: String,
     val body: String,
     val comments: MutableList<Comment> = mutableListOf(),
-    val accent: Color
+    val accent: Color,
+    val isMine: Boolean = false
 )
 
 data class Comment(
