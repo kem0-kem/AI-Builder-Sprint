@@ -26,12 +26,15 @@ import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Eco
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Flight
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Report
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.School
 import androidx.compose.material.icons.outlined.Send
@@ -41,6 +44,9 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -351,12 +357,16 @@ private fun FeedCard(
 fun WriteFeedScreen(
     onBack: () -> Unit,
     onProfile: () -> Unit,
+    initialPost: FeedPost? = null,
     onPublish: (String, String, String) -> Unit
 ) {
     val categories = feedCategoryVisuals
-    var category by remember { mutableStateOf(categories.first().name) }
-    var title by remember { mutableStateOf("") }
-    var body by remember { mutableStateOf("") }
+    var category by remember(initialPost?.id) {
+        mutableStateOf(initialPost?.category ?: categories.first().name)
+    }
+    var title by remember(initialPost?.id) { mutableStateOf(initialPost?.title.orEmpty()) }
+    var body by remember(initialPost?.id) { mutableStateOf(initialPost?.body.orEmpty()) }
+    val isEditing = initialPost != null
 
     PaperBackground {
         Scaffold(containerColor = Color.Transparent) { padding ->
@@ -375,7 +385,7 @@ fun WriteFeedScreen(
                     ) {
                         IconButton(onClick = onBack) { Icon(Icons.Outlined.ArrowBack, "뒤로") }
                         Text(
-                            "피드 쓰기",
+                            if (isEditing) "피드 수정" else "피드 쓰기",
                             modifier = Modifier.weight(1f),
                             fontSize = 24.sp,
                             fontWeight = FontWeight.ExtraBold
@@ -636,7 +646,10 @@ fun WriteFeedScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = Purple)
                     ) {
                         Icon(Icons.Outlined.Send, null)
-                        Text("  피드 올리기 (익명)", fontWeight = FontWeight.Bold)
+                        Text(
+                            if (isEditing) "  수정 완료" else "  피드 올리기 (익명)",
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
                 item {
@@ -721,12 +734,18 @@ fun FeedDetailScreen(
     post: FeedPost,
     isLiked: Boolean,
     onToggleLike: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onReport: () -> Unit,
     onBack: () -> Unit
 ) {
     var comment by remember { mutableStateOf("") }
     var comments by remember { mutableStateOf(post.comments.toList()) }
     var replyTarget by remember { mutableStateOf<Pair<Int, String>?>(null) }
     var isRefreshing by remember { mutableStateOf(false) }
+    var menuExpanded by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var showReportDialog by remember { mutableStateOf(false) }
     val commentFocusRequester = remember { FocusRequester() }
     val refreshScope = rememberCoroutineScope()
 
@@ -734,6 +753,66 @@ fun FeedDetailScreen(
         if (replyTarget != null) {
             commentFocusRequester.requestFocus()
         }
+    }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("피드를 삭제할까요?", fontWeight = FontWeight.Bold) },
+            text = { Text("삭제한 피드는 다시 복구할 수 없어요.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteDialog = false
+                        onDelete()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD95C55))
+                ) {
+                    Text("삭제")
+                }
+            },
+            dismissButton = {
+                Button(
+                    onClick = { showDeleteDialog = false },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = SubtleInk
+                    )
+                ) {
+                    Text("취소")
+                }
+            }
+        )
+    }
+
+    if (showReportDialog) {
+        AlertDialog(
+            onDismissRequest = { showReportDialog = false },
+            title = { Text("이 피드를 신고할까요?", fontWeight = FontWeight.Bold) },
+            text = { Text("운영 정책에 따라 내용을 확인할 수 있도록 신고가 접수됩니다.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showReportDialog = false
+                        onReport()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Purple)
+                ) {
+                    Text("신고")
+                }
+            },
+            dismissButton = {
+                Button(
+                    onClick = { showReportDialog = false },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = SubtleInk
+                    )
+                ) {
+                    Text("취소")
+                }
+            }
+        )
     }
 
     PaperBackground {
@@ -871,7 +950,53 @@ fun FeedDetailScreen(
                             IconButton(onClick = onBack) { Icon(Icons.Outlined.ArrowBack, "뒤로") }
                             Text("피드", fontSize = 27.sp, fontWeight = FontWeight.ExtraBold)
                             Spacer(Modifier.weight(1f))
-                            IconButton(onClick = {}) { Icon(Icons.Outlined.MoreVert, "더보기") }
+                            Box {
+                                IconButton(onClick = { menuExpanded = true }) {
+                                    Icon(Icons.Outlined.MoreVert, "더보기")
+                                }
+                                DropdownMenu(
+                                    expanded = menuExpanded,
+                                    onDismissRequest = { menuExpanded = false }
+                                ) {
+                                    if (post.isMine) {
+                                        DropdownMenuItem(
+                                            text = { Text("수정") },
+                                            leadingIcon = {
+                                                Icon(Icons.Outlined.Edit, contentDescription = null)
+                                            },
+                                            onClick = {
+                                                menuExpanded = false
+                                                onEdit()
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("삭제", color = Color(0xFFD95C55)) },
+                                            leadingIcon = {
+                                                Icon(
+                                                    Icons.Outlined.DeleteOutline,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFFD95C55)
+                                                )
+                                            },
+                                            onClick = {
+                                                menuExpanded = false
+                                                showDeleteDialog = true
+                                            }
+                                        )
+                                    } else {
+                                        DropdownMenuItem(
+                                            text = { Text("신고") },
+                                            leadingIcon = {
+                                                Icon(Icons.Outlined.Report, contentDescription = null)
+                                            },
+                                            onClick = {
+                                                menuExpanded = false
+                                                showReportDialog = true
+                                            }
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                     item {

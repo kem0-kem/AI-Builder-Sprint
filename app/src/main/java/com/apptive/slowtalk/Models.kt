@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.Color
 sealed interface Screen {
     data object Feed : Screen
     data object WriteFeed : Screen
+    data class EditFeed(val feedId: Int) : Screen
     data class FeedDetail(val feedId: Int) : Screen
     data object Conversations : Screen
     data class Chat(val title: String, val isGroup: Boolean = false) : Screen

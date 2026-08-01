@@ -14,9 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -25,6 +23,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -32,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.apptive.slowtalk.ui.profile.ProfileViewModel
 import com.apptive.slowtalk.ui.theme.SlowTalkTheme
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,11 +48,11 @@ class MainActivity : ComponentActivity() {
 private fun ApptiveApp() {
     val context = LocalContext.current
     val activity = context as? Activity
+    val appScope = rememberCoroutineScope()
     val profileViewModel: ProfileViewModel = viewModel()
     var screen by remember { mutableStateOf<Screen>(Screen.Feed) }
     var profileReturnScreen by remember { mutableStateOf<Screen>(Screen.Feed) }
     var lastBackPressTime by remember { mutableLongStateOf(0L) }
-    var profileLocation by remember { mutableStateOf("서울 마포구") }
     val likedFeeds = remember { mutableStateMapOf<Int, Boolean>() }
     val feeds = remember {
         mutableStateListOf(
@@ -145,12 +145,11 @@ private fun ApptiveApp() {
             }
         } else {
             screen = when (screen) {
-                is Screen.FeedDetail, Screen.WriteFeed -> Screen.Feed
+                is Screen.FeedDetail, is Screen.EditFeed, Screen.WriteFeed -> Screen.Feed
                 is Screen.Chat, Screen.CreateGroup -> Screen.Conversations
                 Screen.WriteLetter, Screen.LetterHistory -> Screen.LetterHome
                 is Screen.LetterDetail -> Screen.LetterHistory
-                Screen.WriteReflection -> Screen.LetterHome
-                is Screen.ReflectionDetail -> Screen.LetterHome
+                Screen.WriteReflection, is Screen.ReflectionDetail -> Screen.LetterHome
                 Screen.Profile -> profileReturnScreen
                 Screen.EditProfile -> Screen.Profile
                 Screen.Interests -> Screen.Profile
@@ -159,9 +158,11 @@ private fun ApptiveApp() {
         }
     }
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = Color.White
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Paper)
+            .safeDrawingPadding()
     ) {
         when (val current = screen) {
             Screen.Feed, Screen.Conversations, Screen.LetterHome -> Scaffold(
@@ -248,6 +249,48 @@ private fun ApptiveApp() {
                     screen = Screen.Feed
                 }
             )
+            is Screen.EditFeed -> {
+                val post = feeds.firstOrNull { it.id == current.feedId }
+                if (post == null) {
+                    screen = Screen.Feed
+                } else {
+                    WriteFeedScreen(
+                        initialPost = post,
+                        onBack = { screen = Screen.FeedDetail(post.id) },
+                        onProfile = {
+                            profileReturnScreen = current
+                            screen = Screen.Profile
+                        },
+                        onPublish = { category, title, body ->
+                            val index = feeds.indexOfFirst { it.id == post.id }
+                            if (index >= 0) {
+                                feeds[index] = post.copy(
+                                    category = category,
+                                    title = title,
+                                    body = body
+                                )
+                            }
+                            screen = Screen.FeedDetail(post.id)
+                            if (FeedApi.isConfigured) {
+                                appScope.launch {
+                                    FeedApi.updateFeed(
+                                        feedId = post.id,
+                                        categoryId = feedCategoryId(category),
+                                        title = title,
+                                        content = body
+                                    ).onFailure {
+                                        Toast.makeText(
+                                            context,
+                                            "서버에 수정 내용을 반영하지 못했습니다.",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                }
+                            }
+                        }
+                    )
+                }
+            }
             is Screen.FeedDetail -> {
                 val post = feeds.first { it.id == current.feedId }
                 FeedDetailScreen(
@@ -255,6 +298,38 @@ private fun ApptiveApp() {
                     isLiked = likedFeeds[post.id] == true,
                     onToggleLike = {
                         likedFeeds[post.id] = likedFeeds[post.id] != true
+                    },
+                    onEdit = { screen = Screen.EditFeed(post.id) },
+                    onDelete = {
+                        feeds.removeAll { it.id == post.id }
+                        likedFeeds.remove(post.id)
+                        screen = Screen.Feed
+                        Toast.makeText(context, "피드가 삭제되었습니다.", Toast.LENGTH_SHORT).show()
+                        if (FeedApi.isConfigured) {
+                            appScope.launch {
+                                FeedApi.deleteFeed(post.id).onFailure {
+                                    Toast.makeText(
+                                        context,
+                                        "서버에서 피드를 삭제하지 못했습니다.",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        }
+                    },
+                    onReport = {
+                        Toast.makeText(context, "신고가 접수되었습니다.", Toast.LENGTH_SHORT).show()
+                        if (FeedApi.isConfigured) {
+                            appScope.launch {
+                                FeedApi.reportFeed(post.id).onFailure {
+                                    Toast.makeText(
+                                        context,
+                                        "신고를 서버에 전송하지 못했습니다.",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        }
                     },
                     onBack = { screen = Screen.Feed }
                 )
@@ -311,11 +386,7 @@ private fun ApptiveApp() {
             )
             Screen.Interests -> InterestSettingScreen(
                 onBack = { screen = Screen.Profile },
-                onComplete = { selected ->
-                    // 선택된 관심사를 뷰모델을 통해 업데이트하거나 상태에 반영할 수 있음
-                    // 여기서는 단순히 프로필로 복귀
-                    screen = Screen.Profile
-                }
+                onComplete = { _ -> screen = Screen.Profile }
             )
         }
     }
