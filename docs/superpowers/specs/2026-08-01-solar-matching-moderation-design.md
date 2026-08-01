@@ -209,6 +209,7 @@ Upstage의 정확한 모델 식별자와 출력 차원은 환경 설정으로 �
 - 작성자 본인의 제출만 조회할 수 있다.
 - 응답 상태: `PENDING_REVIEW`, `ALLOWED`, `BLOCKED`, `MANUAL_REVIEW`
 - `ALLOWED`이면 생성된 리소스 ID를 함께 반환한다.
+- OCR 제출이 `ALLOWED`이면 작성자에게 검열을 통과한 `text`를 반환한다. OCR 텍스트 암호문은 허용 판정 후 24시간 동안만 유지하고 만료 worker가 삭제한다.
 
 ### 내부 수동 판정
 
