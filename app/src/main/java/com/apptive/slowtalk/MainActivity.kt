@@ -362,11 +362,22 @@ private fun ApptiveApp() {
             )
             Screen.LetterHistory -> LetterHistoryScreen(
                 letters = letters,
+                loadLetters = { type -> LetterApi.getLetters(type) },
                 onBack = { screen = Screen.LetterHome },
-                onOpen = { screen = Screen.LetterDetail(it.title) }
+                onOpen = { screen = Screen.LetterDetail(it.id, it.title) }
             )
             is Screen.LetterDetail -> LetterDetailScreen(
-                letter = letters.firstOrNull { it.title == current.title } ?: letters.first(),
+                letter = letters.firstOrNull {
+                    (current.letterId != null && it.id == current.letterId) || it.title == current.title
+                } ?: Letter(
+                    title = current.title,
+                    preview = "편지 내용을 불러오고 있어요.",
+                    date = "",
+                    received = false,
+                    id = current.letterId,
+                    content = ""
+                ),
+                loadLetter = { letterId -> LetterApi.getLetter(letterId) },
                 onBack = { screen = Screen.LetterHistory }
             )
             Screen.WriteReflection -> WriteReflectionScreen(

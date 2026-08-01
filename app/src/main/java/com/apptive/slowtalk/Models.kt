@@ -17,7 +17,7 @@ sealed interface Screen {
     data object LetterHome : Screen
     data object WriteLetter : Screen
     data object LetterHistory : Screen
-    data class LetterDetail(val title: String) : Screen
+    data class LetterDetail(val letterId: Int?, val title: String) : Screen
     data object Profile : Screen
     data object EditProfile : Screen
     data object Interests : Screen
@@ -67,7 +67,9 @@ data class Letter(
     val title: String,
     val preview: String,
     val date: String,
-    val received: Boolean
+    val received: Boolean,
+    val id: Int? = null,
+    val content: String = preview
 )
 
 enum class MainTab { CONVERSATIONS, FEED, LETTER }

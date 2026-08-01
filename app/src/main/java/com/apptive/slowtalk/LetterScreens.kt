@@ -47,7 +47,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.collectAsState
 import com.apptive.slowtalk.ui.profile.ProfileViewModel
@@ -58,6 +57,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,9 +78,9 @@ fun WriteLetterScreen(
     onMatched: () -> Unit,
     onTab: (MainTab) -> Unit
 ) {
-    var bodyState by remember {
+    var body by remember {
         mutableStateOf(
-            TextFieldValue("오늘은 평소보다 조금 느리게 걸어봤어요.\n\n늘 빠르게만 지나치던 길들이\n천천히 바라보니 이렇게 예쁘더라고요.\n\n여러분의 하루는 어땠나요?")
+            "오늘은 평소보다 조금 느리게 걸어봤어요.\n\n늘 빠르게만 지나치던 길들이\n천천히 바라보니 이렇게 예쁘더라고요.\n\n여러분의 하루는 어땠나요?"
         )
     }
     var showMatch by remember { mutableStateOf(false) }
@@ -118,11 +118,11 @@ fun WriteLetterScreen(
                                 Icon(Icons.Outlined.Edit, null, tint = Purple)
                                 Text("  오늘의 편지", color = Purple, fontWeight = FontWeight.Bold)
                                 Spacer(Modifier.weight(1f))
-                                Text("${bodyState.text.length} / 1,000자", color = Purple, fontSize = 11.sp)
+                                Text("${body.length} / 1,000자", color = Purple, fontSize = 11.sp)
                             }
                             OutlinedTextField(
-                                value = bodyState,
-                                onValueChange = { if (it.text.length <= 1000) bodyState = it },
+                                value = body,
+                                onValueChange = { body = it.take(1000) },
                                 modifier = Modifier.fillMaxWidth().height(300.dp),
                                 placeholder = { Text("당신의 하루를 천천히 들려주세요.") }
                             )
@@ -191,7 +191,7 @@ fun WriteLetterScreen(
                 item {
                     Button(
                         onClick = { showMatch = true },
-                        enabled = bodyState.text.isNotBlank(),
+                        enabled = body.isNotBlank(),
                         modifier = Modifier.fillMaxWidth().height(56.dp),
                         shape = RoundedCornerShape(28.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Purple)
@@ -212,7 +212,7 @@ fun WriteLetterScreen(
             text = { Text("손글씨 사진을 읽어 편지 본문으로 옮기는 OCR 데모입니다.") },
             confirmButton = {
                 TextButton(onClick = {
-                    bodyState = TextFieldValue("오늘 하루도 잘 보내셨나요?\n손으로 적은 마음을 천천히 전해봅니다.\n작은 기쁨이 오래 머무는 하루이길 바라요.")
+                    body = "오늘 하루도 잘 보내셨나요?\n손으로 적은 마음을 천천히 전해봅니다.\n작은 기쁨이 오래 머무는 하루이길 바라요."
                     showOcr = false
                 }) { Text("샘플 인식하기") }
             },
@@ -237,9 +237,26 @@ fun WriteLetterScreen(
 }
 
 @Composable
-fun LetterHistoryScreen(letters: List<Letter>, onBack: () -> Unit, onOpen: (Letter) -> Unit) {
+fun LetterHistoryScreen(
+    letters: List<Letter>,
+    loadLetters: suspend (String?) -> Result<List<Letter>>,
+    onBack: () -> Unit,
+    onOpen: (Letter) -> Unit
+) {
     var filter by remember { mutableStateOf(0) }
-    val visible = letters.filter { filter == 0 || (filter == 1 && !it.received) || (filter == 2 && it.received) }
+    var remoteLetters by remember { mutableStateOf<List<Letter>?>(null) }
+    val requestedType = when (filter) {
+        1 -> "SENT"
+        2 -> "RECEIVED"
+        else -> null
+    }
+    LaunchedEffect(filter) {
+        remoteLetters = null
+        loadLetters(requestedType).onSuccess { remoteLetters = it }
+    }
+    val visible = (remoteLetters ?: letters).filter {
+        filter == 0 || (filter == 1 && !it.received) || (filter == 2 && it.received)
+    }
     PaperBackground {
         Scaffold(containerColor = Color.Transparent) { padding ->
             LazyColumn(
@@ -298,7 +315,17 @@ fun LetterHistoryScreen(letters: List<Letter>, onBack: () -> Unit, onOpen: (Lett
 }
 
 @Composable
-fun LetterDetailScreen(letter: Letter, onBack: () -> Unit) {
+fun LetterDetailScreen(
+    letter: Letter,
+    loadLetter: suspend (Int) -> Result<Letter>,
+    onBack: () -> Unit
+) {
+    var displayedLetter by remember(letter.id, letter.title) { mutableStateOf(letter) }
+    LaunchedEffect(letter.id) {
+        letter.id?.let { id ->
+            loadLetter(id).onSuccess { displayedLetter = it }
+        }
+    }
     PaperBackground {
         Scaffold(containerColor = Color.Transparent) { padding ->
             Column(Modifier.fillMaxSize().padding(padding).padding(20.dp)) {
@@ -306,9 +333,9 @@ fun LetterDetailScreen(letter: Letter, onBack: () -> Unit) {
                     IconButton(onClick = onBack) { Icon(Icons.Outlined.ArrowBack, "뒤로") }
                     Text("이전 편지", fontSize = 27.sp, fontWeight = FontWeight.ExtraBold)
                 }
-                Text(if (letter.received) "받은 편지" else "보낸 편지", color = Purple, fontWeight = FontWeight.Bold)
-                Text(letter.title, fontSize = 25.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(vertical = 8.dp))
-                Text(letter.date, color = SubtleInk, fontSize = 12.sp)
+                Text(if (displayedLetter.received) "받은 편지" else "보낸 편지", color = Purple, fontWeight = FontWeight.Bold)
+                Text(displayedLetter.title, fontSize = 25.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(vertical = 8.dp))
+                Text(displayedLetter.date, color = SubtleInk, fontSize = 12.sp)
                 Spacer(Modifier.height(16.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -316,7 +343,7 @@ fun LetterDetailScreen(letter: Letter, onBack: () -> Unit) {
                     colors = CardDefaults.cardColors(PurpleSoft.copy(alpha = 0.6f))
                 ) {
                     Text(
-                        "안녕하세요.\n\n오늘은 평소보다 조금 느리게 걸어봤어요.\n그 길에서 작은 행복들을 많이 발견했어요.\n\n늘 빠르게만 지나치던 것들이 천천히 바라보니 이렇게 예쁘더라고요.\n\n여러분의 하루는 어땠나요?\n오늘도 따뜻한 하루 보내세요.\n\n– 익명의 이웃 드림",
+                        displayedLetter.content.ifBlank { displayedLetter.preview },
                         modifier = Modifier.padding(24.dp),
                         fontSize = 15.sp,
                         lineHeight = 27.sp
@@ -340,8 +367,8 @@ fun ProfileEditScreen(
     
     val currentProfile = (uiState as? ProfileUiState.Success)?.profile
 
-    var nicknameState by remember { mutableStateOf(TextFieldValue(currentProfile?.nickname ?: "지연")) }
-    var introState by remember { mutableStateOf(TextFieldValue(currentProfile?.bio ?: "")) }
+    var nickname by remember { mutableStateOf(currentProfile?.nickname ?: "지연") }
+    var intro by remember { mutableStateOf(currentProfile?.bio ?: "") }
     
     // 지역 정보 파싱 (기존 로직 유지하되 서버 데이터 우선)
     val serverLocation = currentProfile?.let { 
@@ -396,8 +423,8 @@ fun ProfileEditScreen(
                             "저장",
                             modifier = Modifier.clickable {
                                 viewModel.updateProfile(
-                                    nickname = nicknameState.text,
-                                    bio = introState.text,
+                                    nickname = nickname,
+                                    bio = intro,
                                     interest = currentProfile?.interest ?: "",
                                     province = selectedProvince,
                                     district = selectedDistrict,
@@ -423,20 +450,11 @@ fun ProfileEditScreen(
                 }
                 item {
                     Text("닉네임", fontWeight = FontWeight.Bold)
-                    OutlinedTextField(
-                        value = nicknameState,
-                        onValueChange = { nicknameState = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
+                    OutlinedTextField(nickname, { nickname = it.take(10) }, Modifier.fillMaxWidth(), singleLine = true)
                 }
                 item {
                     Text("소개", fontWeight = FontWeight.Bold)
-                    OutlinedTextField(
-                        value = introState,
-                        onValueChange = { introState = it },
-                        modifier = Modifier.fillMaxWidth().height(110.dp)
-                    )
+                    OutlinedTextField(intro, { intro = it.take(100) }, Modifier.fillMaxWidth().height(110.dp))
                 }
                 item {
                     Text("거주지", fontWeight = FontWeight.Bold)
