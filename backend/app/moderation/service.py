@@ -129,7 +129,7 @@ class ModerationOrchestrator:
             submission = await self._repository.create_pending(normalized_command, None)
             return ModerationOutcome.pending(submission.id)
 
-        assessment = _combine(local, provider_assessment)
+        assessment = combine_assessments(local, provider_assessment)
         if (
             assessment.decision is ModerationDecision.BLOCK
             and assessment.confidence >= self._block_confidence
@@ -151,7 +151,7 @@ class ModerationOrchestrator:
         return ModerationOutcome.pending(submission.id)
 
 
-def _combine(
+def combine_assessments(
     local: LocalRuleResult, provider: ModerationAssessment
 ) -> ModerationAssessment:
     if local.decision is ModerationDecision.ALLOW:

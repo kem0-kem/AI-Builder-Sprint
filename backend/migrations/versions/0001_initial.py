@@ -2,6 +2,7 @@
 
 from collections.abc import Sequence
 
+import sqlalchemy as sa
 from alembic import op
 from sqlalchemy import Table
 
@@ -26,7 +27,6 @@ HISTORICAL_TABLE_NAMES = (
     "chat_rooms",
     "chat_participants",
     "chat_messages",
-    "outbox_events",
     "feed_categories",
     "feeds",
     "comments",
@@ -52,7 +52,20 @@ def _historical_tables() -> list[Table]:
 
 def upgrade() -> None:
     Base.metadata.create_all(bind=op.get_bind(), tables=_historical_tables())
+    op.create_table(
+        "outbox_events",
+        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.Column("topic", sa.String(80), nullable=False),
+        sa.Column("aggregate_id", sa.Uuid(), nullable=False),
+        sa.Column("payload", sa.Text(), nullable=False),
+        sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_outbox_events_topic", "outbox_events", ["topic"])
+    op.create_index("ix_outbox_events_aggregate_id", "outbox_events", ["aggregate_id"])
 
 
 def downgrade() -> None:
+    op.drop_table("outbox_events")
     Base.metadata.drop_all(bind=op.get_bind(), tables=_historical_tables())

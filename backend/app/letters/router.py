@@ -6,9 +6,10 @@ from sqlalchemy import and_, select
 
 from app.auth.dependencies import CurrentUserId, Session
 from app.auth.models import User
-from app.chat.models import ChatMessage, ChatParticipant, ChatRoom, OutboxEvent
+from app.chat.models import ChatMessage, ChatParticipant, ChatRoom
 from app.common.responses import page, success
 from app.core.errors import ApiError
+from app.events.outbox import OutboxEvent
 from app.letters.models import IdempotencyRecord, Letter, MailboxEntry, UserBlock
 from app.letters.schemas import LetterCreate
 

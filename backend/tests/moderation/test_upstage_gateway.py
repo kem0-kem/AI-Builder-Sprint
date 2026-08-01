@@ -350,7 +350,7 @@ def test_enforce_mode_accepts_complete_moderation_configuration() -> None:
         upstage_chat_model="configured-solar-model",
         moderation_encryption_key="test-encryption-key",
         content_hash_pepper="test-content-pepper",
-        internal_moderation_token="test-internal-token",
+        internal_moderation_token="i" * 32,
         moderation_allow_confidence=0.80,
         moderation_block_confidence=0.90,
     )
@@ -404,7 +404,7 @@ def test_enforce_mode_rejects_whitespace_only_required_values(field: str) -> Non
         "upstage_chat_model": "configured-solar-model",
         "moderation_encryption_key": "test-encryption-key",
         "content_hash_pepper": "test-content-pepper",
-        "internal_moderation_token": "test-internal-token",
+        "internal_moderation_token": "i" * 32,
         "moderation_allow_confidence": 0.80,
         "moderation_block_confidence": 0.90,
     }

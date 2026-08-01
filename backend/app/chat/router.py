@@ -8,11 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import CurrentUserId, Session
 from app.auth.security import decode_access_token
-from app.chat.models import ChatMessage, ChatParticipant, ChatRoom, OutboxEvent
+from app.chat.models import ChatMessage, ChatParticipant, ChatRoom
 from app.chat.schemas import MessageCreate, ReadPositionUpdate
 from app.common.responses import page, success
 from app.core.errors import ApiError
 from app.db.session import get_session
+from app.events.outbox import OutboxEvent
 
 router = APIRouter(tags=["chat"])
 

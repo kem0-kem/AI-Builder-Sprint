@@ -44,6 +44,12 @@ class ContentSubmission(Base):
             "status",
             "next_attempt_at",
         ),
+        Index(
+            "ix_content_submissions_result_expiry",
+            "status",
+            "content_type",
+            "result_expires_at",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -64,6 +70,9 @@ class ContentSubmission(Base):
     attempt_count: Mapped[int] = mapped_column(default=0)
     next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     resolved_resource_id: Mapped[UUID | None] = mapped_column(default=None)
+    result_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 

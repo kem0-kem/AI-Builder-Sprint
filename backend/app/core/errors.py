@@ -46,7 +46,16 @@ async def validation_error_handler(_: Request, exc: Exception) -> JSONResponse:
             "error": {
                 "code": "VALIDATION_ERROR",
                 "message": "요청 값을 확인해 주세요.",
-                "details": {"fields": exc.errors()},
+                "details": {
+                    "fields": [
+                        {
+                            "type": error.get("type"),
+                            "loc": error.get("loc"),
+                            "msg": error.get("msg"),
+                        }
+                        for error in exc.errors()
+                    ]
+                },
             },
             "meta": None,
         },

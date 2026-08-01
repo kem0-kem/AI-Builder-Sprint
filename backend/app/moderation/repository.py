@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
 
@@ -8,6 +8,7 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ApiError
+from app.events.outbox import OutboxRepository
 from app.moderation.crypto import CommandCipher, EncryptedPayload, content_hash
 from app.moderation.models import (
     ContentSubmission,
@@ -59,6 +60,7 @@ class ModerationRepository:
         self._provider = provider
         self._model = model
         self._prompt_version = prompt_version
+        self._outbox = OutboxRepository(session)
 
     async def create_pending(
         self,
@@ -66,6 +68,7 @@ class ModerationRepository:
         assessment: ModerationAssessment | None = None,
     ) -> ContentSubmission:
         encrypted = self._cipher.encrypt(command.payload)
+        first_retry_at = datetime.now(UTC) + timedelta(minutes=1)
         submission = ContentSubmission(
             owner_id=command.owner_id,
             content_type=command.content_type,
@@ -76,11 +79,22 @@ class ModerationRepository:
             content_hash=content_hash(command.text, self._hash_pepper),
             idempotency_key=command.idempotency_key,
             status=SubmissionStatus.PENDING_REVIEW,
+            next_attempt_at=first_retry_at,
         )
         self._session.add(submission)
         await self._session.flush()
         if assessment is not None:
             await self.record_decision(submission.id, assessment)
+        await self._outbox.add(
+            "moderation.retry",
+            submission.id,
+            {
+                "submissionId": str(submission.id),
+                "scheduledAt": first_retry_at.isoformat(),
+                "attempt": 0,
+            },
+            available_at=first_retry_at,
+        )
         return submission
 
     async def create_blocked(
@@ -149,24 +163,257 @@ class ModerationRepository:
         self._session.add(record)
         return record
 
-    async def mark_allowed(self, submission_id: UUID, resource_id: UUID | None) -> None:
-        await self._transition(
-            submission_id,
-            status=SubmissionStatus.ALLOWED,
-            resolved_resource_id=resource_id,
-            resolved_at=datetime.now(UTC),
-            next_attempt_at=None,
-        )
+    async def mark_allowed(
+        self,
+        submission_id: UUID,
+        resource_id: UUID | None,
+        *,
+        result_expires_at: datetime | None = None,
+    ) -> None:
+        values: dict[str, object] = {
+            "status": SubmissionStatus.ALLOWED,
+            "resolved_resource_id": resource_id,
+            "resolved_at": datetime.now(UTC),
+            "result_expires_at": result_expires_at,
+            "next_attempt_at": None,
+        }
+        if result_expires_at is None:
+            values.update(ciphertext=None, nonce=None)
+        await self._transition(submission_id, values)
 
     async def mark_blocked(self, submission_id: UUID) -> None:
         await self._transition(
             submission_id,
-            status=SubmissionStatus.BLOCKED,
-            ciphertext=None,
-            nonce=None,
-            resolved_at=datetime.now(UTC),
-            next_attempt_at=None,
+            {
+                "status": SubmissionStatus.BLOCKED,
+                "ciphertext": None,
+                "nonce": None,
+                "resolved_at": datetime.now(UTC),
+                "next_attempt_at": None,
+                "result_expires_at": None,
+            },
         )
+
+    async def mark_manual_allowed(
+        self,
+        submission_id: UUID,
+        resource_id: UUID | None,
+        *,
+        result_expires_at: datetime | None = None,
+    ) -> None:
+        values: dict[str, object] = {
+            "status": SubmissionStatus.ALLOWED,
+            "resolved_resource_id": resource_id,
+            "resolved_at": datetime.now(UTC),
+            "result_expires_at": result_expires_at,
+            "next_attempt_at": None,
+        }
+        if result_expires_at is None:
+            values.update(ciphertext=None, nonce=None)
+        await self._transition(
+            submission_id,
+            values,
+            expected_statuses=(SubmissionStatus.MANUAL_REVIEW,),
+        )
+
+    async def mark_manual_blocked(self, submission_id: UUID) -> None:
+        await self._transition(
+            submission_id,
+            {
+                "status": SubmissionStatus.BLOCKED,
+                "ciphertext": None,
+                "nonce": None,
+                "resolved_at": datetime.now(UTC),
+                "next_attempt_at": None,
+                "result_expires_at": None,
+            },
+            expected_statuses=(SubmissionStatus.MANUAL_REVIEW,),
+        )
+
+    async def resolve_allowed(
+        self,
+        submission: ContentSubmission,
+        resource_id: UUID | None,
+        assessment: ModerationAssessment,
+        *,
+        provenance: DecisionProvenance | None = None,
+        expected_status: SubmissionStatus = SubmissionStatus.PENDING_REVIEW,
+        result_expires_at: datetime | None = None,
+    ) -> bool:
+        values: dict[str, object] = {
+            "status": SubmissionStatus.ALLOWED,
+            "resolved_resource_id": resource_id,
+            "resolved_at": datetime.now(UTC),
+            "result_expires_at": result_expires_at,
+            "next_attempt_at": None,
+        }
+        if result_expires_at is None:
+            values.update(ciphertext=None, nonce=None)
+        won = await self._try_transition(
+            submission.id,
+            values,
+            expected_attempt_count=submission.attempt_count,
+            expected_statuses=(expected_status,),
+        )
+        if won:
+            await self.record_decision(submission.id, assessment, provenance)
+        return won
+
+    async def resolve_blocked(
+        self,
+        submission: ContentSubmission,
+        assessment: ModerationAssessment,
+        *,
+        provenance: DecisionProvenance | None = None,
+        expected_status: SubmissionStatus = SubmissionStatus.PENDING_REVIEW,
+    ) -> bool:
+        won = await self._try_transition(
+            submission.id,
+            {
+                "status": SubmissionStatus.BLOCKED,
+                "ciphertext": None,
+                "nonce": None,
+                "resolved_at": datetime.now(UTC),
+                "next_attempt_at": None,
+                "result_expires_at": None,
+            },
+            expected_attempt_count=submission.attempt_count,
+            expected_statuses=(expected_status,),
+        )
+        if won:
+            await self.record_decision(submission.id, assessment, provenance)
+        return won
+
+    async def resolve_retry(
+        self,
+        submission: ContentSubmission,
+        *,
+        attempt_count: int,
+        next_attempt_at: datetime,
+        assessment: ModerationAssessment | None = None,
+    ) -> bool:
+        won = await self._try_transition(
+            submission.id,
+            {
+                "status": SubmissionStatus.PENDING_REVIEW,
+                "attempt_count": attempt_count,
+                "next_attempt_at": next_attempt_at,
+            },
+            expected_attempt_count=submission.attempt_count,
+        )
+        if not won:
+            return False
+        if assessment is not None:
+            await self.record_decision(submission.id, assessment)
+        await self._outbox.add(
+            "moderation.retry",
+            submission.id,
+            {
+                "submissionId": str(submission.id),
+                "scheduledAt": next_attempt_at.isoformat(),
+                "attempt": attempt_count,
+            },
+            available_at=next_attempt_at,
+        )
+        return True
+
+    async def resolve_manual_review(
+        self,
+        submission: ContentSubmission,
+        *,
+        attempt_count: int,
+        assessment: ModerationAssessment | None = None,
+    ) -> bool:
+        won = await self._try_transition(
+            submission.id,
+            {
+                "status": SubmissionStatus.MANUAL_REVIEW,
+                "attempt_count": attempt_count,
+                "next_attempt_at": None,
+            },
+            expected_attempt_count=submission.attempt_count,
+        )
+        if won and assessment is not None:
+            await self.record_decision(submission.id, assessment)
+        return won
+
+    async def mark_manual_review(self, submission_id: UUID, *, attempt_count: int) -> None:
+        await self._transition(
+            submission_id,
+            {
+                "status": SubmissionStatus.MANUAL_REVIEW,
+                "attempt_count": attempt_count,
+                "next_attempt_at": None,
+            },
+            expected_attempt_count=attempt_count - 1,
+        )
+
+    async def get_owned(self, submission_id: UUID, owner_id: UUID) -> ContentSubmission:
+        submission = await self._session.scalar(
+            select(ContentSubmission).where(
+                ContentSubmission.id == submission_id,
+                ContentSubmission.owner_id == owner_id,
+            ).execution_options(populate_existing=True)
+        )
+        if submission is None:
+            raise ApiError("RESOURCE_NOT_FOUND", "검토 제출을 찾을 수 없습니다.", 404)
+        return submission
+
+    async def get_pending(self, submission_id: UUID) -> ContentSubmission | None:
+        return cast(
+            ContentSubmission | None,
+            await self._session.scalar(
+                select(ContentSubmission)
+                .where(
+                    ContentSubmission.id == submission_id,
+                    ContentSubmission.status == SubmissionStatus.PENDING_REVIEW,
+                )
+                .execution_options(populate_existing=True)
+            ),
+        )
+
+    async def get(self, submission_id: UUID) -> ContentSubmission | None:
+        return cast(
+            ContentSubmission | None,
+            await self._session.scalar(
+                select(ContentSubmission)
+                .where(ContentSubmission.id == submission_id)
+                .execution_options(populate_existing=True)
+            ),
+        )
+
+    async def latest_decision(
+        self, submission_id: UUID
+    ) -> ModerationDecisionRecord | None:
+        return cast(
+            ModerationDecisionRecord | None,
+            await self._session.scalar(
+                select(ModerationDecisionRecord)
+                .where(ModerationDecisionRecord.submission_id == submission_id)
+                .order_by(
+                    ModerationDecisionRecord.created_at.desc(),
+                    ModerationDecisionRecord.id.desc(),
+                )
+                .limit(1)
+            ),
+        )
+
+    async def clear_expired_ocr_results(self, *, now: datetime | None = None) -> int:
+        result = cast(
+            CursorResult[Any],
+            await self._session.execute(
+                update(ContentSubmission)
+                .where(
+                    ContentSubmission.status == SubmissionStatus.ALLOWED,
+                    ContentSubmission.content_type == ContentType.OCR_TEXT,
+                    ContentSubmission.result_expires_at.is_not(None),
+                    ContentSubmission.result_expires_at <= (now or datetime.now(UTC)),
+                )
+                .values(ciphertext=None, nonce=None, result_expires_at=None)
+                .execution_options(synchronize_session=False)
+            ),
+        )
+        return result.rowcount
 
     async def schedule_retry(
         self,
@@ -188,10 +435,22 @@ class ModerationRepository:
             raise InvalidRetrySchedule()
         await self._transition(
             submission_id,
-            status=SubmissionStatus.PENDING_REVIEW,
+            {
+                "status": SubmissionStatus.PENDING_REVIEW,
+                "attempt_count": attempt_count,
+                "next_attempt_at": next_attempt_at,
+            },
             expected_attempt_count=attempt_count - 1,
-            attempt_count=attempt_count,
-            next_attempt_at=next_attempt_at,
+        )
+        await self._outbox.add(
+            "moderation.retry",
+            submission_id,
+            {
+                "submissionId": str(submission_id),
+                "scheduledAt": next_attempt_at.isoformat(),
+                "attempt": attempt_count,
+            },
+            available_at=next_attempt_at,
         )
 
     def decrypt_command(self, submission: ContentSubmission) -> dict[str, object]:
@@ -201,15 +460,44 @@ class ModerationRepository:
             EncryptedPayload(ciphertext=submission.ciphertext, nonce=submission.nonce)
         )
 
+    async def _try_transition(
+        self,
+        submission_id: UUID,
+        values: dict[str, object],
+        *,
+        expected_attempt_count: int | None = None,
+        expected_statuses: tuple[SubmissionStatus, ...] = (
+            SubmissionStatus.PENDING_REVIEW,
+        ),
+    ) -> bool:
+        conditions = [
+            ContentSubmission.id == submission_id,
+            ContentSubmission.status.in_(expected_statuses),
+        ]
+        if expected_attempt_count is not None:
+            conditions.append(ContentSubmission.attempt_count == expected_attempt_count)
+        statement = (
+            update(ContentSubmission)
+            .where(*conditions)
+            .values(**values)
+            .execution_options(synchronize_session=False)
+        )
+        result = cast(CursorResult[Any], await self._session.execute(statement))
+        return result.rowcount == 1
+
     async def _transition(
         self,
         submission_id: UUID,
+        values: dict[str, object],
+        *,
         expected_attempt_count: int | None = None,
-        **values: object,
+        expected_statuses: tuple[SubmissionStatus, ...] = (
+            SubmissionStatus.PENDING_REVIEW,
+        ),
     ) -> None:
         conditions = [
             ContentSubmission.id == submission_id,
-            ContentSubmission.status == SubmissionStatus.PENDING_REVIEW,
+            ContentSubmission.status.in_(expected_statuses),
         ]
         if expected_attempt_count is not None:
             conditions.append(ContentSubmission.attempt_count == expected_attempt_count)

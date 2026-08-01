@@ -60,6 +60,10 @@ class Settings(BaseSettings):
             and self.moderation_allow_confidence >= self.moderation_block_confidence
         ):
             raise ValueError("allow confidence must be lower than block confidence")
+        if self.moderation_mode == "enforce" and self.internal_moderation_token is not None:
+            token = self.internal_moderation_token.get_secret_value()
+            if not token.strip() or len(token.encode("utf-8")) < 32:
+                raise ValueError("internal moderation token must be at least 32 UTF-8 bytes")
         return self
 
 

@@ -21,6 +21,7 @@ from app.core.errors import (
 from app.feeds.router import router as feed_router
 from app.letters.router import router as letter_router
 from app.meetings.router import router as meeting_router
+from app.moderation.router import router as moderation_router
 from app.profiles.router import router as profile_router
 from app.regions.router import router as region_router
 from app.reports.router import router as report_router
@@ -61,6 +62,7 @@ def create_app() -> FastAPI:
     application.include_router(letter_router, prefix=settings.api_prefix)
     application.include_router(chat_router, prefix=settings.api_prefix)
     application.include_router(meeting_router, prefix=settings.api_prefix)
+    application.include_router(moderation_router, prefix=settings.api_prefix)
     application.include_router(feed_router, prefix=settings.api_prefix)
     application.include_router(ai_router, prefix=settings.api_prefix)
     application.include_router(report_router, prefix=settings.api_prefix)
