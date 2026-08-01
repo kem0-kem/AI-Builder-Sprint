@@ -63,6 +63,16 @@ data class ChatMessage(
     val type: String = "CHAT"
 )
 
+data class MeetingInviteUser(
+    val userId: Int,
+    val nickname: String
+)
+
+data class MeetingCreation(
+    val meetingId: Int,
+    val chatRoomId: Int
+)
+
 data class Letter(
     val title: String,
     val preview: String,

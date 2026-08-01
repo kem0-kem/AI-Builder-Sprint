@@ -37,6 +37,7 @@ object RetrofitClient {
     val feedApi: FeedApiService = retrofit.create(FeedApiService::class.java)
     val chatApi: ChatApiService = retrofit.create(ChatApiService::class.java)
     val letterApi: LetterApiService = retrofit.create(LetterApiService::class.java)
+    val meetingApi: MeetingApiService = retrofit.create(MeetingApiService::class.java)
 
     fun openChatWebSocket(chatRoomId: Int, listener: WebSocketListener): WebSocket {
         val socketBaseUrl = BASE_URL

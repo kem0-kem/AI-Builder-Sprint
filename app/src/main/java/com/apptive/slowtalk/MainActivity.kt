@@ -352,8 +352,14 @@ private fun ApptiveApp() {
             )
             Screen.CreateGroup -> CreateGroupScreen(
                 availablePeople = anonymousConversations,
+                loadInviteUsers = { keyword -> MeetingApi.getInviteUsers(keyword) },
+                createMeeting = { title, description, inviteUserIds ->
+                    MeetingApi.createMeeting(title, description, inviteUserIds)
+                },
                 onBack = { screen = Screen.Conversations },
-                onCreate = { title -> screen = Screen.Chat(title, isGroup = true) }
+                onCreated = { title, chatRoomId ->
+                    screen = Screen.Chat(title, isGroup = true, chatRoomId = chatRoomId)
+                }
             )
             Screen.WriteLetter -> WriteLetterScreen(
                 onHistory = { screen = Screen.LetterHistory },

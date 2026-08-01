@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.GroupAdd
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -58,6 +59,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -390,14 +392,36 @@ private fun MessageBubble(message: ChatMessage) {
 @Composable
 fun CreateGroupScreen(
     availablePeople: List<Conversation>,
+    loadInviteUsers: suspend (String?) -> Result<List<MeetingInviteUser>>,
+    createMeeting: suspend (String, String, List<Int>) -> Result<MeetingCreation>,
     onBack: () -> Unit,
-    onCreate: (String) -> Unit
+    onCreated: (String, Int?) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var intro by remember { mutableStateOf("") }
-    val selectedPeople = remember { mutableStateListOf<String>() }
+    val selectedPeople = remember { mutableStateListOf<Int>() }
     var showPeoplePicker by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var remotePeople by remember { mutableStateOf<List<MeetingInviteUser>?>(null) }
+    var isCreating by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     val peopleSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val fallbackPeople = remember(availablePeople) {
+        availablePeople.mapIndexed { index, person ->
+            MeetingInviteUser(userId = -(index + 1), nickname = person.title)
+        }
+    }
+    val shownPeople = remotePeople ?: fallbackPeople.filter {
+        searchQuery.isBlank() || it.nickname.contains(searchQuery, ignoreCase = true)
+    }
+
+    LaunchedEffect(showPeoplePicker, searchQuery) {
+        if (showPeoplePicker) {
+            if (searchQuery.isNotBlank()) delay(300)
+            loadInviteUsers(searchQuery.takeIf { it.isNotBlank() })
+                .onSuccess { remotePeople = it }
+        }
+    }
 
     PaperBackground {
         Scaffold(containerColor = Color.Transparent) { padding ->
@@ -451,16 +475,27 @@ fun CreateGroupScreen(
                 }
                 item {
                     Button(
-                        onClick = { onCreate(title.ifBlank { "새로운 모임" }) },
+                        onClick = {
+                            if (!isCreating) {
+                                isCreating = true
+                                scope.launch {
+                                    createMeeting(title, intro, selectedPeople.filter { it > 0 })
+                                        .onSuccess { onCreated(title, it.chatRoomId) }
+                                        .onFailure { onCreated(title, null) }
+                                    isCreating = false
+                                }
+                            }
+                        },
                         enabled = title.isNotBlank() &&
                             intro.isNotBlank() &&
-                            selectedPeople.isNotEmpty(),
+                            selectedPeople.isNotEmpty() &&
+                            !isCreating,
                         modifier = Modifier.fillMaxWidth().height(54.dp),
                         shape = RoundedCornerShape(28.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Purple)
                     ) {
                         Icon(Icons.Outlined.Groups, null)
-                        Text("  모임 대화 만들기")
+                        Text(if (isCreating) "  모임을 만들고 있어요" else "  모임 대화 만들기")
                     }
                 }
             }
@@ -497,31 +532,45 @@ fun CreateGroupScreen(
                 }
 
                 Spacer(Modifier.height(14.dp))
-                if (availablePeople.isEmpty()) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it.take(30) },
+                    modifier = Modifier.fillMaxWidth(),
+                    leadingIcon = { Icon(Icons.Outlined.Search, null) },
+                    placeholder = { Text("닉네임으로 검색") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(15.dp)
+                )
+                Spacer(Modifier.height(10.dp))
+                if (shownPeople.isEmpty()) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("아직 대화한 이웃이 없어요.", color = SubtleInk)
+                        Text(
+                            if (searchQuery.isBlank()) "초대할 수 있는 이웃이 없어요."
+                            else "검색 결과가 없어요.",
+                            color = SubtleInk
+                        )
                     }
                 } else {
                     LazyColumn(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        items(availablePeople) { person ->
-                            val isSelected = person.title in selectedPeople
+                        items(shownPeople, key = { it.userId }) { person ->
+                            val isSelected = person.userId in selectedPeople
                             val canSelect = isSelected || selectedPeople.size < 9
                             Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable(enabled = canSelect) {
                                         if (isSelected) {
-                                            selectedPeople.remove(person.title)
+                                            selectedPeople.remove(person.userId)
                                         } else {
-                                            selectedPeople.add(person.title)
+                                            selectedPeople.add(person.userId)
                                         }
                                     },
                                 shape = RoundedCornerShape(15.dp),
@@ -550,9 +599,9 @@ fun CreateGroupScreen(
                                             .padding(start = 12.dp)
                                             .weight(1f)
                                     ) {
-                                        Text(person.title, fontWeight = FontWeight.Bold)
+                                        Text(person.nickname, fontWeight = FontWeight.Bold)
                                         Text(
-                                            person.preview,
+                                            "대화한 이웃",
                                             color = SubtleInk,
                                             fontSize = 11.sp,
                                             maxLines = 1
@@ -563,11 +612,11 @@ fun CreateGroupScreen(
                                         enabled = canSelect,
                                         onCheckedChange = { checked ->
                                             if (checked) {
-                                                if (person.title !in selectedPeople && selectedPeople.size < 9) {
-                                                    selectedPeople.add(person.title)
+                                                if (person.userId !in selectedPeople && selectedPeople.size < 9) {
+                                                    selectedPeople.add(person.userId)
                                                 }
                                             } else {
-                                                selectedPeople.remove(person.title)
+                                                selectedPeople.remove(person.userId)
                                             }
                                         }
                                     )
