@@ -421,15 +421,47 @@ fun WriteFeedScreen(
     onBack: () -> Unit,
     onProfile: () -> Unit,
     initialPost: FeedPost? = null,
-    onPublish: (String, String, String) -> Unit
+    loadCategories: suspend () -> Result<List<FeedCategoryResult>>,
+    requestFeedback: suspend (String, String) -> Result<FeedFeedbackResult>,
+    onSubmit: suspend (Int, String, String, String) -> Result<Int>,
+    onSuccess: (Int, String, String, String) -> Unit
 ) {
-    val categories = feedCategoryVisuals
+    var categories by remember { mutableStateOf(feedCategoryVisuals) }
     var category by remember(initialPost?.id) {
         mutableStateOf(initialPost?.category ?: categories.first().name)
     }
     var title by remember(initialPost?.id) { mutableStateOf(initialPost?.title.orEmpty()) }
     var body by remember(initialPost?.id) { mutableStateOf(initialPost?.body.orEmpty()) }
+    var aiFeedback by remember { mutableStateOf<FeedFeedbackResult?>(null) }
+    var isFeedbackLoading by remember { mutableStateOf(false) }
+    var isSubmitting by remember { mutableStateOf(false) }
+    var submitFailed by remember { mutableStateOf(false) }
+    val submitScope = rememberCoroutineScope()
     val isEditing = initialPost != null
+
+    LaunchedEffect(initialPost?.id) {
+        loadCategories().onSuccess { remoteCategories ->
+            if (remoteCategories.isNotEmpty()) {
+                categories = remoteCategories.map { it.toVisual() }
+                category = initialPost?.category
+                    ?.takeIf { current -> categories.any { it.name == current } }
+                    ?: categories.first().name
+            }
+        }
+    }
+
+    LaunchedEffect(title, body) {
+        if (title.isBlank() || body.isBlank()) {
+            aiFeedback = null
+            isFeedbackLoading = false
+        } else {
+            delay(700)
+            isFeedbackLoading = true
+            requestFeedback(title.trim(), body.trim())
+                .onSuccess { aiFeedback = it }
+            isFeedbackLoading = false
+        }
+    }
 
     PaperBackground {
         Scaffold(containerColor = Color.Transparent) { padding ->
@@ -605,7 +637,11 @@ fun WriteFeedScreen(
                                     color = Purple.copy(alpha = 0.1f)
                                 ) {
                                     Text(
-                                        "실시간 분석 중",
+                                        when {
+                                            isFeedbackLoading -> "분석 중"
+                                            aiFeedback != null -> "분석 완료"
+                                            else -> "입력 대기"
+                                        },
                                         modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
                                         color = Purple,
                                         fontSize = 10.sp,
@@ -627,25 +663,37 @@ fun WriteFeedScreen(
                                         Icon(
                                             Icons.Outlined.CheckCircle,
                                             contentDescription = null,
-                                            tint = Color(0xFF4DB77A),
+                                            tint = if (aiFeedback?.hasWarning == true) {
+                                                Color(0xFFD95C55)
+                                            } else {
+                                                Color(0xFF4DB77A)
+                                            },
                                             modifier = Modifier.size(21.dp)
                                         )
                                         Column(Modifier.padding(start = 9.dp)) {
                                             Text(
-                                                if (body.length < 30) {
-                                                    "조금 더 들려주세요"
+                                                aiFeedback?.warningMessage
+                                                    ?: if (body.length < 30) {
+                                                        "조금 더 들려주세요"
+                                                    } else {
+                                                        "좋은 흐름이에요!"
+                                                    },
+                                                color = if (aiFeedback?.hasWarning == true) {
+                                                    Color(0xFFD95C55)
+                                                } else if (body.length < 30) {
+                                                    Purple
                                                 } else {
-                                                    "좋은 흐름이에요!"
+                                                    Color(0xFF2FAE68)
                                                 },
-                                                color = if (body.length < 30) Purple else Color(0xFF2FAE68),
                                                 fontWeight = FontWeight.Bold
                                             )
                                             Text(
-                                                if (body.length < 30) {
-                                                    "구체적인 순간이 더해지면 이야기가 풍성해져요."
-                                                } else {
-                                                    "편안하고 자연스러운 글이에요."
-                                                },
+                                                aiFeedback?.tips?.firstOrNull()
+                                                    ?: if (body.length < 30) {
+                                                        "구체적인 순간이 더해지면 이야기가 풍성해져요."
+                                                    } else {
+                                                        "편안하고 자연스러운 글이에요."
+                                                    },
                                                 color = SubtleInk,
                                                 fontSize = 11.sp
                                             )
@@ -672,7 +720,11 @@ fun WriteFeedScreen(
                                                 )
                                             }
                                             Text(
-                                                "• 구체적인 순간을 떠올려보세요.\n• 감정을 한 단어로 표현해보세요.",
+                                                aiFeedback?.tips
+                                                    ?.take(2)
+                                                    ?.joinToString("\n") { "• $it" }
+                                                    ?.takeIf { it.isNotBlank() }
+                                                    ?: "• 구체적인 순간을 떠올려보세요.\n• 감정을 한 단어로 표현해보세요.",
                                                 modifier = Modifier.padding(top = 7.dp),
                                                 color = SubtleInk,
                                                 fontSize = 10.sp,
@@ -700,8 +752,26 @@ fun WriteFeedScreen(
                 }
                 item {
                     Button(
-                        onClick = { onPublish(category, title.trim(), body.trim()) },
-                        enabled = title.isNotBlank() && body.isNotBlank(),
+                        onClick = {
+                            val selectedCategory = categories.first { it.name == category }
+                            submitScope.launch {
+                                isSubmitting = true
+                                submitFailed = false
+                                onSubmit(
+                                    selectedCategory.id,
+                                    category,
+                                    title.trim(),
+                                    body.trim()
+                                ).fold(
+                                    onSuccess = { feedId ->
+                                        onSuccess(feedId, category, title.trim(), body.trim())
+                                    },
+                                    onFailure = { submitFailed = true }
+                                )
+                                isSubmitting = false
+                            }
+                        },
+                        enabled = title.isNotBlank() && body.isNotBlank() && !isSubmitting,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(54.dp),
@@ -710,8 +780,23 @@ fun WriteFeedScreen(
                     ) {
                         Icon(Icons.Outlined.Send, null)
                         Text(
-                            if (isEditing) "  수정 완료" else "  피드 올리기 (익명)",
+                            when {
+                                isSubmitting -> "  전송 중..."
+                                isEditing -> "  수정 완료"
+                                else -> "  피드 올리기 (익명)"
+                            },
                             fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                if (submitFailed) {
+                    item {
+                        Text(
+                            "피드를 저장하지 못했습니다. 서버 연결을 확인하고 다시 시도해주세요.",
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center,
+                            color = Color(0xFFD95C55),
+                            fontSize = 12.sp
                         )
                     }
                 }
@@ -730,6 +815,7 @@ fun WriteFeedScreen(
 }
 
 private data class FeedCategoryVisual(
+    val id: Int,
     val name: String,
     val icon: ImageVector,
     val tint: Color,
@@ -737,13 +823,18 @@ private data class FeedCategoryVisual(
 )
 
 private val feedCategoryVisuals = listOf(
-    FeedCategoryVisual("일상 이야기", Icons.Outlined.Eco, Color(0xFF54B978), Color(0xFFEAF7ED)),
-    FeedCategoryVisual("취미 생활", Icons.Outlined.Palette, Purple, PurpleSoft),
-    FeedCategoryVisual("마음과 고민", Icons.Outlined.FavoriteBorder, Color(0xFFE76E91), Color(0xFFFFEFF3)),
-    FeedCategoryVisual("배움과 성장", Icons.Outlined.School, Color(0xFF5C95E8), Color(0xFFEDF4FF)),
-    FeedCategoryVisual("여행과 경험", Icons.Outlined.Flight, Color(0xFF3DBCC1), Color(0xFFEAF9F9)),
-    FeedCategoryVisual("기타", Icons.Outlined.MoreHoriz, SubtleInk, Color(0xFFF4F1ED))
+    FeedCategoryVisual(1, "일상 이야기", Icons.Outlined.Eco, Color(0xFF54B978), Color(0xFFEAF7ED)),
+    FeedCategoryVisual(2, "마음과 고민", Icons.Outlined.FavoriteBorder, Color(0xFFE76E91), Color(0xFFFFEFF3)),
+    FeedCategoryVisual(3, "취미 생활", Icons.Outlined.Palette, Purple, PurpleSoft),
+    FeedCategoryVisual(4, "질문", Icons.Outlined.MoreHoriz, SubtleInk, Color(0xFFF4F1ED))
 )
+
+private fun FeedCategoryResult.toVisual(): FeedCategoryVisual = when (name) {
+    "일상 이야기" -> FeedCategoryVisual(id, name, Icons.Outlined.Eco, Color(0xFF54B978), Color(0xFFEAF7ED))
+    "마음과 고민" -> FeedCategoryVisual(id, name, Icons.Outlined.FavoriteBorder, Color(0xFFE76E91), Color(0xFFFFEFF3))
+    "취미 생활" -> FeedCategoryVisual(id, name, Icons.Outlined.Palette, Purple, PurpleSoft)
+    else -> FeedCategoryVisual(id, name, Icons.Outlined.MoreHoriz, SubtleInk, Color(0xFFF4F1ED))
+}
 
 @Composable
 private fun FeedCategoryOption(

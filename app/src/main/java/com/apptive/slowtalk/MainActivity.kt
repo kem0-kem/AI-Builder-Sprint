@@ -242,11 +242,16 @@ private fun ApptiveApp() {
                     profileReturnScreen = Screen.WriteFeed
                     screen = Screen.Profile
                 },
-                onPublish = { category, title, body ->
+                loadCategories = { FeedApi.getFeedCategories() },
+                requestFeedback = { title, body -> FeedApi.getFeedFeedback(title, body) },
+                onSubmit = { categoryId, _, title, body ->
+                    FeedApi.createFeed(categoryId, title, body)
+                },
+                onSuccess = { feedId, category, title, body ->
                     feeds.add(
                         0,
                         FeedPost(
-                            id = (feeds.maxOfOrNull { it.id } ?: 0) + 1,
+                            id = feedId,
                             category = category,
                             title = title,
                             body = body,
@@ -269,7 +274,17 @@ private fun ApptiveApp() {
                             profileReturnScreen = current
                             screen = Screen.Profile
                         },
-                        onPublish = { category, title, body ->
+                        loadCategories = { FeedApi.getFeedCategories() },
+                        requestFeedback = { title, body -> FeedApi.getFeedFeedback(title, body) },
+                        onSubmit = { categoryId, _, title, body ->
+                            FeedApi.updateFeed(
+                                feedId = post.id,
+                                categoryId = categoryId,
+                                title = title,
+                                content = body
+                            ).map { post.id }
+                        },
+                        onSuccess = { _, category, title, body ->
                             val index = feeds.indexOfFirst { it.id == post.id }
                             if (index >= 0) {
                                 feeds[index] = post.copy(
@@ -279,22 +294,6 @@ private fun ApptiveApp() {
                                 )
                             }
                             screen = Screen.FeedDetail(post.id)
-                            if (FeedApi.isConfigured) {
-                                appScope.launch {
-                                    FeedApi.updateFeed(
-                                        feedId = post.id,
-                                        categoryId = feedCategoryId(category),
-                                        title = title,
-                                        content = body
-                                    ).onFailure {
-                                        Toast.makeText(
-                                            context,
-                                            "서버에 수정 내용을 반영하지 못했습니다.",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                }
-                            }
                         }
                     )
                 }

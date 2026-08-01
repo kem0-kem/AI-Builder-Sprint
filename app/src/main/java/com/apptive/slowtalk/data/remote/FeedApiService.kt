@@ -10,6 +10,15 @@ import retrofit2.http.POST
 import retrofit2.http.Path
 
 interface FeedApiService {
+    @GET("feed-categories")
+    suspend fun getFeedCategories(): List<FeedWriteCategoryDto>
+
+    @POST("feeds")
+    suspend fun createFeed(@Body request: FeedCreateRequest): FeedCreateResponse
+
+    @POST("feeds/feedback")
+    suspend fun getFeedFeedback(@Body request: FeedFeedbackRequest): FeedFeedbackResponse
+
     @GET("feeds/mine")
     suspend fun getMyFeeds(): List<MyFeedDto>
 
@@ -78,3 +87,37 @@ data class CommentContentRequest(val content: String)
 
 @Serializable
 data class CommentCreateResponse(val commentId: Int)
+
+@Serializable
+data class FeedWriteCategoryDto(
+    val categoryId: Int,
+    val name: String
+)
+
+@Serializable
+data class FeedCreateRequest(
+    val categoryId: Int,
+    val title: String,
+    val content: String
+)
+
+@Serializable
+data class FeedCreateResponse(val feedId: Int)
+
+@Serializable
+data class FeedFeedbackRequest(
+    val title: String,
+    val content: String
+)
+
+@Serializable
+data class FeedFeedbackResponse(
+    val warning: FeedFeedbackWarning = FeedFeedbackWarning(),
+    val tips: List<String> = emptyList()
+)
+
+@Serializable
+data class FeedFeedbackWarning(
+    val exists: Boolean = false,
+    val message: String? = null
+)

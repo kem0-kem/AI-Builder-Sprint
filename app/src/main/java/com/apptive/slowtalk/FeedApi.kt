@@ -3,6 +3,8 @@ package com.apptive.slowtalk
 import androidx.compose.ui.graphics.Color
 import com.apptive.slowtalk.data.remote.FeedUpdateRequest
 import com.apptive.slowtalk.data.remote.CommentContentRequest
+import com.apptive.slowtalk.data.remote.FeedCreateRequest
+import com.apptive.slowtalk.data.remote.FeedFeedbackRequest
 import com.apptive.slowtalk.data.remote.RetrofitClient
 import retrofit2.Response
 
@@ -11,8 +13,45 @@ data class MyFeedResult(
     val liked: Boolean
 )
 
+data class FeedCategoryResult(val id: Int, val name: String)
+
+data class FeedFeedbackResult(
+    val hasWarning: Boolean,
+    val warningMessage: String?,
+    val tips: List<String>
+)
+
 object FeedApi {
     val isConfigured: Boolean = true
+
+    suspend fun getFeedCategories(): Result<List<FeedCategoryResult>> = runCatching {
+        RetrofitClient.feedApi.getFeedCategories().map {
+            FeedCategoryResult(it.categoryId, appCategoryName(it.name))
+        }
+    }
+
+    suspend fun createFeed(
+        categoryId: Int,
+        title: String,
+        content: String
+    ): Result<Int> = runCatching {
+        RetrofitClient.feedApi.createFeed(
+            FeedCreateRequest(categoryId, title, content)
+        ).feedId
+    }
+
+    suspend fun getFeedFeedback(title: String, content: String): Result<FeedFeedbackResult> =
+        runCatching {
+            RetrofitClient.feedApi.getFeedFeedback(
+                FeedFeedbackRequest(title, content)
+            ).let {
+                FeedFeedbackResult(
+                    hasWarning = it.warning.exists,
+                    warningMessage = it.warning.message,
+                    tips = it.tips
+                )
+            }
+        }
 
     suspend fun getMyFeeds(): Result<List<MyFeedResult>> = runCatching {
         RetrofitClient.feedApi.getMyFeeds().map { item ->
@@ -98,10 +137,8 @@ private fun categoryAccent(category: String): Color = when (category) {
 }
 
 fun feedCategoryId(category: String): Int = when (category) {
-    "일상 이야기" -> 2
+    "일상 이야기" -> 1
+    "마음과 고민" -> 2
     "취미 생활" -> 3
-    "마음과 고민" -> 4
-    "배움과 성장" -> 5
-    "여행과 경험" -> 6
-    else -> 7
+    else -> 4
 }
