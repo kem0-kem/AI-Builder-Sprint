@@ -887,6 +887,8 @@ private fun FeedCategoryOption(
 fun FeedDetailScreen(
     post: FeedPost,
     isLiked: Boolean,
+    loadFeed: suspend (Int) -> Result<FeedDetailResult>,
+    onFeedLoaded: (FeedDetailResult) -> Unit,
     onToggleLike: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -894,7 +896,8 @@ fun FeedDetailScreen(
     onBack: () -> Unit
 ) {
     var comment by remember { mutableStateOf("") }
-    var comments by remember { mutableStateOf(post.comments.toList()) }
+    var displayedPost by remember(post.id) { mutableStateOf(post) }
+    var comments by remember(post.id) { mutableStateOf(post.comments.toList()) }
     var replyTarget by remember { mutableStateOf<Pair<Int, String>?>(null) }
     var isRefreshing by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
@@ -904,6 +907,18 @@ fun FeedDetailScreen(
     val refreshScope = rememberCoroutineScope()
     val context = LocalContext.current
 
+    suspend fun refreshFeed() {
+        loadFeed(post.id).onSuccess { result ->
+            displayedPost = result.post
+            comments = result.post.comments.toList()
+            onFeedLoaded(result)
+        }
+    }
+
+    LaunchedEffect(post.id) {
+        refreshFeed()
+    }
+
     LaunchedEffect(replyTarget) {
         if (replyTarget != null) {
             commentFocusRequester.requestFocus()
@@ -912,6 +927,8 @@ fun FeedDetailScreen(
 
     fun commitComments(updated: List<Comment>) {
         comments = updated
+        displayedPost.comments.clear()
+        displayedPost.comments.addAll(updated)
         post.comments.clear()
         post.comments.addAll(updated)
     }
@@ -1201,8 +1218,7 @@ fun FeedDetailScreen(
                     if (!isRefreshing) {
                         refreshScope.launch {
                             isRefreshing = true
-                            delay(700)
-                            comments = post.comments.toList()
+                            refreshFeed()
                             isRefreshing = false
                         }
                     }
@@ -1229,7 +1245,7 @@ fun FeedDetailScreen(
                                     expanded = menuExpanded,
                                     onDismissRequest = { menuExpanded = false }
                                 ) {
-                                    if (post.isMine) {
+                                    if (displayedPost.isMine) {
                                         DropdownMenuItem(
                                             text = { Text("수정") },
                                             leadingIcon = {
@@ -1272,7 +1288,7 @@ fun FeedDetailScreen(
                     }
                     item {
                         FeedDetailCard(
-                            post = post,
+                            post = displayedPost,
                             commentCount = comments.size,
                             isLiked = isLiked,
                             onToggleLike = onToggleLike

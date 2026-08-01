@@ -13,6 +13,11 @@ data class MyFeedResult(
     val liked: Boolean
 )
 
+data class FeedDetailResult(
+    val post: FeedPost,
+    val liked: Boolean
+)
+
 data class FeedCategoryResult(val id: Int, val name: String)
 
 data class FeedFeedbackResult(
@@ -64,6 +69,32 @@ object FeedApi {
                     body = item.content,
                     accent = categoryAccent(category),
                     isMine = true
+                ),
+                liked = item.liked
+            )
+        }
+    }
+
+    suspend fun getFeedDetail(feedId: Int): Result<FeedDetailResult> = runCatching {
+        RetrofitClient.feedApi.getFeed(feedId).let { item ->
+            val category = appCategoryName(item.category.name)
+            FeedDetailResult(
+                post = FeedPost(
+                    id = item.feedId,
+                    category = category,
+                    title = item.title,
+                    body = item.content,
+                    comments = item.comments.map { comment ->
+                        Comment(
+                            author = if (comment.isMine) "글쓴이" else comment.author.nickname,
+                            message = comment.content,
+                            time = "",
+                            isMine = comment.isMine,
+                            id = comment.commentId
+                        )
+                    }.toMutableList(),
+                    accent = categoryAccent(category),
+                    isMine = item.isMine
                 ),
                 liked = item.liked
             )

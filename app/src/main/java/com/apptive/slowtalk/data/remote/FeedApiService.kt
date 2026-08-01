@@ -22,6 +22,9 @@ interface FeedApiService {
     @GET("feeds/mine")
     suspend fun getMyFeeds(): List<MyFeedDto>
 
+    @GET("feeds/{feedId}")
+    suspend fun getFeed(@Path("feedId") feedId: Int): FeedDetailDto
+
     @PATCH("feeds/{feedId}")
     suspend fun updateFeed(
         @Path("feedId") feedId: Int,
@@ -79,6 +82,29 @@ data class MyFeedDto(
 data class FeedCategoryDto(
     val id: Int,
     val name: String
+)
+
+@Serializable
+data class FeedDetailDto(
+    val feedId: Int,
+    val category: FeedCategoryDto,
+    val author: FeedAuthorDto,
+    val title: String,
+    val content: String,
+    val liked: Boolean = false,
+    val isMine: Boolean = false,
+    val comments: List<FeedDetailCommentDto> = emptyList()
+)
+
+@Serializable
+data class FeedAuthorDto(val nickname: String)
+
+@Serializable
+data class FeedDetailCommentDto(
+    val commentId: Int,
+    val author: FeedAuthorDto,
+    val content: String,
+    val isMine: Boolean = false
 )
 
 @Serializable

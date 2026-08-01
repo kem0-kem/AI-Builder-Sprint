@@ -326,6 +326,12 @@ private fun ApptiveApp() {
                 FeedDetailScreen(
                     post = post,
                     isLiked = likedFeeds[post.id] == true,
+                    loadFeed = { feedId -> FeedApi.getFeedDetail(feedId) },
+                    onFeedLoaded = { result ->
+                        val index = feeds.indexOfFirst { it.id == result.post.id }
+                        if (index >= 0) feeds[index] = result.post
+                        likedFeeds[result.post.id] = result.liked
+                    },
                     onToggleLike = { toggleFeedLike(post.id) },
                     onEdit = { screen = Screen.EditFeed(post.id) },
                     onDelete = {
