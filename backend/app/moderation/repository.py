@@ -28,6 +28,20 @@ class ModerationCommand:
     target_id: UUID | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class DecisionProvenance:
+    provider: str
+    model: str
+    prompt_version: str
+
+
+LOCAL_RULE_PROVENANCE = DecisionProvenance(
+    provider="local-rules",
+    model="deterministic",
+    prompt_version="v1",
+)
+
+
 class ModerationRepository:
     def __init__(
         self,
@@ -69,16 +83,53 @@ class ModerationRepository:
             await self.record_decision(submission.id, assessment)
         return submission
 
+    async def create_blocked(
+        self,
+        command: ModerationCommand,
+        assessment: ModerationAssessment,
+        provenance: DecisionProvenance | None = None,
+    ) -> ContentSubmission:
+        """Persist a blocked decision without ever encrypting or storing raw content."""
+
+        submission = ContentSubmission(
+            owner_id=command.owner_id,
+            content_type=command.content_type,
+            operation=command.operation,
+            target_id=command.target_id,
+            ciphertext=None,
+            nonce=None,
+            content_hash=content_hash(command.text, self._hash_pepper),
+            idempotency_key=command.idempotency_key,
+            status=SubmissionStatus.BLOCKED,
+            resolved_at=datetime.now(UTC),
+        )
+        self._session.add(submission)
+        await self._session.flush()
+        await self.record_decision(submission.id, assessment, provenance)
+        return submission
+
     async def record_decision(
         self,
         submission_id: UUID,
         assessment: ModerationAssessment,
+        provenance: DecisionProvenance | None = None,
     ) -> ModerationDecisionRecord:
+        """Persist one decision, hashing the raw provider request ID exactly once.
+
+        Callers must pass a fresh ``ModerationAssessment`` from the provider boundary,
+        never a value copied from an already-persisted decision record.
+        """
+
         exists = await self._session.scalar(
             select(ContentSubmission.id).where(ContentSubmission.id == submission_id)
         )
         if exists is None:
             raise ApiError("RESOURCE_NOT_FOUND", "검열 제출을 찾을 수 없습니다.", 404)
+        source = provenance or DecisionProvenance(
+            provider=self._provider,
+            model=self._model,
+            prompt_version=self._prompt_version,
+        )
         record = ModerationDecisionRecord(
             submission_id=submission_id,
             decision=assessment.decision,
@@ -86,10 +137,14 @@ class ModerationRepository:
             severity=assessment.severity,
             confidence=assessment.confidence,
             reason=assessment.reason,
-            provider_request_id=assessment.provider_request_id,
-            provider=self._provider,
-            model=self._model,
-            prompt_version=self._prompt_version,
+            provider_request_id=(
+                content_hash(assessment.provider_request_id, self._hash_pepper)
+                if assessment.provider_request_id is not None
+                else None
+            ),
+            provider=source.provider,
+            model=source.model,
+            prompt_version=source.prompt_version,
         )
         self._session.add(record)
         return record

@@ -219,6 +219,90 @@ async def test_record_decision_rejects_missing_submission(
     assert caught.value.code == "RESOURCE_NOT_FOUND"
 
 
+async def test_provider_request_id_is_hashed_once_at_persistence_boundary(
+    session: AsyncSession, repository: ModerationRepository
+) -> None:
+    raw_request_id = "prefix-RAW-REQUEST-MARKER-suffix"
+    value = assessment().model_copy(update={"provider_request_id": raw_request_id})
+    submission = await repository.create_pending(
+        ModerationCommand(
+            owner_id=USER_ID,
+            content_type=ContentType.LETTER,
+            operation="CREATE_LETTER",
+            text="pending text",
+            payload={"content": "pending text"},
+            idempotency_key="provider-request-pending",
+        ),
+        value,
+    )
+    await session.flush()
+    records = list(
+        await session.scalars(
+            select(ModerationDecisionRecord).where(
+                ModerationDecisionRecord.submission_id == submission.id
+            )
+        )
+    )
+
+    expected = content_hash(raw_request_id, "test-pepper")
+    assert records[0].provider_request_id == expected
+    assert len(expected) == 64
+    assert raw_request_id not in repr(records[0].__dict__)
+
+    await repository.record_decision(submission.id, value)
+    await session.flush()
+    records = list(
+        await session.scalars(
+            select(ModerationDecisionRecord).where(
+                ModerationDecisionRecord.submission_id == submission.id
+            )
+        )
+    )
+    assert [record.provider_request_id for record in records] == [expected, expected]
+    assert content_hash(expected, "test-pepper") not in {
+        record.provider_request_id for record in records
+    }
+
+
+async def test_blocked_provider_request_id_is_hashed_and_raw_is_never_stored(
+    session: AsyncSession, repository: ModerationRepository
+) -> None:
+    raw_request_id = "before-RAW-BLOCKED-MARKER-after"
+    value = assessment(ModerationDecision.BLOCK).model_copy(
+        update={
+            "categories": {ModerationCategory.HARASSMENT},
+            "severity": Severity.HIGH,
+            "confidence": 0.99,
+            "provider_request_id": raw_request_id,
+        }
+    )
+    submission = await repository.create_blocked(
+        ModerationCommand(
+            owner_id=USER_ID,
+            content_type=ContentType.LETTER,
+            operation="CREATE_LETTER",
+            text="blocked text",
+            payload={"content": "RAW-BLOCKED-PAYLOAD"},
+            idempotency_key="provider-request-blocked",
+        ),
+        value,
+    )
+    await session.flush()
+    record = await session.scalar(
+        select(ModerationDecisionRecord).where(
+            ModerationDecisionRecord.submission_id == submission.id
+        )
+    )
+
+    assert submission.ciphertext is None
+    assert submission.nonce is None
+    assert record is not None
+    assert record.provider_request_id == content_hash(raw_request_id, "test-pepper")
+    rendered = repr(submission.__dict__) + repr(record.__dict__)
+    assert raw_request_id not in rendered
+    assert "RAW-BLOCKED-PAYLOAD" not in rendered
+
+
 async def test_submission_and_user_deletes_cascade_decisions(session_factory) -> None:
     async with session_factory() as cascade_session:
         await cascade_session.execute(text("PRAGMA foreign_keys=ON"))

@@ -1,4 +1,5 @@
 import json
+import re
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError
@@ -17,6 +18,8 @@ contain HATE, HARASSMENT, SEXUAL, VIOLENCE, SELF_HARM, PERSONAL_DATA, or SPAM.
 severity must be NONE, LOW, MEDIUM, HIGH, or CRITICAL. confidence must be between 0 and 1.
 Do not repeat the input text in reason.
 """
+
+_SAFE_REQUEST_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,254}$")
 
 
 class _UpstageMessage(BaseModel):
@@ -83,5 +86,15 @@ class UpstageModerationGateway:
 
         return ModerationAssessment(
             **provider_assessment.model_dump(),
-            provider_request_id=response.headers.get("x-request-id"),
+            provider_request_id=_safe_request_id(
+                response.headers.get("x-request-id"), text
+            ),
         )
+
+
+def _safe_request_id(value: str | None, submitted_text: str) -> str | None:
+    if value is None or _SAFE_REQUEST_ID.fullmatch(value) is None:
+        return None
+    if value in submitted_text:
+        return None
+    return value

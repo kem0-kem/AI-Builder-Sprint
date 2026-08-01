@@ -7,7 +7,13 @@ from pydantic import SecretStr, ValidationError
 
 from app.core.config import Settings
 from app.moderation.gateway import ModerationProviderUnavailable
-from app.moderation.schemas import ContentType, ModerationCategory, ModerationDecision, Severity
+from app.moderation.schemas import (
+    ContentType,
+    ModerationAssessment,
+    ModerationCategory,
+    ModerationDecision,
+    Severity,
+)
 from app.moderation.upstage_gateway import UpstageModerationGateway
 
 
@@ -136,6 +142,126 @@ async def test_gateway_maps_malformed_model_output_to_provider_unavailable(conte
             await build_gateway(client).classify(ContentType.FEED, "private-input-marker")
 
     assert "private-input-marker" not in str(caught.value)
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_gateway_rejects_contradictory_allow_assessment() -> None:
+    respx.post("https://api.upstage.ai/v1/chat/completions").mock(
+        return_value=upstage_response(
+            json.dumps(
+                {
+                    "decision": "ALLOW",
+                    "categories": ["SPAM"],
+                    "severity": "HIGH",
+                    "confidence": 0.99,
+                    "reason": "contradictory",
+                }
+            )
+        )
+    )
+    async with httpx.AsyncClient(base_url="https://api.upstage.ai/v1") as client:
+        with pytest.raises(ModerationProviderUnavailable):
+            await build_gateway(client).classify(ContentType.FEED, "private-input-marker")
+
+
+def test_direct_assessment_rejects_contradictory_allow() -> None:
+    raw_marker = "RAW_SCHEMA_INPUT_MARKER"
+    with pytest.raises(ValidationError, match="ALLOW assessment") as caught:
+        ModerationAssessment(
+            decision=ModerationDecision.ALLOW,
+            categories={ModerationCategory.SPAM},
+            severity=Severity.NONE,
+            confidence=0.9,
+            reason=raw_marker,
+        )
+    assert raw_marker not in str(caught.value) + repr(caught.value)
+
+
+@pytest.mark.parametrize("decision", [ModerationDecision.REVIEW, ModerationDecision.BLOCK])
+def test_direct_assessment_requires_categories_and_severity_for_non_allow(
+    decision: ModerationDecision,
+) -> None:
+    with pytest.raises(ValidationError, match="non-ALLOW assessment"):
+        ModerationAssessment(
+            decision=decision,
+            categories=set(),
+            severity=Severity.NONE,
+            confidence=0.9,
+            reason="invalid",
+        )
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize("decision", ["REVIEW", "BLOCK"])
+async def test_gateway_rejects_empty_non_allow_assessment(decision: str) -> None:
+    respx.post("https://api.upstage.ai/v1/chat/completions").mock(
+        return_value=upstage_response(
+            json.dumps(
+                {
+                    "decision": decision,
+                    "categories": [],
+                    "severity": "NONE",
+                    "confidence": 0.99,
+                    "reason": "contradictory",
+                }
+            )
+        )
+    )
+    async with httpx.AsyncClient(base_url="https://api.upstage.ai/v1") as client:
+        with pytest.raises(ModerationProviderUnavailable):
+            await build_gateway(client).classify(ContentType.FEED, "private-input-marker")
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize(
+    "request_id",
+    [
+        "x" * 10_000,
+        "request\nraw-marker",
+        "RAW CONTENT MARKER",
+        "RAW-CONTENT-MARKER",
+    ],
+)
+async def test_gateway_discards_unsafe_provider_request_id(request_id: str) -> None:
+    respx.post("https://api.upstage.ai/v1/chat/completions").mock(
+        return_value=upstage_response(
+            json.dumps(
+                {
+                    "decision": "ALLOW",
+                    "categories": [],
+                    "severity": "NONE",
+                    "confidence": 0.99,
+                    "reason": "safe",
+                }
+            ),
+            request_id=request_id,
+        )
+    )
+    async with httpx.AsyncClient(base_url="https://api.upstage.ai/v1") as client:
+        submitted_text = request_id if request_id == "RAW-CONTENT-MARKER" else "RAW CONTENT MARKER"
+        result = await build_gateway(client).classify(ContentType.FEED, submitted_text)
+
+    assert result.provider_request_id is None
+
+
+def test_provider_request_id_is_bounded_safe_and_hidden_from_repr() -> None:
+    result = ModerationAssessment(
+        decision=ModerationDecision.ALLOW,
+        categories=set(),
+        severity=Severity.NONE,
+        confidence=0.9,
+        reason="safe",
+        provider_request_id="request-123",
+    )
+    assert "request-123" not in repr(result)
+    for unsafe in ("x" * 256, "request id", "request\nidentifier"):
+        with pytest.raises(ValidationError):
+            result.model_copy(update={"provider_request_id": unsafe}).model_validate(
+                {**result.model_dump(), "provider_request_id": unsafe}
+            )
 
 
 @pytest.mark.asyncio
