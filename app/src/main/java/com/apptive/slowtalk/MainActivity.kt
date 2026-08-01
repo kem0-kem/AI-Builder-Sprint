@@ -145,7 +145,7 @@ private fun ApptiveApp() {
             }
         } else {
             screen = when (screen) {
-                is Screen.FeedDetail, Screen.WriteFeed -> Screen.Feed
+                is Screen.FeedDetail, Screen.WriteFeed, is Screen.EditFeed -> Screen.Feed
                 is Screen.Chat, Screen.CreateGroup -> Screen.Conversations
                 Screen.WriteLetter, Screen.LetterHistory -> Screen.LetterHome
                 is Screen.LetterDetail -> Screen.LetterHistory
@@ -259,6 +259,10 @@ private fun ApptiveApp() {
                     onBack = { screen = Screen.Feed }
                 )
             }
+            is Screen.EditFeed -> {
+                // 피드 수정 화면 (구현 예정이거나 WriteFeedScreen 공유 가능)
+                screen = Screen.Feed
+            }
             is Screen.Chat -> ChatScreen(
                 title = current.title,
                 isGroup = current.isGroup,
@@ -310,12 +314,9 @@ private fun ApptiveApp() {
                 onBack = { screen = Screen.Profile }
             )
             Screen.Interests -> InterestSettingScreen(
+                viewModel = profileViewModel,
                 onBack = { screen = Screen.Profile },
-                onComplete = { selected ->
-                    // 선택된 관심사를 뷰모델을 통해 업데이트하거나 상태에 반영할 수 있음
-                    // 여기서는 단순히 프로필로 복귀
-                    screen = Screen.Profile
-                }
+                onComplete = { screen = Screen.Profile }
             )
         }
     }
