@@ -8,7 +8,11 @@ sealed interface Screen {
     data class EditFeed(val feedId: Int) : Screen
     data class FeedDetail(val feedId: Int) : Screen
     data object Conversations : Screen
-    data class Chat(val title: String, val isGroup: Boolean = false) : Screen
+    data class Chat(
+        val title: String,
+        val isGroup: Boolean = false,
+        val chatRoomId: Int? = null
+    ) : Screen
     data object CreateGroup : Screen
     data object LetterHome : Screen
     data object WriteLetter : Screen
@@ -46,14 +50,17 @@ data class Conversation(
     val time: String,
     val unread: Boolean = false,
     val isGroup: Boolean = false,
-    val members: Int = 1
+    val members: Int = 1,
+    val chatRoomId: Int? = null
 )
 
 data class ChatMessage(
     val sender: String,
     val body: String,
     val time: String,
-    val mine: Boolean
+    val mine: Boolean,
+    val id: Int? = null,
+    val type: String = "CHAT"
 )
 
 data class Letter(

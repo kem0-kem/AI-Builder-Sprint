@@ -190,7 +190,10 @@ private fun ApptiveApp() {
                         0 -> ConversationListScreen(
                             anonymous = anonymousConversations,
                             groups = groupConversations,
-                            onOpen = { screen = Screen.Chat(it.title, it.isGroup) },
+                            loadRooms = { ChatApi.getRooms() },
+                            onOpen = {
+                                screen = Screen.Chat(it.title, it.isGroup, it.chatRoomId)
+                            },
                             onCreateGroup = { screen = Screen.CreateGroup },
                             onProfile = {
                                 profileReturnScreen = Screen.Conversations
@@ -344,6 +347,7 @@ private fun ApptiveApp() {
             is Screen.Chat -> ChatScreen(
                 title = current.title,
                 isGroup = current.isGroup,
+                chatRoomId = current.chatRoomId,
                 onBack = { screen = Screen.Conversations }
             )
             Screen.CreateGroup -> CreateGroupScreen(

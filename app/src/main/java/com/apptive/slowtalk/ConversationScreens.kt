@@ -38,17 +38,19 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,11 +58,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 
 @Composable
 fun ConversationListScreen(
     anonymous: List<Conversation>,
     groups: List<Conversation>,
+    loadRooms: suspend () -> Result<List<Conversation>>,
     onOpen: (Conversation) -> Unit,
     onCreateGroup: () -> Unit,
     onProfile: () -> Unit,
@@ -68,7 +72,12 @@ fun ConversationListScreen(
     showBottomBar: Boolean = true
 ) {
     var selected by remember { mutableStateOf(0) }
-    val shown = if (selected == 0) anonymous else groups
+    var remoteRooms by remember { mutableStateOf<List<Conversation>?>(null) }
+    LaunchedEffect(Unit) {
+        loadRooms().onSuccess { remoteRooms = it }
+    }
+    val shown = remoteRooms?.filter { it.isGroup == (selected == 1) }
+        ?: if (selected == 0) anonymous else groups
     PaperBackground {
         Scaffold(
             containerColor = Color.Transparent,
@@ -163,7 +172,9 @@ private fun ConversationRow(item: Conversation, onClick: () -> Unit) {
         Column(Modifier.padding(start = 12.dp).weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(item.title, fontWeight = FontWeight.Bold)
-                if (item.isGroup) Text("  ${item.members}명", color = SubtleInk, fontSize = 11.sp)
+                if (item.isGroup && item.members > 0) {
+                    Text("  ${item.members}명", color = SubtleInk, fontSize = 11.sp)
+                }
             }
             Spacer(Modifier.height(4.dp))
             Text(item.preview, color = SubtleInk, fontSize = 12.sp, maxLines = 1)
@@ -180,7 +191,12 @@ private fun ConversationRow(item: Conversation, onClick: () -> Unit) {
 }
 
 @Composable
-fun ChatScreen(title: String, isGroup: Boolean, onBack: () -> Unit) {
+fun ChatScreen(
+    title: String,
+    isGroup: Boolean,
+    chatRoomId: Int?,
+    onBack: () -> Unit
+) {
     val messages = remember {
         mutableStateListOf(
             ChatMessage(if (isGroup) "이웃 01" else title, "안녕하세요 :)\n오늘 날씨가 정말 좋네요.", "15:40", false),
@@ -189,7 +205,44 @@ fun ChatScreen(title: String, isGroup: Boolean, onBack: () -> Unit) {
             ChatMessage("나", if (isGroup) "네, 토요일에 봬요!" else "맞아요. 그런 순간들이 하루를 조금 더 행복하게 만들어주는 것 같아요.", "15:51", true)
         )
     }
-    var textState by remember { mutableStateOf(TextFieldValue("")) }
+    var text by remember { mutableStateOf("") }
+    var roomInfo by remember { mutableStateOf<ChatRoomInfo?>(null) }
+    var socketConnection by remember { mutableStateOf<ChatSocketConnection?>(null) }
+    val chatScope = rememberCoroutineScope()
+
+    LaunchedEffect(chatRoomId) {
+        chatRoomId?.let { roomId ->
+            ChatApi.getRoom(roomId).onSuccess { roomInfo = it }
+            ChatApi.getMessages(roomId).onSuccess { loaded ->
+                messages.clear()
+                messages.addAll(loaded)
+            }
+        }
+    }
+
+    DisposableEffect(chatRoomId) {
+        val connection = chatRoomId?.let { roomId ->
+            ChatSocket.connect(
+                chatRoomId = roomId,
+                onMessage = { incoming ->
+                    chatScope.launch {
+                        if (incoming.id == null || messages.none { it.id == incoming.id }) {
+                            messages.add(incoming)
+                        }
+                    }
+                },
+                onFailure = {
+                    chatScope.launch { socketConnection = null }
+                }
+            )
+        }
+        socketConnection = connection
+        onDispose {
+            connection?.close()
+            socketConnection = null
+        }
+    }
+
     PaperBackground {
         Scaffold(
             containerColor = Color.Transparent,
@@ -207,8 +260,16 @@ fun ChatScreen(title: String, isGroup: Boolean, onBack: () -> Unit) {
                                 }
                             }
                             Column(Modifier.padding(start = 10.dp).weight(1f)) {
-                                Text(title, fontWeight = FontWeight.ExtraBold)
-                                Text(if (isGroup) "5명 참여" else "온라인", color = Color(0xFF67B985), fontSize = 11.sp)
+                                Text(roomInfo?.name ?: title, fontWeight = FontWeight.ExtraBold)
+                                Text(
+                                    if (isGroup) {
+                                        roomInfo?.participantCount?.let { "${it}명 참여" } ?: "모임 대화"
+                                    } else {
+                                        "1:1 대화"
+                                    },
+                                    color = Color(0xFF67B985),
+                                    fontSize = 11.sp
+                                )
                             }
                             IconButton(onClick = {}) { Icon(Icons.Outlined.MoreVert, "더보기") }
                         }
@@ -240,16 +301,31 @@ fun ChatScreen(title: String, isGroup: Boolean, onBack: () -> Unit) {
                     Row(Modifier.padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (isGroup) IconButton(onClick = {}) { Icon(Icons.Outlined.Add, "첨부") }
                         OutlinedTextField(
-                            value = textState,
-                            onValueChange = { textState = it },
+                            value = text,
+                            onValueChange = { text = it },
                             modifier = Modifier.weight(1f),
                             placeholder = { Text("메시지를 입력해주세요", fontSize = 12.sp) },
                             singleLine = true
                         )
                         IconButton(onClick = {
-                            if (textState.text.isNotBlank()) {
-                                messages.add(ChatMessage("나", textState.text.trim(), "지금", true))
-                                textState = TextFieldValue("")
+                            val content = text.trim()
+                            if (content.isNotBlank()) {
+                                text = ""
+                                val sentBySocket = socketConnection?.send(content) == true
+                                if (sentBySocket) {
+                                    messages.add(ChatMessage("나", content, "지금", true))
+                                } else {
+                                    chatRoomId?.let { roomId ->
+                                        chatScope.launch {
+                                            ChatApi.sendMessage(roomId, content)
+                                                .onSuccess { sent ->
+                                                    if (messages.none { it.id == sent.id }) {
+                                                        messages.add(sent)
+                                                    }
+                                                }
+                                        }
+                                    } ?: messages.add(ChatMessage("나", content, "지금", true))
+                                }
                             }
                         }) { Icon(Icons.Outlined.Send, "전송", tint = Purple) }
                     }
@@ -317,8 +393,8 @@ fun CreateGroupScreen(
     onBack: () -> Unit,
     onCreate: (String) -> Unit
 ) {
-    var titleState by remember { mutableStateOf(TextFieldValue("")) }
-    var introState by remember { mutableStateOf(TextFieldValue("")) }
+    var title by remember { mutableStateOf("") }
+    var intro by remember { mutableStateOf("") }
     val selectedPeople = remember { mutableStateListOf<String>() }
     var showPeoplePicker by remember { mutableStateOf(false) }
     val peopleSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -341,17 +417,12 @@ fun CreateGroupScreen(
                     Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(BlockSurface)) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("모임 대화 제목", color = Purple, fontWeight = FontWeight.Bold)
-                            OutlinedTextField(
-                                value = titleState,
-                                onValueChange = { if (it.text.length <= 30) titleState = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                placeholder = { Text("모임 제목을 입력해주세요.") }
-                            )
+                            OutlinedTextField(title, { title = it.take(30) }, Modifier.fillMaxWidth(), placeholder = { Text("모임 제목을 입력해주세요.") })
                             Text("모임 소개", color = Purple, fontWeight = FontWeight.Bold)
                             OutlinedTextField(
-                                value = introState,
-                                onValueChange = { if (it.text.length <= 150) introState = it },
-                                modifier = Modifier.fillMaxWidth().height(110.dp),
+                                intro,
+                                { intro = it.take(150) },
+                                Modifier.fillMaxWidth().height(110.dp),
                                 placeholder = { Text("어떤 주제로, 어떤 이야기를 나누고 싶은지 소개해주세요.") }
                             )
                             Text("모임 인원 선택", color = Purple, fontWeight = FontWeight.Bold)
@@ -380,9 +451,9 @@ fun CreateGroupScreen(
                 }
                 item {
                     Button(
-                        onClick = { onCreate(titleState.text.ifBlank { "새로운 모임" }) },
-                        enabled = titleState.text.isNotBlank() &&
-                            introState.text.isNotBlank() &&
+                        onClick = { onCreate(title.ifBlank { "새로운 모임" }) },
+                        enabled = title.isNotBlank() &&
+                            intro.isNotBlank() &&
                             selectedPeople.isNotEmpty(),
                         modifier = Modifier.fillMaxWidth().height(54.dp),
                         shape = RoundedCornerShape(28.dp),

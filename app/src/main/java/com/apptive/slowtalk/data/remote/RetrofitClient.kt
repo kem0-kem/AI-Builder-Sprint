@@ -4,6 +4,9 @@ import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 
@@ -32,4 +35,16 @@ object RetrofitClient {
     val regionApi: RegionApi = retrofit.create(RegionApi::class.java)
     val interestApi: InterestApi = retrofit.create(InterestApi::class.java)
     val feedApi: FeedApiService = retrofit.create(FeedApiService::class.java)
+    val chatApi: ChatApiService = retrofit.create(ChatApiService::class.java)
+
+    fun openChatWebSocket(chatRoomId: Int, listener: WebSocketListener): WebSocket {
+        val socketBaseUrl = BASE_URL
+            .replaceFirst("https://", "wss://")
+            .replaceFirst("http://", "ws://")
+            .trimEnd('/')
+        val request = Request.Builder()
+            .url("$socketBaseUrl/ws/chat/$chatRoomId")
+            .build()
+        return okHttpClient.newWebSocket(request, listener)
+    }
 }
