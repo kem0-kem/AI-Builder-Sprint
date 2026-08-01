@@ -11,6 +11,7 @@ from app.db.base import Base
 from app.feeds import models as feed_models  # noqa: F401
 from app.letters import models as letter_models  # noqa: F401
 from app.meetings import models as meeting_models  # noqa: F401
+from app.moderation import models as moderation_models  # noqa: F401
 from app.profiles import models as profile_models  # noqa: F401
 from app.reports import models as report_models  # noqa: F401
 

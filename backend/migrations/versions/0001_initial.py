@@ -3,6 +3,7 @@
 from collections.abc import Sequence
 
 from alembic import op
+from sqlalchemy import Table
 
 # Register all model tables before create_all/drop_all.
 from app.auth import models as auth_models  # noqa: F401
@@ -19,10 +20,39 @@ down_revision: str | Sequence[str] | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
+HISTORICAL_TABLE_NAMES = (
+    "users",
+    "refresh_tokens",
+    "chat_rooms",
+    "chat_participants",
+    "chat_messages",
+    "outbox_events",
+    "feed_categories",
+    "feeds",
+    "comments",
+    "feed_likes",
+    "moderation_reports",
+    "letters",
+    "mailbox_entries",
+    "user_blocks",
+    "idempotency_records",
+    "invite_candidates",
+    "meetings",
+    "meeting_participants",
+    "interests",
+    "user_interests",
+    "analysis_snapshots",
+    "reflection_reports",
+)
+
+
+def _historical_tables() -> list[Table]:
+    return [Base.metadata.tables[name] for name in HISTORICAL_TABLE_NAMES]
+
 
 def upgrade() -> None:
-    Base.metadata.create_all(bind=op.get_bind())
+    Base.metadata.create_all(bind=op.get_bind(), tables=_historical_tables())
 
 
 def downgrade() -> None:
-    Base.metadata.drop_all(bind=op.get_bind())
+    Base.metadata.drop_all(bind=op.get_bind(), tables=_historical_tables())
