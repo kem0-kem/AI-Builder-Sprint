@@ -75,6 +75,23 @@ object FeedApi {
         }
     }
 
+    suspend fun getFeeds(): Result<List<MyFeedResult>> = runCatching {
+        RetrofitClient.feedApi.getFeeds().map { item ->
+            val category = appCategoryName(item.category.name)
+            MyFeedResult(
+                post = FeedPost(
+                    id = item.feedId,
+                    category = category,
+                    title = item.title,
+                    body = item.content,
+                    accent = categoryAccent(category),
+                    isMine = false
+                ),
+                liked = item.liked
+            )
+        }
+    }
+
     suspend fun getFeedDetail(feedId: Int): Result<FeedDetailResult> = runCatching {
         RetrofitClient.feedApi.getFeed(feedId).let { item ->
             val category = appCategoryName(item.category.name)

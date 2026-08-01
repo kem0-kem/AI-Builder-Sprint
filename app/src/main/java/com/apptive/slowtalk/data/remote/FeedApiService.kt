@@ -10,6 +10,9 @@ import retrofit2.http.POST
 import retrofit2.http.Path
 
 interface FeedApiService {
+    @GET("feeds")
+    suspend fun getFeeds(): List<FeedTimelineDto>
+
     @GET("feed-categories")
     suspend fun getFeedCategories(): List<FeedWriteCategoryDto>
 
@@ -73,6 +76,16 @@ interface FeedApiService {
 data class MyFeedDto(
     val feedId: Int,
     val category: FeedCategoryDto,
+    val title: String,
+    val content: String,
+    val liked: Boolean = false
+)
+
+@Serializable
+data class FeedTimelineDto(
+    val feedId: Int,
+    val category: FeedCategoryDto,
+    val author: FeedAuthorDto,
     val title: String,
     val content: String,
     val liked: Boolean = false

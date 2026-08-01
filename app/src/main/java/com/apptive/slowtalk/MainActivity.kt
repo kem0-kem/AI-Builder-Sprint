@@ -55,48 +55,7 @@ private fun ApptiveApp() {
     var lastBackPressTime by remember { mutableLongStateOf(0L) }
     val likedFeeds = remember { mutableStateMapOf<Int, Boolean>() }
     val likingFeeds = remember { mutableStateMapOf<Int, Boolean>() }
-    val feeds = remember {
-        mutableStateListOf(
-            FeedPost(
-                1,
-                "일상 이야기",
-                "오늘은 조금 천천히 걸어봤어요",
-                "매일 지나치던 길인데 천천히 걸으니 보이지 않던 풍경들이 눈에 들어왔어요.",
-                mutableListOf(
-                    Comment(
-                        "익명3",
-                        "저도 도저히 머리가 안 돌아갈 땐 산책을 즐겨해요",
-                        "12:42",
-                        replies = listOf(
-                            Comment("글쓴이", "그럴 때 산책이 정말 큰 도움이 되더라고요", "17:58", true)
-                        )
-                    )
-                ),
-                Purple
-            ),
-            FeedPost(
-                2,
-                "마음과 고민",
-                "새로운 시작이 조금 두렵습니다",
-                "기대되는 마음도 있지만 잘할 수 있을지 걱정돼요. 여러분은 시작 앞에서 어떤가요?",
-                mutableListOf(
-                    Comment("익명1", "새로운 시작은 누구에게나 떨리는 것 같아요.", "어제"),
-                    Comment("익명2", "천천히 해도 괜찮아요.", "어제"),
-                    Comment("익명4", "응원할게요!", "어제"),
-                    Comment("글쓴이", "따뜻한 말 고마워요.", "어제", true)
-                ),
-                Color(0xFFEC7168)
-            ),
-            FeedPost(
-                3,
-                "취미 생활",
-                "요즘 그림을 배우고 있어요",
-                "잘 그리는 것보다 내 마음을 천천히 표현하는 시간이 좋아서 계속해 보려고 합니다.",
-                mutableListOf(Comment("익명2", "멋진 취미네요. 오래 이어가길 바라요.", "2일 전")),
-                Color(0xFF8A70D8)
-            )
-        )
-    }
+    val feeds = remember { mutableStateListOf<FeedPost>() }
     val anonymousConversations = remember {
         listOf(
             Conversation("익명의 이웃 01", "오늘 하루는 어떻게 보내셨나요?", "방금 전", unread = true),
@@ -229,6 +188,14 @@ private fun ApptiveApp() {
                             onOpenFeed = { screen = Screen.FeedDetail(it) },
                             isLiked = { likedFeeds[it] == true },
                             onToggleLike = toggleFeedLike,
+                            loadFeeds = { FeedApi.getFeeds() },
+                            onFeedsLoaded = { remoteFeeds ->
+                                feeds.removeAll { !it.isMine }
+                                feeds.addAll(remoteFeeds.map { it.post })
+                                remoteFeeds.forEach { item ->
+                                    likedFeeds[item.post.id] = item.liked
+                                }
+                            },
                             loadMyFeeds = { FeedApi.getMyFeeds() },
                             onMyFeedsLoaded = { remoteFeeds ->
                                 feeds.removeAll { it.isMine }

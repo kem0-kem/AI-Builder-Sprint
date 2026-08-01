@@ -90,6 +90,8 @@ fun FeedScreen(
     onOpenFeed: (Int) -> Unit,
     isLiked: (Int) -> Boolean,
     onToggleLike: (Int) -> Unit,
+    loadFeeds: suspend () -> Result<List<MyFeedResult>>,
+    onFeedsLoaded: (List<MyFeedResult>) -> Unit,
     loadMyFeeds: suspend () -> Result<List<MyFeedResult>>,
     onMyFeedsLoaded: (List<MyFeedResult>) -> Unit,
     onWrite: () -> Unit,
@@ -99,12 +101,28 @@ fun FeedScreen(
 ) {
     var isRefreshing by remember { mutableStateOf(false) }
     var selectedIndex by remember { mutableStateOf(FeedIndex.ALL) }
+    var isAllFeedsLoading by remember { mutableStateOf(false) }
+    var allFeedsLoadFailed by remember { mutableStateOf(false) }
     var isMyFeedsLoading by remember { mutableStateOf(false) }
     var myFeedsLoadFailed by remember { mutableStateOf(false) }
     val refreshScope = rememberCoroutineScope()
     val visibleFeeds = when (selectedIndex) {
         FeedIndex.ALL -> feeds.filterNot { it.isMine }
         FeedIndex.MINE -> feeds.filter { it.isMine }
+    }
+
+    suspend fun refreshAllFeeds() {
+        isAllFeedsLoading = true
+        loadFeeds().fold(
+            onSuccess = {
+                onFeedsLoaded(it)
+                allFeedsLoadFailed = false
+            },
+            onFailure = {
+                allFeedsLoadFailed = true
+            }
+        )
+        isAllFeedsLoading = false
     }
 
     suspend fun refreshMyFeeds() {
@@ -121,10 +139,12 @@ fun FeedScreen(
         isMyFeedsLoading = false
     }
 
+    LaunchedEffect(Unit) {
+        refreshAllFeeds()
+    }
+
     LaunchedEffect(selectedIndex) {
-        if (selectedIndex == FeedIndex.MINE) {
-            refreshMyFeeds()
-        }
+        if (selectedIndex == FeedIndex.MINE) refreshMyFeeds()
     }
 
     PaperBackground {
@@ -149,7 +169,7 @@ fun FeedScreen(
                             if (selectedIndex == FeedIndex.MINE) {
                                 refreshMyFeeds()
                             } else {
-                                delay(700)
+                                refreshAllFeeds()
                             }
                             isRefreshing = false
                         }
@@ -174,11 +194,15 @@ fun FeedScreen(
                     }
                     if (visibleFeeds.isEmpty()) {
                         item {
-                            EmptyMyFeedMessage(
-                                loading = selectedIndex == FeedIndex.MINE && isMyFeedsLoading,
-                                loadFailed = selectedIndex == FeedIndex.MINE && myFeedsLoadFailed,
+                            EmptyFeedMessage(
+                                mine = selectedIndex == FeedIndex.MINE,
+                                loading = if (selectedIndex == FeedIndex.MINE) isMyFeedsLoading else isAllFeedsLoading,
+                                loadFailed = if (selectedIndex == FeedIndex.MINE) myFeedsLoadFailed else allFeedsLoadFailed,
                                 onRetry = {
-                                    refreshScope.launch { refreshMyFeeds() }
+                                    refreshScope.launch {
+                                        if (selectedIndex == FeedIndex.MINE) refreshMyFeeds()
+                                        else refreshAllFeeds()
+                                    }
                                 }
                             )
                         }
@@ -257,7 +281,8 @@ private fun FeedIndexSelector(
 }
 
 @Composable
-private fun EmptyMyFeedMessage(
+private fun EmptyFeedMessage(
+    mine: Boolean,
     loading: Boolean,
     loadFailed: Boolean,
     onRetry: () -> Unit
@@ -275,7 +300,11 @@ private fun EmptyMyFeedMessage(
                 strokeWidth = 3.dp
             )
             Spacer(Modifier.height(14.dp))
-            Text("내가 쓴 피드를 불러오고 있어요.", color = SubtleInk, fontSize = 13.sp)
+            Text(
+                if (mine) "내가 쓴 피드를 불러오고 있어요." else "관심사 피드를 불러오고 있어요.",
+                color = SubtleInk,
+                fontSize = 13.sp
+            )
             return@Column
         }
         Surface(
@@ -294,15 +323,22 @@ private fun EmptyMyFeedMessage(
         }
         Spacer(Modifier.height(14.dp))
         Text(
-            if (loadFailed) "피드를 불러오지 못했어요." else "아직 내가 쓴 피드가 없어요.",
+            when {
+                loadFailed -> "피드를 불러오지 못했어요."
+                mine -> "아직 내가 쓴 피드가 없어요."
+                else -> "관심사와 연관된 피드가 없습니다."
+            },
             color = Ink,
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            if (loadFailed) "서버 연결을 확인한 뒤 다시 시도해주세요."
-            else "피드를 작성하면 이곳에서 모아볼 수 있어요.",
+            when {
+                loadFailed -> "서버 연결을 확인한 뒤 다시 시도해주세요."
+                mine -> "피드를 작성하면 이곳에서 모아볼 수 있어요."
+                else -> "관심사를 설정하거나 잠시 후 다시 확인해주세요."
+            },
             color = SubtleInk,
             fontSize = 13.sp,
             textAlign = TextAlign.Center
