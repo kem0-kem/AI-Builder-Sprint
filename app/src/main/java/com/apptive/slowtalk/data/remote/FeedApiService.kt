@@ -34,6 +34,12 @@ interface FeedApiService {
     @POST("feeds/{feedId}/report")
     suspend fun reportFeed(@Path("feedId") feedId: Int): Response<Unit>
 
+    @POST("feeds/{feedId}/like")
+    suspend fun likeFeed(@Path("feedId") feedId: Int): FeedLikeResponse
+
+    @DELETE("feeds/{feedId}/like")
+    suspend fun unlikeFeed(@Path("feedId") feedId: Int): FeedLikeResponse
+
     @POST("feeds/{feedId}/comments")
     suspend fun createComment(
         @Path("feedId") feedId: Int,
@@ -87,6 +93,9 @@ data class CommentContentRequest(val content: String)
 
 @Serializable
 data class CommentCreateResponse(val commentId: Int)
+
+@Serializable
+data class FeedLikeResponse(val liked: Boolean)
 
 @Serializable
 data class FeedWriteCategoryDto(

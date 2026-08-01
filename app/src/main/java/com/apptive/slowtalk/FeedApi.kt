@@ -90,6 +90,14 @@ object FeedApi {
         RetrofitClient.feedApi.reportFeed(feedId).requireSuccess()
     }
 
+    suspend fun setFeedLiked(feedId: Int, liked: Boolean): Result<Boolean> = runCatching {
+        if (liked) {
+            RetrofitClient.feedApi.likeFeed(feedId).liked
+        } else {
+            RetrofitClient.feedApi.unlikeFeed(feedId).liked
+        }
+    }
+
     suspend fun createComment(feedId: Int, content: String): Result<Int> = runCatching {
         RetrofitClient.feedApi.createComment(
             feedId,

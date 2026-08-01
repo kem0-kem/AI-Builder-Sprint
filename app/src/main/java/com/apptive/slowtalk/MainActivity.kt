@@ -54,6 +54,7 @@ private fun ApptiveApp() {
     var profileReturnScreen by remember { mutableStateOf<Screen>(Screen.Feed) }
     var lastBackPressTime by remember { mutableLongStateOf(0L) }
     val likedFeeds = remember { mutableStateMapOf<Int, Boolean>() }
+    val likingFeeds = remember { mutableStateMapOf<Int, Boolean>() }
     val feeds = remember {
         mutableStateListOf(
             FeedPost(
@@ -120,6 +121,27 @@ private fun ApptiveApp() {
         )
     }
     val mainPagerState = rememberPagerState(initialPage = 1, pageCount = { 3 })
+    val toggleFeedLike: (Int) -> Unit = { feedId ->
+        if (likingFeeds[feedId] != true) {
+            val wasLiked = likedFeeds[feedId] == true
+            val requestedLike = !wasLiked
+            likedFeeds[feedId] = requestedLike
+            likingFeeds[feedId] = true
+            appScope.launch {
+                FeedApi.setFeedLiked(feedId, requestedLike)
+                    .onSuccess { serverLiked -> likedFeeds[feedId] = serverLiked }
+                    .onFailure {
+                        likedFeeds[feedId] = wasLiked
+                        Toast.makeText(
+                            context,
+                            if (requestedLike) "공감하지 못했습니다." else "공감을 취소하지 못했습니다.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                likingFeeds.remove(feedId)
+            }
+        }
+    }
 
     LaunchedEffect(mainPagerState.settledPage) {
         if (screen.isMainTab()) {
@@ -206,9 +228,7 @@ private fun ApptiveApp() {
                             feeds = feeds,
                             onOpenFeed = { screen = Screen.FeedDetail(it) },
                             isLiked = { likedFeeds[it] == true },
-                            onToggleLike = { id ->
-                                likedFeeds[id] = likedFeeds[id] != true
-                            },
+                            onToggleLike = toggleFeedLike,
                             loadMyFeeds = { FeedApi.getMyFeeds() },
                             onMyFeedsLoaded = { remoteFeeds ->
                                 feeds.removeAll { it.isMine }
@@ -306,9 +326,7 @@ private fun ApptiveApp() {
                 FeedDetailScreen(
                     post = post,
                     isLiked = likedFeeds[post.id] == true,
-                    onToggleLike = {
-                        likedFeeds[post.id] = likedFeeds[post.id] != true
-                    },
+                    onToggleLike = { toggleFeedLike(post.id) },
                     onEdit = { screen = Screen.EditFeed(post.id) },
                     onDelete = {
                         feeds.removeAll { it.id == post.id }
