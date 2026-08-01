@@ -47,6 +47,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.collectAsState
 import com.apptive.slowtalk.ui.profile.ProfileViewModel
@@ -77,9 +78,9 @@ fun WriteLetterScreen(
     onMatched: () -> Unit,
     onTab: (MainTab) -> Unit
 ) {
-    var body by remember {
+    var bodyState by remember {
         mutableStateOf(
-            "오늘은 평소보다 조금 느리게 걸어봤어요.\n\n늘 빠르게만 지나치던 길들이\n천천히 바라보니 이렇게 예쁘더라고요.\n\n여러분의 하루는 어땠나요?"
+            TextFieldValue("오늘은 평소보다 조금 느리게 걸어봤어요.\n\n늘 빠르게만 지나치던 길들이\n천천히 바라보니 이렇게 예쁘더라고요.\n\n여러분의 하루는 어땠나요?")
         )
     }
     var showMatch by remember { mutableStateOf(false) }
@@ -117,11 +118,11 @@ fun WriteLetterScreen(
                                 Icon(Icons.Outlined.Edit, null, tint = Purple)
                                 Text("  오늘의 편지", color = Purple, fontWeight = FontWeight.Bold)
                                 Spacer(Modifier.weight(1f))
-                                Text("${body.length} / 1,000자", color = Purple, fontSize = 11.sp)
+                                Text("${bodyState.text.length} / 1,000자", color = Purple, fontSize = 11.sp)
                             }
                             OutlinedTextField(
-                                value = body,
-                                onValueChange = { body = it.take(1000) },
+                                value = bodyState,
+                                onValueChange = { if (it.text.length <= 1000) bodyState = it },
                                 modifier = Modifier.fillMaxWidth().height(300.dp),
                                 placeholder = { Text("당신의 하루를 천천히 들려주세요.") }
                             )
@@ -190,7 +191,7 @@ fun WriteLetterScreen(
                 item {
                     Button(
                         onClick = { showMatch = true },
-                        enabled = body.isNotBlank(),
+                        enabled = bodyState.text.isNotBlank(),
                         modifier = Modifier.fillMaxWidth().height(56.dp),
                         shape = RoundedCornerShape(28.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Purple)
@@ -211,7 +212,7 @@ fun WriteLetterScreen(
             text = { Text("손글씨 사진을 읽어 편지 본문으로 옮기는 OCR 데모입니다.") },
             confirmButton = {
                 TextButton(onClick = {
-                    body = "오늘 하루도 잘 보내셨나요?\n손으로 적은 마음을 천천히 전해봅니다.\n작은 기쁨이 오래 머무는 하루이길 바라요."
+                    bodyState = TextFieldValue("오늘 하루도 잘 보내셨나요?\n손으로 적은 마음을 천천히 전해봅니다.\n작은 기쁨이 오래 머무는 하루이길 바라요.")
                     showOcr = false
                 }) { Text("샘플 인식하기") }
             },
@@ -339,8 +340,8 @@ fun ProfileEditScreen(
     
     val currentProfile = (uiState as? ProfileUiState.Success)?.profile
 
-    var nickname by remember { mutableStateOf(currentProfile?.nickname ?: "지연") }
-    var intro by remember { mutableStateOf(currentProfile?.bio ?: "") }
+    var nicknameState by remember { mutableStateOf(TextFieldValue(currentProfile?.nickname ?: "지연")) }
+    var introState by remember { mutableStateOf(TextFieldValue(currentProfile?.bio ?: "")) }
     
     // 지역 정보 파싱 (기존 로직 유지하되 서버 데이터 우선)
     val serverLocation = currentProfile?.let { 
@@ -395,8 +396,8 @@ fun ProfileEditScreen(
                             "저장",
                             modifier = Modifier.clickable {
                                 viewModel.updateProfile(
-                                    nickname = nickname,
-                                    bio = intro,
+                                    nickname = nicknameState.text,
+                                    bio = introState.text,
                                     interest = currentProfile?.interest ?: "",
                                     province = selectedProvince,
                                     district = selectedDistrict,
@@ -422,11 +423,20 @@ fun ProfileEditScreen(
                 }
                 item {
                     Text("닉네임", fontWeight = FontWeight.Bold)
-                    OutlinedTextField(nickname, { nickname = it.take(10) }, Modifier.fillMaxWidth(), singleLine = true)
+                    OutlinedTextField(
+                        value = nicknameState,
+                        onValueChange = { nicknameState = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
                 }
                 item {
                     Text("소개", fontWeight = FontWeight.Bold)
-                    OutlinedTextField(intro, { intro = it.take(100) }, Modifier.fillMaxWidth().height(110.dp))
+                    OutlinedTextField(
+                        value = introState,
+                        onValueChange = { introState = it },
+                        modifier = Modifier.fillMaxWidth().height(110.dp)
+                    )
                 }
                 item {
                     Text("거주지", fontWeight = FontWeight.Bold)

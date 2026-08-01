@@ -38,6 +38,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -188,7 +189,7 @@ fun ChatScreen(title: String, isGroup: Boolean, onBack: () -> Unit) {
             ChatMessage("나", if (isGroup) "네, 토요일에 봬요!" else "맞아요. 그런 순간들이 하루를 조금 더 행복하게 만들어주는 것 같아요.", "15:51", true)
         )
     }
-    var text by remember { mutableStateOf("") }
+    var textState by remember { mutableStateOf(TextFieldValue("")) }
     PaperBackground {
         Scaffold(
             containerColor = Color.Transparent,
@@ -239,16 +240,16 @@ fun ChatScreen(title: String, isGroup: Boolean, onBack: () -> Unit) {
                     Row(Modifier.padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (isGroup) IconButton(onClick = {}) { Icon(Icons.Outlined.Add, "첨부") }
                         OutlinedTextField(
-                            value = text,
-                            onValueChange = { text = it },
+                            value = textState,
+                            onValueChange = { textState = it },
                             modifier = Modifier.weight(1f),
                             placeholder = { Text("메시지를 입력해주세요", fontSize = 12.sp) },
                             singleLine = true
                         )
                         IconButton(onClick = {
-                            if (text.isNotBlank()) {
-                                messages.add(ChatMessage("나", text.trim(), "지금", true))
-                                text = ""
+                            if (textState.text.isNotBlank()) {
+                                messages.add(ChatMessage("나", textState.text.trim(), "지금", true))
+                                textState = TextFieldValue("")
                             }
                         }) { Icon(Icons.Outlined.Send, "전송", tint = Purple) }
                     }
@@ -316,8 +317,8 @@ fun CreateGroupScreen(
     onBack: () -> Unit,
     onCreate: (String) -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
-    var intro by remember { mutableStateOf("") }
+    var titleState by remember { mutableStateOf(TextFieldValue("")) }
+    var introState by remember { mutableStateOf(TextFieldValue("")) }
     val selectedPeople = remember { mutableStateListOf<String>() }
     var showPeoplePicker by remember { mutableStateOf(false) }
     val peopleSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -340,12 +341,17 @@ fun CreateGroupScreen(
                     Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(BlockSurface)) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("모임 대화 제목", color = Purple, fontWeight = FontWeight.Bold)
-                            OutlinedTextField(title, { title = it.take(30) }, Modifier.fillMaxWidth(), placeholder = { Text("모임 제목을 입력해주세요.") })
+                            OutlinedTextField(
+                                value = titleState,
+                                onValueChange = { if (it.text.length <= 30) titleState = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("모임 제목을 입력해주세요.") }
+                            )
                             Text("모임 소개", color = Purple, fontWeight = FontWeight.Bold)
                             OutlinedTextField(
-                                intro,
-                                { intro = it.take(150) },
-                                Modifier.fillMaxWidth().height(110.dp),
+                                value = introState,
+                                onValueChange = { if (it.text.length <= 150) introState = it },
+                                modifier = Modifier.fillMaxWidth().height(110.dp),
                                 placeholder = { Text("어떤 주제로, 어떤 이야기를 나누고 싶은지 소개해주세요.") }
                             )
                             Text("모임 인원 선택", color = Purple, fontWeight = FontWeight.Bold)
@@ -374,9 +380,9 @@ fun CreateGroupScreen(
                 }
                 item {
                     Button(
-                        onClick = { onCreate(title.ifBlank { "새로운 모임" }) },
-                        enabled = title.isNotBlank() &&
-                            intro.isNotBlank() &&
+                        onClick = { onCreate(titleState.text.ifBlank { "새로운 모임" }) },
+                        enabled = titleState.text.isNotBlank() &&
+                            introState.text.isNotBlank() &&
                             selectedPeople.isNotEmpty(),
                         modifier = Modifier.fillMaxWidth().height(54.dp),
                         shape = RoundedCornerShape(28.dp),

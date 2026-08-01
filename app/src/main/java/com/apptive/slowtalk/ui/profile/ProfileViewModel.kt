@@ -2,9 +2,11 @@ package com.apptive.slowtalk.ui.profile
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.apptive.slowtalk.data.remote.InterestDto
 import com.apptive.slowtalk.data.remote.ProfileUpdateRequest
 import com.apptive.slowtalk.data.remote.RegionDto
 import com.apptive.slowtalk.data.remote.UserProfileDto
+import com.apptive.slowtalk.data.repository.InterestRepository
 import com.apptive.slowtalk.data.repository.ProfileRepository
 import com.apptive.slowtalk.data.repository.RegionRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,7 +23,8 @@ sealed class ProfileUiState {
 
 class ProfileViewModel(
     private val profileRepository: ProfileRepository = ProfileRepository(),
-    private val regionRepository: RegionRepository = RegionRepository()
+    private val regionRepository: RegionRepository = RegionRepository(),
+    private val interestRepository: InterestRepository = InterestRepository()
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<ProfileUiState>(ProfileUiState.Idle)
@@ -35,6 +38,9 @@ class ProfileViewModel(
 
     private val _subDistricts = MutableStateFlow<List<String>>(emptyList())
     val subDistricts: StateFlow<List<String>> = _subDistricts.asStateFlow()
+
+    private val _allInterests = MutableStateFlow<List<InterestDto>>(emptyList())
+    val allInterests: StateFlow<List<InterestDto>> = _allInterests.asStateFlow()
 
     fun fetchProfile() {
         viewModelScope.launch {
@@ -77,6 +83,23 @@ class ProfileViewModel(
         viewModelScope.launch {
             regionRepository.getSubDistricts(province, district)
                 .onSuccess { _subDistricts.value = it }
+        }
+    }
+
+    fun fetchAllInterests() {
+        viewModelScope.launch {
+            interestRepository.getAllInterests()
+                .onSuccess { _allInterests.value = it }
+        }
+    }
+
+    fun updateInterests(interestIds: List<Int>, onComplete: () -> Unit) {
+        viewModelScope.launch {
+            interestRepository.updateMyInterests(interestIds)
+                .onSuccess { 
+                    fetchProfile()
+                    onComplete()
+                }
         }
     }
 }

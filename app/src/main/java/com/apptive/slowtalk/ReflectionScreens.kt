@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -62,7 +63,7 @@ fun WriteReflectionScreen(
     onFinish: (String) -> Unit,
     onProfile: () -> Unit,
 ) {
-    var text by remember { mutableStateOf("") }
+    var textState by remember { mutableStateOf(TextFieldValue("")) }
     
     PaperBackground {
         Column(
@@ -156,7 +157,7 @@ fun WriteReflectionScreen(
                                 modifier = Modifier.weight(1f)
                             )
                             Text(
-                                text = "${text.length} / 1,000자",
+                                text = "${textState.text.length} / 1,000자",
                                 fontSize = 14.sp,
                                 color = Purple.copy(alpha = 0.7f)
                             )
@@ -181,8 +182,8 @@ fun WriteReflectionScreen(
                             }
                             
                             BasicTextField(
-                                value = text,
-                                onValueChange = { if (it.length <= 1000) text = it },
+                                value = textState,
+                                onValueChange = { if (it.text.length <= 1000) textState = it },
                                 modifier = Modifier.fillMaxSize(),
                                 textStyle = TextStyle(
                                     fontSize = 16.sp,
@@ -190,7 +191,7 @@ fun WriteReflectionScreen(
                                     color = Ink
                                 ),
                                 decorationBox = { innerTextField ->
-                                    if (text.isEmpty()) {
+                                    if (textState.text.isEmpty()) {
                                         Text(
                                             "오늘 하루는 어땠나요?\n편안하게 작성해 보세요.",
                                             fontSize = 16.sp,
@@ -227,7 +228,7 @@ fun WriteReflectionScreen(
                 Spacer(Modifier.height(24.dp))
                 
                 Button(
-                    onClick = { if (text.isNotBlank()) onFinish(text) },
+                    onClick = { if (textState.text.isNotBlank()) onFinish(textState.text) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(60.dp),
@@ -236,7 +237,7 @@ fun WriteReflectionScreen(
                         containerColor = Purple,
                         disabledContainerColor = Purple.copy(alpha = 0.5f)
                     ),
-                    enabled = text.isNotBlank()
+                    enabled = textState.text.isNotBlank()
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = null)

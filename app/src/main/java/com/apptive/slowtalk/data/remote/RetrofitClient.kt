@@ -30,4 +30,5 @@ object RetrofitClient {
 
     val profileApi: ProfileApi = retrofit.create(ProfileApi::class.java)
     val regionApi: RegionApi = retrofit.create(RegionApi::class.java)
+    val interestApi: InterestApi = retrofit.create(InterestApi::class.java)
 }

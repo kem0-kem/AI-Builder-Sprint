@@ -37,3 +37,19 @@ data class StatisticsDto(
 data class ProfileUpdateResponse(
     val message: String
 )
+
+@Serializable
+data class InterestDto(
+    val interestId: Int,
+    val name: String
+)
+
+@Serializable
+data class InterestUpdateRequest(
+    val interestIds: List<Int>
+)
+
+@Serializable
+data class InterestUpdateResponse(
+    val interestIds: List<Int>
+)
