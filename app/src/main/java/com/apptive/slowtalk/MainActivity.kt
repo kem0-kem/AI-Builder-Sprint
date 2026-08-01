@@ -310,9 +310,12 @@ private fun ApptiveApp() {
                 onBack = { screen = Screen.Profile }
             )
             Screen.Interests -> InterestSettingScreen(
-                viewModel = profileViewModel,
                 onBack = { screen = Screen.Profile },
-                onComplete = { screen = Screen.Profile }
+                onComplete = { selected ->
+                    // 선택된 관심사를 뷰모델을 통해 업데이트하거나 상태에 반영할 수 있음
+                    // 여기서는 단순히 프로필로 복귀
+                    screen = Screen.Profile
+                }
             )
         }
     }

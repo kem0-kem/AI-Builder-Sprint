@@ -45,7 +45,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -356,8 +355,8 @@ fun WriteFeedScreen(
 ) {
     val categories = feedCategoryVisuals
     var category by remember { mutableStateOf(categories.first().name) }
-    var titleState by remember { mutableStateOf(TextFieldValue("")) }
-    var bodyState by remember { mutableStateOf(TextFieldValue("")) }
+    var title by remember { mutableStateOf("") }
+    var body by remember { mutableStateOf("") }
 
     PaperBackground {
         Scaffold(containerColor = Color.Transparent) { padding ->
@@ -431,7 +430,7 @@ fun WriteFeedScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    "${bodyState.text.length} / 1,000자",
+                                    "${body.length} / 1,000자",
                                     color = SubtleInk,
                                     fontSize = 11.sp
                                 )
@@ -440,8 +439,8 @@ fun WriteFeedScreen(
                             Text("제목", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                             Spacer(Modifier.height(6.dp))
                             OutlinedTextField(
-                                value = titleState,
-                                onValueChange = { titleState = it },
+                                value = title,
+                                onValueChange = { title = it.take(60) },
                                 modifier = Modifier.fillMaxWidth(),
                                 placeholder = { Text("오늘 어떤 일이 있었나요?") },
                                 singleLine = true
@@ -450,8 +449,8 @@ fun WriteFeedScreen(
                             Text("본문", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                             Spacer(Modifier.height(6.dp))
                             OutlinedTextField(
-                                value = bodyState,
-                                onValueChange = { bodyState = it },
+                                value = body,
+                                onValueChange = { body = it.take(1000) },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(280.dp),
@@ -560,16 +559,16 @@ fun WriteFeedScreen(
                                         )
                                         Column(Modifier.padding(start = 9.dp)) {
                                             Text(
-                                                if (bodyState.text.length < 30) {
+                                                if (body.length < 30) {
                                                     "조금 더 들려주세요"
                                                 } else {
                                                     "좋은 흐름이에요!"
                                                 },
-                                                color = if (bodyState.text.length < 30) Purple else Color(0xFF2FAE68),
+                                                color = if (body.length < 30) Purple else Color(0xFF2FAE68),
                                                 fontWeight = FontWeight.Bold
                                             )
                                             Text(
-                                                if (bodyState.text.length < 30) {
+                                                if (body.length < 30) {
                                                     "구체적인 순간이 더해지면 이야기가 풍성해져요."
                                                 } else {
                                                     "편안하고 자연스러운 글이에요."
@@ -628,8 +627,8 @@ fun WriteFeedScreen(
                 }
                 item {
                     Button(
-                        onClick = { onPublish(category, titleState.text.trim(), bodyState.text.trim()) },
-                        enabled = titleState.text.isNotBlank() && bodyState.text.isNotBlank(),
+                        onClick = { onPublish(category, title.trim(), body.trim()) },
+                        enabled = title.isNotBlank() && body.isNotBlank(),
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(54.dp),
@@ -724,7 +723,7 @@ fun FeedDetailScreen(
     onToggleLike: () -> Unit,
     onBack: () -> Unit
 ) {
-    var commentState by remember { mutableStateOf(TextFieldValue("")) }
+    var comment by remember { mutableStateOf("") }
     var comments by remember { mutableStateOf(post.comments.toList()) }
     var replyTarget by remember { mutableStateOf<Pair<Int, String>?>(null) }
     var isRefreshing by remember { mutableStateOf(false) }
@@ -788,8 +787,8 @@ fun FeedDetailScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             OutlinedTextField(
-                                value = commentState,
-                                onValueChange = { commentState = it },
+                                value = comment,
+                                onValueChange = { comment = it },
                                 modifier = Modifier
                                     .weight(1f)
                                     .focusRequester(commentFocusRequester),
@@ -806,7 +805,7 @@ fun FeedDetailScreen(
                             )
                             IconButton(
                                 onClick = {
-                                    val message = commentState.text.trim()
+                                    val message = comment.trim()
                                     if (message.isNotBlank()) {
                                         val targetIndex = replyTarget?.first
                                         val updatedComments = if (targetIndex == null) {
@@ -830,7 +829,7 @@ fun FeedDetailScreen(
                                         comments = updatedComments
                                         post.comments.clear()
                                         post.comments.addAll(updatedComments)
-                                        commentState = TextFieldValue("")
+                                        comment = ""
                                         replyTarget = null
                                     }
                                 }
