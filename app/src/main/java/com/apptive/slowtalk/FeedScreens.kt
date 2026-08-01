@@ -1,5 +1,7 @@
 package com.apptive.slowtalk
 
+import android.widget.Toast
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
@@ -26,12 +28,15 @@ import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Eco
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Flight
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Report
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.School
 import androidx.compose.material.icons.outlined.Send
@@ -41,6 +46,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -64,6 +73,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -80,6 +90,8 @@ fun FeedScreen(
     onOpenFeed: (Int) -> Unit,
     isLiked: (Int) -> Boolean,
     onToggleLike: (Int) -> Unit,
+    loadMyFeeds: suspend () -> Result<List<MyFeedResult>>,
+    onMyFeedsLoaded: (List<MyFeedResult>) -> Unit,
     onWrite: () -> Unit,
     onProfile: () -> Unit,
     onTab: (MainTab) -> Unit,
@@ -87,10 +99,32 @@ fun FeedScreen(
 ) {
     var isRefreshing by remember { mutableStateOf(false) }
     var selectedIndex by remember { mutableStateOf(FeedIndex.ALL) }
+    var isMyFeedsLoading by remember { mutableStateOf(false) }
+    var myFeedsLoadFailed by remember { mutableStateOf(false) }
     val refreshScope = rememberCoroutineScope()
     val visibleFeeds = when (selectedIndex) {
         FeedIndex.ALL -> feeds.filterNot { it.isMine }
         FeedIndex.MINE -> feeds.filter { it.isMine }
+    }
+
+    suspend fun refreshMyFeeds() {
+        isMyFeedsLoading = true
+        loadMyFeeds().fold(
+            onSuccess = {
+                onMyFeedsLoaded(it)
+                myFeedsLoadFailed = false
+            },
+            onFailure = {
+                myFeedsLoadFailed = true
+            }
+        )
+        isMyFeedsLoading = false
+    }
+
+    LaunchedEffect(selectedIndex) {
+        if (selectedIndex == FeedIndex.MINE) {
+            refreshMyFeeds()
+        }
     }
 
     PaperBackground {
@@ -112,7 +146,11 @@ fun FeedScreen(
                     if (!isRefreshing) {
                         refreshScope.launch {
                             isRefreshing = true
-                            delay(700)
+                            if (selectedIndex == FeedIndex.MINE) {
+                                refreshMyFeeds()
+                            } else {
+                                delay(700)
+                            }
                             isRefreshing = false
                         }
                     }
@@ -136,7 +174,13 @@ fun FeedScreen(
                     }
                     if (visibleFeeds.isEmpty()) {
                         item {
-                            EmptyMyFeedMessage()
+                            EmptyMyFeedMessage(
+                                loading = selectedIndex == FeedIndex.MINE && isMyFeedsLoading,
+                                loadFailed = selectedIndex == FeedIndex.MINE && myFeedsLoadFailed,
+                                onRetry = {
+                                    refreshScope.launch { refreshMyFeeds() }
+                                }
+                            )
                         }
                     }
                     items(visibleFeeds, key = { it.id }) { post ->
@@ -213,13 +257,27 @@ private fun FeedIndexSelector(
 }
 
 @Composable
-private fun EmptyMyFeedMessage() {
+private fun EmptyMyFeedMessage(
+    loading: Boolean,
+    loadFailed: Boolean,
+    onRetry: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 36.dp, vertical = 54.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        if (loading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(34.dp),
+                color = Purple,
+                strokeWidth = 3.dp
+            )
+            Spacer(Modifier.height(14.dp))
+            Text("내가 쓴 피드를 불러오고 있어요.", color = SubtleInk, fontSize = 13.sp)
+            return@Column
+        }
         Surface(
             modifier = Modifier.size(52.dp),
             shape = CircleShape,
@@ -236,18 +294,29 @@ private fun EmptyMyFeedMessage() {
         }
         Spacer(Modifier.height(14.dp))
         Text(
-            "아직 내가 쓴 피드가 없어요.",
+            if (loadFailed) "피드를 불러오지 못했어요." else "아직 내가 쓴 피드가 없어요.",
             color = Ink,
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            "피드를 작성하면 이곳에서 모아볼 수 있어요.",
+            if (loadFailed) "서버 연결을 확인한 뒤 다시 시도해주세요."
+            else "피드를 작성하면 이곳에서 모아볼 수 있어요.",
             color = SubtleInk,
             fontSize = 13.sp,
             textAlign = TextAlign.Center
         )
+        if (loadFailed) {
+            Spacer(Modifier.height(14.dp))
+            Button(
+                onClick = onRetry,
+                colors = ButtonDefaults.buttonColors(containerColor = Purple),
+                shape = RoundedCornerShape(18.dp)
+            ) {
+                Text("다시 시도")
+            }
+        }
     }
 }
 
@@ -351,12 +420,16 @@ private fun FeedCard(
 fun WriteFeedScreen(
     onBack: () -> Unit,
     onProfile: () -> Unit,
+    initialPost: FeedPost? = null,
     onPublish: (String, String, String) -> Unit
 ) {
     val categories = feedCategoryVisuals
-    var category by remember { mutableStateOf(categories.first().name) }
-    var title by remember { mutableStateOf("") }
-    var body by remember { mutableStateOf("") }
+    var category by remember(initialPost?.id) {
+        mutableStateOf(initialPost?.category ?: categories.first().name)
+    }
+    var title by remember(initialPost?.id) { mutableStateOf(initialPost?.title.orEmpty()) }
+    var body by remember(initialPost?.id) { mutableStateOf(initialPost?.body.orEmpty()) }
+    val isEditing = initialPost != null
 
     PaperBackground {
         Scaffold(containerColor = Color.Transparent) { padding ->
@@ -375,7 +448,7 @@ fun WriteFeedScreen(
                     ) {
                         IconButton(onClick = onBack) { Icon(Icons.Outlined.ArrowBack, "뒤로") }
                         Text(
-                            "피드 쓰기",
+                            if (isEditing) "피드 수정" else "피드 쓰기",
                             modifier = Modifier.weight(1f),
                             fontSize = 24.sp,
                             fontWeight = FontWeight.ExtraBold
@@ -636,7 +709,10 @@ fun WriteFeedScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = Purple)
                     ) {
                         Icon(Icons.Outlined.Send, null)
-                        Text("  피드 올리기 (익명)", fontWeight = FontWeight.Bold)
+                        Text(
+                            if (isEditing) "  수정 완료" else "  피드 올리기 (익명)",
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
                 item {
@@ -721,19 +797,183 @@ fun FeedDetailScreen(
     post: FeedPost,
     isLiked: Boolean,
     onToggleLike: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onReport: () -> Unit,
     onBack: () -> Unit
 ) {
     var comment by remember { mutableStateOf("") }
     var comments by remember { mutableStateOf(post.comments.toList()) }
     var replyTarget by remember { mutableStateOf<Pair<Int, String>?>(null) }
     var isRefreshing by remember { mutableStateOf(false) }
+    var menuExpanded by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var showReportDialog by remember { mutableStateOf(false) }
     val commentFocusRequester = remember { FocusRequester() }
     val refreshScope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     LaunchedEffect(replyTarget) {
         if (replyTarget != null) {
             commentFocusRequester.requestFocus()
         }
+    }
+
+    fun commitComments(updated: List<Comment>) {
+        comments = updated
+        post.comments.clear()
+        post.comments.addAll(updated)
+    }
+
+    fun editCommentAt(parentIndex: Int, replyIndex: Int?, content: String) {
+        val target = if (replyIndex == null) {
+            comments[parentIndex]
+        } else {
+            comments[parentIndex].replies[replyIndex]
+        }
+        val updated = comments.mapIndexed { index, parent ->
+            if (index != parentIndex) {
+                parent
+            } else if (replyIndex == null) {
+                parent.copy(message = content)
+            } else {
+                parent.copy(
+                    replies = parent.replies.mapIndexed { childIndex, reply ->
+                        if (childIndex == replyIndex) reply.copy(message = content) else reply
+                    }
+                )
+            }
+        }
+        commitComments(updated)
+        target.id?.let { commentId ->
+            refreshScope.launch {
+                FeedApi.updateComment(post.id, commentId, content).onFailure {
+                    Toast.makeText(context, "댓글 수정을 서버에 반영하지 못했습니다.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    fun deleteCommentAt(parentIndex: Int, replyIndex: Int?) {
+        val target = if (replyIndex == null) {
+            comments[parentIndex]
+        } else {
+            comments[parentIndex].replies[replyIndex]
+        }
+        val updated = if (replyIndex == null) {
+            comments.filterIndexed { index, _ -> index != parentIndex }
+        } else {
+            comments.mapIndexed { index, parent ->
+                if (index == parentIndex) {
+                    parent.copy(
+                        replies = parent.replies.filterIndexed { childIndex, _ -> childIndex != replyIndex }
+                    )
+                } else {
+                    parent
+                }
+            }
+        }
+        commitComments(updated)
+        target.id?.let { commentId ->
+            refreshScope.launch {
+                FeedApi.deleteComment(post.id, commentId).onFailure {
+                    Toast.makeText(context, "댓글을 서버에서 삭제하지 못했습니다.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    fun reportCommentAt(parentIndex: Int, replyIndex: Int?) {
+        val target = if (replyIndex == null) {
+            comments[parentIndex]
+        } else {
+            comments[parentIndex].replies[replyIndex]
+        }
+        Toast.makeText(context, "댓글 신고가 접수되었습니다.", Toast.LENGTH_SHORT).show()
+        target.id?.let { commentId ->
+            refreshScope.launch {
+                FeedApi.reportComment(post.id, commentId).onFailure {
+                    Toast.makeText(context, "댓글 신고를 서버에 전송하지 못했습니다.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    fun assignCommentId(parentIndex: Int, replyIndex: Int?, commentId: Int) {
+        val updated = comments.mapIndexed { index, parent ->
+            if (index != parentIndex) {
+                parent
+            } else if (replyIndex == null) {
+                parent.copy(id = commentId)
+            } else {
+                parent.copy(
+                    replies = parent.replies.mapIndexed { childIndex, reply ->
+                        if (childIndex == replyIndex) reply.copy(id = commentId) else reply
+                    }
+                )
+            }
+        }
+        commitComments(updated)
+    }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("피드를 삭제할까요?", fontWeight = FontWeight.Bold) },
+            text = { Text("삭제한 피드는 다시 복구할 수 없어요.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteDialog = false
+                        onDelete()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD95C55))
+                ) {
+                    Text("삭제")
+                }
+            },
+            dismissButton = {
+                Button(
+                    onClick = { showDeleteDialog = false },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = SubtleInk
+                    )
+                ) {
+                    Text("취소")
+                }
+            }
+        )
+    }
+
+    if (showReportDialog) {
+        AlertDialog(
+            onDismissRequest = { showReportDialog = false },
+            title = { Text("이 피드를 신고할까요?", fontWeight = FontWeight.Bold) },
+            text = { Text("운영 정책에 따라 내용을 확인할 수 있도록 신고가 접수됩니다.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showReportDialog = false
+                        onReport()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Purple)
+                ) {
+                    Text("신고")
+                }
+            },
+            dismissButton = {
+                Button(
+                    onClick = { showReportDialog = false },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = SubtleInk
+                    )
+                ) {
+                    Text("취소")
+                }
+            }
+        )
     }
 
     PaperBackground {
@@ -826,9 +1066,28 @@ fun FeedDetailScreen(
                                                 }
                                             }
                                         }
-                                        comments = updatedComments
-                                        post.comments.clear()
-                                        post.comments.addAll(updatedComments)
+                                        commitComments(updatedComments)
+                                        val createdParentIndex = targetIndex ?: updatedComments.lastIndex
+                                        val createdReplyIndex = targetIndex?.let {
+                                            updatedComments[it].replies.lastIndex
+                                        }
+                                        refreshScope.launch {
+                                            FeedApi.createComment(post.id, message)
+                                                .onSuccess { commentId ->
+                                                    assignCommentId(
+                                                        createdParentIndex,
+                                                        createdReplyIndex,
+                                                        commentId
+                                                    )
+                                                }
+                                                .onFailure {
+                                                    Toast.makeText(
+                                                        context,
+                                                        "댓글을 서버에 등록하지 못했습니다.",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                        }
                                         comment = ""
                                         replyTarget = null
                                     }
@@ -871,7 +1130,53 @@ fun FeedDetailScreen(
                             IconButton(onClick = onBack) { Icon(Icons.Outlined.ArrowBack, "뒤로") }
                             Text("피드", fontSize = 27.sp, fontWeight = FontWeight.ExtraBold)
                             Spacer(Modifier.weight(1f))
-                            IconButton(onClick = {}) { Icon(Icons.Outlined.MoreVert, "더보기") }
+                            Box {
+                                IconButton(onClick = { menuExpanded = true }) {
+                                    Icon(Icons.Outlined.MoreVert, "더보기")
+                                }
+                                DropdownMenu(
+                                    expanded = menuExpanded,
+                                    onDismissRequest = { menuExpanded = false }
+                                ) {
+                                    if (post.isMine) {
+                                        DropdownMenuItem(
+                                            text = { Text("수정") },
+                                            leadingIcon = {
+                                                Icon(Icons.Outlined.Edit, contentDescription = null)
+                                            },
+                                            onClick = {
+                                                menuExpanded = false
+                                                onEdit()
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("삭제", color = Color(0xFFD95C55)) },
+                                            leadingIcon = {
+                                                Icon(
+                                                    Icons.Outlined.DeleteOutline,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFFD95C55)
+                                                )
+                                            },
+                                            onClick = {
+                                                menuExpanded = false
+                                                showDeleteDialog = true
+                                            }
+                                        )
+                                    } else {
+                                        DropdownMenuItem(
+                                            text = { Text("신고") },
+                                            leadingIcon = {
+                                                Icon(Icons.Outlined.Report, contentDescription = null)
+                                            },
+                                            onClick = {
+                                                menuExpanded = false
+                                                showReportDialog = true
+                                            }
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                     item {
@@ -892,7 +1197,15 @@ fun FeedDetailScreen(
                     items(comments.size) { index ->
                         CommentThread(
                             comment = comments[index],
-                            onReply = { author -> replyTarget = index to author }
+                            onReply = { author -> replyTarget = index to author },
+                            onEditRoot = { content -> editCommentAt(index, null, content) },
+                            onDeleteRoot = { deleteCommentAt(index, null) },
+                            onReportRoot = { reportCommentAt(index, null) },
+                            onEditReply = { replyIndex, content ->
+                                editCommentAt(index, replyIndex, content)
+                            },
+                            onDeleteReply = { replyIndex -> deleteCommentAt(index, replyIndex) },
+                            onReportReply = { replyIndex -> reportCommentAt(index, replyIndex) }
                         )
                     }
                 }
@@ -904,15 +1217,24 @@ fun FeedDetailScreen(
 @Composable
 private fun CommentThread(
     comment: Comment,
-    onReply: (String) -> Unit
+    onReply: (String) -> Unit,
+    onEditRoot: (String) -> Unit,
+    onDeleteRoot: () -> Unit,
+    onReportRoot: () -> Unit,
+    onEditReply: (Int, String) -> Unit,
+    onDeleteReply: (Int) -> Unit,
+    onReportReply: (Int) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         CommentCard(
             comment = comment,
             modifier = Modifier.fillMaxWidth(),
-            onReply = { onReply(comment.author) }
+            onReply = { onReply(comment.author) },
+            onEdit = onEditRoot,
+            onDelete = onDeleteRoot,
+            onReport = onReportRoot
         )
-        comment.replies.forEach { reply ->
+        comment.replies.forEachIndexed { replyIndex, reply ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -931,6 +1253,9 @@ private fun CommentThread(
                     comment = reply,
                     modifier = Modifier.weight(1f),
                     onReply = { onReply(reply.author) },
+                    onEdit = { content -> onEditReply(replyIndex, content) },
+                    onDelete = { onDeleteReply(replyIndex) },
+                    onReport = { onReportReply(replyIndex) },
                     isReply = true
                 )
             }
@@ -943,8 +1268,118 @@ private fun CommentCard(
     comment: Comment,
     modifier: Modifier,
     onReply: () -> Unit,
+    onEdit: (String) -> Unit,
+    onDelete: () -> Unit,
+    onReport: () -> Unit,
     isReply: Boolean = false
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    var showEditDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var showReportDialog by remember { mutableStateOf(false) }
+    var editedContent by remember(comment.message) { mutableStateOf(comment.message) }
+
+    if (showEditDialog) {
+        AlertDialog(
+            onDismissRequest = { showEditDialog = false },
+            title = { Text("댓글 수정", fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = editedContent,
+                    onValueChange = { editedContent = it.take(500) },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val content = editedContent.trim()
+                        if (content.isNotEmpty()) {
+                            showEditDialog = false
+                            onEdit(content)
+                        }
+                    },
+                    enabled = editedContent.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Purple)
+                ) {
+                    Text("수정 완료")
+                }
+            },
+            dismissButton = {
+                Button(
+                    onClick = { showEditDialog = false },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = SubtleInk
+                    )
+                ) {
+                    Text("취소")
+                }
+            }
+        )
+    }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("댓글을 삭제할까요?", fontWeight = FontWeight.Bold) },
+            text = { Text("삭제한 댓글은 다시 복구할 수 없어요.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteDialog = false
+                        onDelete()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD95C55))
+                ) {
+                    Text("삭제")
+                }
+            },
+            dismissButton = {
+                Button(
+                    onClick = { showDeleteDialog = false },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = SubtleInk
+                    )
+                ) {
+                    Text("취소")
+                }
+            }
+        )
+    }
+
+    if (showReportDialog) {
+        AlertDialog(
+            onDismissRequest = { showReportDialog = false },
+            title = { Text("이 댓글을 신고할까요?", fontWeight = FontWeight.Bold) },
+            text = { Text("운영 정책에 따라 확인할 수 있도록 신고가 접수됩니다.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showReportDialog = false
+                        onReport()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Purple)
+                ) {
+                    Text("신고")
+                }
+            },
+            dismissButton = {
+                Button(
+                    onClick = { showReportDialog = false },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = SubtleInk
+                    )
+                ) {
+                    Text("취소")
+                }
+            }
+        )
+    }
+
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(17.dp),
@@ -971,16 +1406,61 @@ private fun CommentCard(
                         modifier = Modifier.size(20.dp)
                     )
                 }
-                IconButton(
-                    onClick = {},
-                    modifier = Modifier.size(38.dp)
-                ) {
-                    Icon(
-                        Icons.Outlined.MoreVert,
-                        contentDescription = "댓글 더보기",
-                        tint = SubtleInk,
-                        modifier = Modifier.size(20.dp)
-                    )
+                Box {
+                    IconButton(
+                        onClick = { menuExpanded = true },
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Icon(
+                            Icons.Outlined.MoreVert,
+                            contentDescription = "댓글 더보기",
+                            tint = SubtleInk,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false }
+                    ) {
+                        if (comment.isMine) {
+                            DropdownMenuItem(
+                                text = { Text("수정") },
+                                leadingIcon = {
+                                    Icon(Icons.Outlined.Edit, contentDescription = null)
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    editedContent = comment.message
+                                    showEditDialog = true
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("삭제", color = Color(0xFFD95C55)) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Outlined.DeleteOutline,
+                                        contentDescription = null,
+                                        tint = Color(0xFFD95C55)
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    showDeleteDialog = true
+                                }
+                            )
+                        } else {
+                            DropdownMenuItem(
+                                text = { Text("신고") },
+                                leadingIcon = {
+                                    Icon(Icons.Outlined.Report, contentDescription = null)
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    showReportDialog = true
+                                }
+                            )
+                        }
+                    }
                 }
             }
             Spacer(Modifier.height(4.dp))

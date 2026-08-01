@@ -1,82 +1,107 @@
 package com.apptive.slowtalk
 
-import java.net.HttpURLConnection
-import java.net.URL
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
+import androidx.compose.ui.graphics.Color
+import com.apptive.slowtalk.data.remote.FeedUpdateRequest
+import com.apptive.slowtalk.data.remote.CommentContentRequest
+import com.apptive.slowtalk.data.remote.RetrofitClient
+import retrofit2.Response
+
+data class MyFeedResult(
+    val post: FeedPost,
+    val liked: Boolean
+)
 
 object FeedApi {
-    val isConfigured: Boolean
-        get() = BuildConfig.API_BASE_URL.isNotBlank()
+    val isConfigured: Boolean = true
+
+    suspend fun getMyFeeds(): Result<List<MyFeedResult>> = runCatching {
+        RetrofitClient.feedApi.getMyFeeds().map { item ->
+            val category = appCategoryName(item.category.name)
+            MyFeedResult(
+                post = FeedPost(
+                    id = item.feedId,
+                    category = category,
+                    title = item.title,
+                    body = item.content,
+                    accent = categoryAccent(category),
+                    isMine = true
+                ),
+                liked = item.liked
+            )
+        }
+    }
 
     suspend fun updateFeed(
         feedId: Int,
         categoryId: Int,
         title: String,
         content: String
-    ): Result<Unit> = request(
-        method = "PATCH",
-        path = "/feeds/$feedId",
-        body = JSONObject()
-            .put("categoryId", categoryId)
-            .put("title", title)
-            .put("content", content)
-    )
+    ): Result<Unit> = runCatching {
+        RetrofitClient.feedApi.updateFeed(
+            feedId = feedId,
+            request = FeedUpdateRequest(categoryId, title, content)
+        ).requireSuccess()
+    }
 
-    suspend fun deleteFeed(feedId: Int): Result<Unit> =
-        request(method = "DELETE", path = "/feeds/$feedId")
+    suspend fun deleteFeed(feedId: Int): Result<Unit> = runCatching {
+        RetrofitClient.feedApi.deleteFeed(feedId).requireSuccess()
+    }
 
-    suspend fun reportFeed(feedId: Int): Result<Unit> =
-        request(method = "POST", path = "/feeds/$feedId/report")
+    suspend fun reportFeed(feedId: Int): Result<Unit> = runCatching {
+        RetrofitClient.feedApi.reportFeed(feedId).requireSuccess()
+    }
 
-    private suspend fun request(
-        method: String,
-        path: String,
-        body: JSONObject? = null
-    ): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun createComment(feedId: Int, content: String): Result<Int> = runCatching {
+        RetrofitClient.feedApi.createComment(
+            feedId,
+            CommentContentRequest(content)
+        ).commentId
+    }
+
+    suspend fun updateComment(feedId: Int, commentId: Int, content: String): Result<Unit> =
         runCatching {
-            val baseUrl = BuildConfig.API_BASE_URL.trim().trimEnd('/')
-            check(baseUrl.isNotEmpty()) { "API_BASE_URL이 설정되지 않았습니다." }
-
-            val connection = (URL("$baseUrl$path").openConnection() as HttpURLConnection).apply {
-                requestMethod = method
-                connectTimeout = 10_000
-                readTimeout = 10_000
-                setRequestProperty("Accept", "application/json")
-                if (BuildConfig.API_AUTH_TOKEN.isNotBlank()) {
-                    setRequestProperty("Authorization", "Bearer ${BuildConfig.API_AUTH_TOKEN}")
-                }
-                if (body != null) {
-                    doOutput = true
-                    setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                    outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
-                        writer.write(body.toString())
-                    }
-                }
-            }
-
-            try {
-                val status = connection.responseCode
-                if (status !in 200..299) {
-                    val errorText = connection.errorStream
-                        ?.bufferedReader(Charsets.UTF_8)
-                        ?.use { it.readText() }
-                        .orEmpty()
-                    error("피드 요청 실패 ($status)${if (errorText.isBlank()) "" else ": $errorText"}")
-                }
-            } finally {
-                connection.disconnect()
-            }
+            RetrofitClient.feedApi.updateComment(
+                feedId,
+                commentId,
+                CommentContentRequest(content)
+            ).requireSuccess()
         }
+
+    suspend fun deleteComment(feedId: Int, commentId: Int): Result<Unit> = runCatching {
+        RetrofitClient.feedApi.deleteComment(feedId, commentId).requireSuccess()
+    }
+
+    suspend fun reportComment(feedId: Int, commentId: Int): Result<Unit> = runCatching {
+        RetrofitClient.feedApi.reportComment(feedId, commentId).requireSuccess()
     }
 }
 
+private fun Response<Unit>.requireSuccess() {
+    check(isSuccessful) { "피드 요청 실패 (${code()})" }
+}
+
+private fun appCategoryName(serverName: String): String = when (serverName.trim()) {
+    "일상", "일상 이야기" -> "일상 이야기"
+    "취미", "취미 생활" -> "취미 생활"
+    "고민", "마음과 고민" -> "마음과 고민"
+    "성장", "배움과 성장" -> "배움과 성장"
+    "여행", "여행과 경험" -> "여행과 경험"
+    else -> serverName.ifBlank { "기타" }
+}
+
+private fun categoryAccent(category: String): Color = when (category) {
+    "마음과 고민" -> Color(0xFFEC7168)
+    "취미 생활" -> Color(0xFF8A70D8)
+    "배움과 성장" -> Color(0xFF5C95E8)
+    "여행과 경험" -> Color(0xFF3DBCC1)
+    else -> Purple
+}
+
 fun feedCategoryId(category: String): Int = when (category) {
-    "일상 이야기" -> 1
-    "취미 생활" -> 2
-    "마음과 고민" -> 3
-    "배움과 성장" -> 4
-    "여행과 경험" -> 5
-    else -> 6
+    "일상 이야기" -> 2
+    "취미 생활" -> 3
+    "마음과 고민" -> 4
+    "배움과 성장" -> 5
+    "여행과 경험" -> 6
+    else -> 7
 }

@@ -36,7 +36,8 @@ data class Comment(
     val message: String,
     val time: String,
     val isMine: Boolean = false,
-    val replies: List<Comment> = emptyList()
+    val replies: List<Comment> = emptyList(),
+    val id: Int? = null
 )
 
 data class Conversation(
