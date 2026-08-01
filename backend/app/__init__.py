@@ -1,0 +1,1 @@
+"""SlowTalk API application."""
