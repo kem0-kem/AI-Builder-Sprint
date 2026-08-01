@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.apptive.slowtalk.ui.auth.AuthViewModel
 import com.apptive.slowtalk.ui.profile.ProfileViewModel
 import com.apptive.slowtalk.ui.theme.SlowTalkTheme
 import kotlinx.coroutines.launch
@@ -50,7 +51,9 @@ private fun ApptiveApp() {
     val activity = context as? Activity
     val appScope = rememberCoroutineScope()
     val profileViewModel: ProfileViewModel = viewModel()
-    var screen by remember { mutableStateOf<Screen>(Screen.Feed) }
+    val authViewModel: AuthViewModel = viewModel()
+    var isLoggedIn by remember { mutableStateOf(false) }
+    var screen by remember { mutableStateOf<Screen>(if (isLoggedIn) Screen.Feed else Screen.Login) }
     var profileReturnScreen by remember { mutableStateOf<Screen>(Screen.Feed) }
     var lastBackPressTime by remember { mutableLongStateOf(0L) }
     val likedFeeds = remember { mutableStateMapOf<Int, Boolean>() }
@@ -134,6 +137,7 @@ private fun ApptiveApp() {
                 Screen.Profile -> profileReturnScreen
                 Screen.EditProfile -> Screen.Profile
                 Screen.Interests -> Screen.Profile
+                Screen.SignUp -> Screen.Login
                 else -> Screen.Feed
             }
         }
@@ -146,6 +150,23 @@ private fun ApptiveApp() {
             .safeDrawingPadding()
     ) {
         when (val current = screen) {
+            Screen.Login -> LoginScreen(
+                viewModel = authViewModel,
+                onLogin = {
+                    isLoggedIn = true
+                    screen = Screen.Feed
+                },
+                onSignUp = { screen = Screen.SignUp }
+            )
+            Screen.SignUp -> SignUpScreen(
+                viewModel = authViewModel,
+                onBack = { screen = Screen.Login },
+                onComplete = {
+                    // 가입 완료 후 로그인 화면으로 이동
+                    screen = Screen.Login
+                    Toast.makeText(context, "회원가입이 완료되었습니다. 로그인해주세요.", Toast.LENGTH_SHORT).show()
+                }
+            )
             Screen.Feed, Screen.Conversations, Screen.LetterHome -> Scaffold(
                 containerColor = Color.Transparent,
                 bottomBar = {
@@ -395,9 +416,14 @@ private fun ApptiveApp() {
             )
             Screen.Profile -> ProfileOverviewScreen(
                 viewModel = profileViewModel,
+                authViewModel = authViewModel,
                 onBack = { screen = profileReturnScreen },
                 onEdit = { screen = Screen.EditProfile },
-                onInterests = { screen = Screen.Interests }
+                onInterests = { screen = Screen.Interests },
+                onLogout = {
+                    isLoggedIn = false
+                    screen = Screen.Login
+                }
             )
             Screen.EditProfile -> ProfileEditScreen(
                 viewModel = profileViewModel,

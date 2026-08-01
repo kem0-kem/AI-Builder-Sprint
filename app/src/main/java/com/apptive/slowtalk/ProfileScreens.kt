@@ -25,6 +25,8 @@ import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Send
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -49,15 +51,18 @@ import androidx.compose.ui.unit.sp
 
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import com.apptive.slowtalk.ui.auth.AuthViewModel
 import com.apptive.slowtalk.ui.profile.ProfileUiState
 import com.apptive.slowtalk.ui.profile.ProfileViewModel
 
 @Composable
 fun ProfileOverviewScreen(
     viewModel: ProfileViewModel,
+    authViewModel: AuthViewModel,
     onBack: () -> Unit,
     onEdit: () -> Unit,
-    onInterests: () -> Unit
+    onInterests: () -> Unit,
+    onLogout: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -228,7 +233,28 @@ fun ProfileOverviewScreen(
                                 Icon(Icons.Outlined.ChevronRight, "관심사 보기", tint = SubtleInk)
                             }
                         }
-                        Spacer(Modifier.height(24.dp))
+                        
+                        Spacer(Modifier.height(40.dp))
+                        
+                        Button(
+                            onClick = {
+                                authViewModel.logout {
+                                    onLogout()
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Purple,
+                                contentColor = Color.White
+                            )
+                        ) {
+                            Text("로그아웃", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        }
+                        
+                        Spacer(Modifier.height(40.dp))
                     }
                 }
                 is ProfileUiState.Error -> {

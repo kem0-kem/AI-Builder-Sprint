@@ -3,6 +3,8 @@ package com.apptive.slowtalk
 import androidx.compose.ui.graphics.Color
 
 sealed interface Screen {
+    data object Login : Screen
+    data object SignUp : Screen
     data object Feed : Screen
     data object WriteFeed : Screen
     data class EditFeed(val feedId: Int) : Screen
