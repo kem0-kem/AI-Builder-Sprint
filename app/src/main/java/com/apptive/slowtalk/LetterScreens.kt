@@ -48,6 +48,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.collectAsState
+import com.apptive.slowtalk.ui.profile.ProfileViewModel
+import com.apptive.slowtalk.ui.profile.ProfileUiState
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -326,32 +329,56 @@ fun LetterDetailScreen(letter: Letter, onBack: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileEditScreen(
-    initialLocation: String,
-    onLocationChange: (String) -> Unit,
+    viewModel: ProfileViewModel,
     onBack: () -> Unit
 ) {
-    val initialParts = remember(initialLocation) { initialLocation.split(" ") }
-    val initialProvince = remember(initialLocation) {
-        residenceDistricts.keys.firstOrNull {
-            officialProvinceLabel(it) == initialParts.firstOrNull()
-        } ?: "서울특별시"
-    }
-    val initialDistrict = remember(initialLocation, initialProvince) {
-        initialParts.getOrNull(1)
-            ?.takeIf { it in residenceDistricts.getValue(initialProvince) }
-            ?: residenceDistricts.getValue(initialProvince).first()
-    }
-    var nickname by remember { mutableStateOf("지연") }
-    var intro by remember { mutableStateOf("따뜻한 이야기를 좋아해요.\n천천히, 서로의 하루를 나눠요.") }
-    var location by remember(initialLocation) { mutableStateOf(initialLocation) }
+    val uiState by viewModel.uiState.collectAsState()
+    val provinces by viewModel.provinces.collectAsState()
+    val districts by viewModel.districts.collectAsState()
+    val subDistricts by viewModel.subDistricts.collectAsState()
+    
+    val currentProfile = (uiState as? ProfileUiState.Success)?.profile
+
+    var nickname by remember { mutableStateOf(currentProfile?.nickname ?: "지연") }
+    var intro by remember { mutableStateOf(currentProfile?.bio ?: "") }
+    
+    // 지역 정보 파싱 (기존 로직 유지하되 서버 데이터 우선)
+    val serverLocation = currentProfile?.let { 
+        buildString {
+            append(it.region.province)
+            append(" ")
+            append(it.region.district)
+            it.region.subDistrict?.let { sub -> append(" "); append(sub) }
+        }
+    } ?: "서울특별시 마포구"
+
+    val initialParts = remember(serverLocation) { serverLocation.split(" ") }
+    
+    var location by remember(serverLocation) { mutableStateOf(serverLocation) }
     var showLocation by remember { mutableStateOf(false) }
-    var selectedProvince by remember(initialLocation) { mutableStateOf(initialProvince) }
-    var selectedDistrict by remember(initialLocation) { mutableStateOf(initialDistrict) }
-    var selectedNeighborhood by remember(initialLocation) {
-        mutableStateOf(initialParts.drop(2).joinToString(" ").ifBlank { null })
-    }
+    var selectedProvince by remember(serverLocation) { mutableStateOf(initialParts.getOrNull(0) ?: "서울특별시") }
+    var selectedDistrict by remember(serverLocation) { mutableStateOf(initialParts.getOrNull(1) ?: "마포구") }
+    var selectedNeighborhood by remember(serverLocation) { mutableStateOf(initialParts.getOrNull(2)) }
+    
     var expandedLevel by remember { mutableStateOf<ResidenceLevel?>(null) }
     val locationSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    // API 호출 연동
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        viewModel.fetchProvinces()
+    }
+
+    androidx.compose.runtime.LaunchedEffect(selectedProvince) {
+        if (selectedProvince.isNotEmpty()) {
+            viewModel.fetchDistricts(selectedProvince)
+        }
+    }
+
+    androidx.compose.runtime.LaunchedEffect(selectedProvince, selectedDistrict) {
+        if (selectedProvince.isNotEmpty() && selectedDistrict.isNotEmpty()) {
+            viewModel.fetchSubDistricts(selectedProvince, selectedDistrict)
+        }
+    }
 
     PaperBackground {
         Scaffold(containerColor = Color.Transparent) { padding ->
@@ -367,7 +394,14 @@ fun ProfileEditScreen(
                         Text(
                             "저장",
                             modifier = Modifier.clickable {
-                                onLocationChange(location)
+                                viewModel.updateProfile(
+                                    nickname = nickname,
+                                    bio = intro,
+                                    interest = currentProfile?.interest ?: "",
+                                    province = selectedProvince,
+                                    district = selectedDistrict,
+                                    subDistrict = selectedNeighborhood
+                                )
                                 onBack()
                             },
                             color = Purple,
@@ -426,9 +460,6 @@ fun ProfileEditScreen(
     }
 
     if (showLocation) {
-        val districtOptions = residenceDistricts.getValue(selectedProvince)
-        val neighborhoodOptions = residenceNeighborhoods(selectedProvince, selectedDistrict)
-
         ModalBottomSheet(
             onDismissRequest = {
                 expandedLevel = null
@@ -482,11 +513,11 @@ fun ProfileEditScreen(
                 if (expandedLevel == ResidenceLevel.PROVINCE) {
                     ResidenceOptionsAbove(
                         modifier = Modifier.weight(1f),
-                        options = residenceDistricts.keys.toList(),
+                        options = provinces,
                         selected = selectedProvince,
                         onSelect = { province ->
                             selectedProvince = province
-                            selectedDistrict = residenceDistricts.getValue(province).first()
+                            selectedDistrict = ""
                             selectedNeighborhood = null
                             expandedLevel = null
                         }
@@ -508,7 +539,7 @@ fun ProfileEditScreen(
                 if (expandedLevel == ResidenceLevel.DISTRICT) {
                     ResidenceOptionsAbove(
                         modifier = Modifier.weight(1f),
-                        options = districtOptions,
+                        options = districts,
                         selected = selectedDistrict,
                         onSelect = { district ->
                             selectedDistrict = district
@@ -533,7 +564,7 @@ fun ProfileEditScreen(
                 if (expandedLevel == ResidenceLevel.NEIGHBORHOOD) {
                     ResidenceOptionsAbove(
                         modifier = Modifier.weight(1f),
-                        options = listOf("선택 안 함") + neighborhoodOptions,
+                        options = listOf("선택 안 함") + subDistricts,
                         selected = selectedNeighborhood ?: "선택 안 함",
                         onSelect = { neighborhood ->
                             selectedNeighborhood = neighborhood.takeUnless { it == "선택 안 함" }
@@ -583,7 +614,6 @@ fun ProfileEditScreen(
                             selectedNeighborhood
                         )
                         location = updatedLocation
-                        onLocationChange(updatedLocation)
                         expandedLevel = null
                         showLocation = false
                     },

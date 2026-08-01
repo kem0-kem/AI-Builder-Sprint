@@ -45,6 +45,7 @@ fun PaperBackground(content: @Composable () -> Unit) {
             .fillMaxSize()
             .background(Paper)
     ) {
+        /*
         Canvas(Modifier.fillMaxSize()) {
             val gap = 42.dp.toPx()
             var y = 34.dp.toPx()
@@ -64,6 +65,7 @@ fun PaperBackground(content: @Composable () -> Unit) {
                 strokeWidth = 1.5f
             )
         }
+        */
         content()
     }
 }

@@ -14,7 +14,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -27,6 +29,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.apptive.slowtalk.ui.profile.ProfileViewModel
 import com.apptive.slowtalk.ui.theme.SlowTalkTheme
 
 class MainActivity : ComponentActivity() {
@@ -44,6 +48,7 @@ class MainActivity : ComponentActivity() {
 private fun ApptiveApp() {
     val context = LocalContext.current
     val activity = context as? Activity
+    val profileViewModel: ProfileViewModel = viewModel()
     var screen by remember { mutableStateOf<Screen>(Screen.Feed) }
     var profileReturnScreen by remember { mutableStateOf<Screen>(Screen.Feed) }
     var lastBackPressTime by remember { mutableLongStateOf(0L) }
@@ -154,11 +159,9 @@ private fun ApptiveApp() {
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Paper)
-            .safeDrawingPadding()
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = Color.White
     ) {
         when (val current = screen) {
             Screen.Feed, Screen.Conversations, Screen.LetterHome -> Scaffold(
@@ -297,19 +300,22 @@ private fun ApptiveApp() {
                 }
             )
             Screen.Profile -> ProfileOverviewScreen(
-                location = profileLocation,
+                viewModel = profileViewModel,
                 onBack = { screen = profileReturnScreen },
                 onEdit = { screen = Screen.EditProfile },
                 onInterests = { screen = Screen.Interests }
             )
             Screen.EditProfile -> ProfileEditScreen(
-                initialLocation = profileLocation,
-                onLocationChange = { profileLocation = it },
+                viewModel = profileViewModel,
                 onBack = { screen = Screen.Profile }
             )
             Screen.Interests -> InterestSettingScreen(
                 onBack = { screen = Screen.Profile },
-                onComplete = { screen = Screen.Profile }
+                onComplete = { selected ->
+                    // 선택된 관심사를 뷰모델을 통해 업데이트하거나 상태에 반영할 수 있음
+                    // 여기서는 단순히 프로필로 복귀
+                    screen = Screen.Profile
+                }
             )
         }
     }

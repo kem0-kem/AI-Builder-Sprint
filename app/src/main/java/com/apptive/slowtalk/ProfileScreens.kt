@@ -47,160 +47,196 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import com.apptive.slowtalk.ui.profile.ProfileUiState
+import com.apptive.slowtalk.ui.profile.ProfileViewModel
+
 @Composable
 fun ProfileOverviewScreen(
-    location: String,
+    viewModel: ProfileViewModel,
     onBack: () -> Unit,
     onEdit: () -> Unit,
     onInterests: () -> Unit
 ) {
+    val uiState by viewModel.uiState.collectAsState()
+
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        viewModel.fetchProfile()
+    }
+
     PaperBackground {
         Scaffold(containerColor = Color.Transparent) { padding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(horizontal = 22.dp)
-                    .verticalScroll(rememberScrollState())
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 12.dp, bottom = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.Outlined.ArrowBack,
-                            contentDescription = "뒤로"
-                        )
-                    }
-                    Text(
-                        "내 프로필",
-                        modifier = Modifier.weight(1f),
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Ink
-                    )
-                    IconButton(onClick = onEdit) {
-                        Icon(
-                            Icons.Outlined.Edit,
-                            contentDescription = "프로필 편집",
-                            tint = Purple,
-                            modifier = Modifier.size(28.dp)
-                        )
+            when (val state = uiState) {
+                is ProfileUiState.Loading -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("로딩 중...")
                     }
                 }
-
-                HorizontalDivider(color = LineColor.copy(alpha = 0.55f))
-                Spacer(Modifier.height(16.dp))
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    androidx.compose.foundation.Image(
-                        painter = painterResource(R.drawable.profile_avatar),
-                        contentDescription = "지연 프로필 사진",
+                is ProfileUiState.Success -> {
+                    val profile = state.profile
+                    Column(
                         modifier = Modifier
-                            .size(128.dp)
-                            .clip(CircleShape),
-                        contentScale = ContentScale.Crop
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Text("지연", fontSize = 27.sp, fontWeight = FontWeight.ExtraBold, color = Ink)
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "따뜻한 이야기를 좋아해요.\n천천히, 서로의 하루를 나눠요.",
-                        textAlign = TextAlign.Center,
-                        color = Ink,
-                        fontSize = 14.sp,
-                        lineHeight = 21.sp
-                    )
-                    Spacer(Modifier.height(14.dp))
-                    Surface(
-                        shape = RoundedCornerShape(15.dp),
-                        color = BlockSurface,
-                        border = BorderStroke(1.dp, LineColor)
+                            .fillMaxSize()
+                            .padding(padding)
+                            .padding(horizontal = 22.dp)
+                            .verticalScroll(rememberScrollState())
                     ) {
+                        // Header
                         Row(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 12.dp, bottom = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                Icons.Outlined.LocationOn,
-                                contentDescription = null,
-                                tint = Purple,
-                                modifier = Modifier.size(21.dp)
-                            )
+                            IconButton(onClick = onBack) {
+                                Icon(Icons.Outlined.ArrowBack, "뒤로")
+                            }
                             Text(
-                                location,
-                                modifier = Modifier.padding(start = 8.dp),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium
+                                "내 프로필",
+                                modifier = Modifier.weight(1f),
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Ink
                             )
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(20.dp))
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(BlockSurface),
-                    elevation = CardDefaults.cardElevation(1.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 16.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OverviewStat(Icons.Outlined.MailOutline, "12", "받은 편지", Modifier.weight(1f))
-                        VerticalDivider(Modifier.height(64.dp), color = LineColor)
-                        OverviewStat(Icons.Outlined.Send, "8", "보낸 편지", Modifier.weight(1f))
-                        VerticalDivider(Modifier.height(64.dp), color = LineColor)
-                        OverviewStat(Icons.Outlined.People, "5", "매칭한 사람", Modifier.weight(1f))
-                    }
-                }
-
-                Spacer(Modifier.height(20.dp))
-                Text("나에 대해", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = Ink)
-                Spacer(Modifier.height(8.dp))
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(onClick = onInterests),
-                    shape = RoundedCornerShape(17.dp),
-                    colors = CardDefaults.cardColors(BlockSurface),
-                    elevation = CardDefaults.cardElevation(1.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            modifier = Modifier.size(46.dp),
-                            shape = CircleShape,
-                            color = PurpleSoft
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(Icons.Outlined.MailOutline, null, tint = Purple)
+                            IconButton(onClick = onEdit) {
+                                Icon(
+                                    Icons.Outlined.Edit,
+                                    "프로필 편집",
+                                    tint = Purple,
+                                    modifier = Modifier.size(28.dp)
+                                )
                             }
                         }
+
+                        HorizontalDivider(color = LineColor.copy(alpha = 0.55f))
+                        Spacer(Modifier.height(16.dp))
+
+                        // Profile Info
                         Column(
-                            modifier = Modifier
-                                .padding(start = 12.dp)
-                                .weight(1f)
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text("관심사", fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                            Text("책 읽기, 산책, 음악 감상", color = SubtleInk, fontSize = 13.sp)
+                            androidx.compose.foundation.Image(
+                                painter = painterResource(R.drawable.profile_avatar),
+                                contentDescription = "${profile.nickname} 프로필 사진",
+                                modifier = Modifier
+                                    .size(128.dp)
+                                    .clip(CircleShape),
+                                contentScale = ContentScale.Crop
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text(profile.nickname, fontSize = 27.sp, fontWeight = FontWeight.ExtraBold, color = Ink)
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                profile.bio,
+                                textAlign = TextAlign.Center,
+                                color = Ink,
+                                fontSize = 14.sp,
+                                lineHeight = 21.sp
+                            )
+                            Spacer(Modifier.height(14.dp))
+                            Surface(
+                                shape = RoundedCornerShape(15.dp),
+                                color = BlockSurface,
+                                border = BorderStroke(1.dp, LineColor)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.LocationOn,
+                                        null,
+                                        tint = Purple,
+                                        modifier = Modifier.size(21.dp)
+                                    )
+                                    val locationText = buildString {
+                                        append(profile.region.province)
+                                        append(" ")
+                                        append(profile.region.district)
+                                        profile.region.subDistrict?.let {
+                                            append(" ")
+                                            append(it)
+                                        }
+                                    }
+                                    Text(
+                                        locationText,
+                                        modifier = Modifier.padding(start = 8.dp),
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
                         }
-                        Icon(Icons.Outlined.ChevronRight, contentDescription = "관심사 보기", tint = SubtleInk)
+
+                        Spacer(Modifier.height(20.dp))
+                        // Statistics
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(BlockSurface),
+                            elevation = CardDefaults.cardElevation(1.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 16.dp),
+                                horizontalArrangement = Arrangement.SpaceEvenly,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OverviewStat(Icons.Outlined.MailOutline, (profile.statistics?.receivedLetters ?: 0).toString(), "받은 편지", Modifier.weight(1f))
+                                VerticalDivider(Modifier.height(64.dp), color = LineColor)
+                                OverviewStat(Icons.Outlined.Send, (profile.statistics?.sentLetters ?: 0).toString(), "보낸 편지", Modifier.weight(1f))
+                                VerticalDivider(Modifier.height(64.dp), color = LineColor)
+                                OverviewStat(Icons.Outlined.People, (profile.statistics?.matchCount ?: 0).toString(), "매칭한 사람", Modifier.weight(1f))
+                            }
+                        }
+
+                        Spacer(Modifier.height(20.dp))
+                        Text("나에 대해", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = Ink)
+                        Spacer(Modifier.height(8.dp))
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(onClick = onInterests),
+                            shape = RoundedCornerShape(17.dp),
+                            colors = CardDefaults.cardColors(BlockSurface),
+                            elevation = CardDefaults.cardElevation(1.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    modifier = Modifier.size(46.dp),
+                                    shape = CircleShape,
+                                    color = PurpleSoft
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Outlined.MailOutline, null, tint = Purple)
+                                    }
+                                }
+                                Column(
+                                    modifier = Modifier
+                                        .padding(start = 12.dp)
+                                        .weight(1f)
+                                ) {
+                                    Text("관심사", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                    Text(profile.interest, color = SubtleInk, fontSize = 13.sp)
+                                }
+                                Icon(Icons.Outlined.ChevronRight, "관심사 보기", tint = SubtleInk)
+                            }
+                        }
+                        Spacer(Modifier.height(24.dp))
                     }
                 }
-                Spacer(Modifier.height(24.dp))
+                is ProfileUiState.Error -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("에러: ${state.message}")
+                    }
+                }
+                else -> {}
             }
         }
     }
