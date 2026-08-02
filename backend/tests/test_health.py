@@ -1,9 +1,11 @@
+from pathlib import Path
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from pydantic import SecretStr
 
 from app import main
-from app.core.config import Settings
+from app.core.config import Settings, moderation_configuration_complete
 
 
 async def system_response(
@@ -39,6 +41,16 @@ def complete_shadow_settings(**overrides: object) -> Settings:
     for field, value in overrides.items():
         setattr(settings, field, value)
     return settings
+
+
+def test_env_example_loads_as_incomplete_moderation_configuration() -> None:
+    env_example = Path(__file__).resolve().parents[1] / ".env.example"
+
+    settings = Settings(_env_file=env_example)
+
+    assert settings.moderation_allow_confidence is None
+    assert settings.moderation_block_confidence is None
+    assert moderation_configuration_complete(settings) is False
 
 
 async def test_health_uses_common_envelope(
