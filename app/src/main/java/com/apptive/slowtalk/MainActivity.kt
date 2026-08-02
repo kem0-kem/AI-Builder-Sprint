@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.apptive.slowtalk.ui.auth.AuthViewModel
 import com.apptive.slowtalk.ui.profile.ProfileViewModel
+import com.apptive.slowtalk.ui.reflection.ReflectionViewModel
 import com.apptive.slowtalk.ui.theme.SlowTalkTheme
 import kotlinx.coroutines.launch
 
@@ -52,6 +53,7 @@ private fun ApptiveApp() {
     val appScope = rememberCoroutineScope()
     val profileViewModel: ProfileViewModel = viewModel()
     val authViewModel: AuthViewModel = viewModel()
+    val reflectionViewModel: ReflectionViewModel = viewModel()
     var isLoggedIn by remember { mutableStateOf(false) }
     var screen by remember { mutableStateOf<Screen>(if (isLoggedIn) Screen.Feed else Screen.Login) }
     var profileReturnScreen by remember { mutableStateOf<Screen>(Screen.Feed) }
@@ -399,15 +401,18 @@ private fun ApptiveApp() {
                 onBack = { screen = Screen.LetterHistory }
             )
             Screen.WriteReflection -> WriteReflectionScreen(
+                viewModel = reflectionViewModel,
                 onBack = { screen = Screen.LetterHome },
-                onFinish = { screen = Screen.ReflectionDetail("천천히 걸었던 하루") },
+                onFinish = { content -> screen = Screen.ReflectionDetail(content) },
                 onProfile = {
                     profileReturnScreen = Screen.WriteReflection
                     screen = Screen.Profile
                 }
             )
             is Screen.ReflectionDetail -> ReflectionDetailScreen(
-                title = current.title,
+                viewModel = reflectionViewModel,
+                content = current.title,
+                title = "오늘의 회고 리포트",
                 onBack = { screen = Screen.LetterHome },
                 onProfile = {
                     profileReturnScreen = current
