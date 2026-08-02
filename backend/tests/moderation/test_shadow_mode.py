@@ -1,3 +1,4 @@
+import base64
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from typing import cast
@@ -25,6 +26,13 @@ from app.moderation.schemas import (
 )
 from app.moderation.service import ShadowModerationOrchestrator
 from tests.letters.test_letter_delivery import register
+
+VALID_ENFORCE_KEY = base64.b64encode(b"k" * 32).decode("ascii")
+INVALID_ENFORCE_KEYS = (
+    "not-base64!",
+    VALID_ENFORCE_KEY[:-2] + "t=",
+    base64.b64encode(b"short").decode("ascii"),
+)
 
 
 class StubGateway:
@@ -224,12 +232,52 @@ def test_complete_enforce_configuration_is_complete() -> None:
         moderation_mode="enforce",
         moderation_allow_confidence=0.7,
         moderation_block_confidence=0.9,
-        moderation_encryption_key=SecretStr("encryption-key"),
+        moderation_encryption_key=SecretStr(VALID_ENFORCE_KEY),
         content_hash_pepper=SecretStr("content-hash-pepper"),
         internal_moderation_token=SecretStr("t" * 32),
     )
 
     assert moderation_configuration_complete(settings) is True
+
+
+@pytest.mark.parametrize("invalid_key", INVALID_ENFORCE_KEYS)
+async def test_invalid_enforce_key_stops_before_storage_construction(
+    session_factory: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+    invalid_key: str,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        upstage_api_key=SecretStr("provider-key"),
+        upstage_chat_model="moderation-model",
+        moderation_mode="enforce",
+        moderation_allow_confidence=0.7,
+        moderation_block_confidence=0.9,
+        moderation_encryption_key=SecretStr(VALID_ENFORCE_KEY),
+        content_hash_pepper=SecretStr("content-hash-pepper"),
+        internal_moderation_token=SecretStr("t" * 32),
+    )
+    settings.moderation_encryption_key = SecretStr(invalid_key)
+
+    def forbidden_storage_dependency(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("invalid enforce key reached storage construction")
+
+    monkeypatch.setattr(dependencies, "get_settings", lambda: settings)
+    monkeypatch.setattr(dependencies, "CommandCipher", forbidden_storage_dependency)
+    monkeypatch.setattr(
+        dependencies, "ModerationRepository", forbidden_storage_dependency
+    )
+
+    async with session_factory() as session:
+        dependency = cast(
+            AsyncGenerator[object, None],
+            dependencies.get_moderation_orchestrator(session),
+        )
+        orchestrator = await anext(dependency)
+        await dependency.aclose()
+
+    assert moderation_configuration_complete(settings) is False
+    assert orchestrator is None
 
 
 async def test_dependency_and_completeness_share_incomplete_result(

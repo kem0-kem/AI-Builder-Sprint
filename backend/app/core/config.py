@@ -4,6 +4,8 @@ from typing import Literal
 from pydantic import AnyHttpUrl, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.moderation.crypto import decode_moderation_encryption_key
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -56,6 +58,15 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "enforce moderation requires provider, encryption, and confidence configuration"
                 )
+            assert self.moderation_encryption_key is not None
+            try:
+                decode_moderation_encryption_key(
+                    self.moderation_encryption_key.get_secret_value()
+                )
+            except ValueError:
+                raise ValueError(
+                    "enforce moderation encryption key is invalid"
+                ) from None
         if (
             self.moderation_allow_confidence is not None
             and self.moderation_block_confidence is not None
@@ -98,10 +109,20 @@ def moderation_configuration_complete(settings: Settings) -> bool:
         if settings.internal_moderation_token is not None
         else None,
     )
-    return not any(
+    if any(
         value is None or (isinstance(value, str) and not value.strip())
         for value in enforce_values
-    )
+    ):
+        return False
+
+    assert settings.moderation_encryption_key is not None
+    try:
+        decode_moderation_encryption_key(
+            settings.moderation_encryption_key.get_secret_value()
+        )
+    except ValueError:
+        return False
+    return True
 
 
 @lru_cache

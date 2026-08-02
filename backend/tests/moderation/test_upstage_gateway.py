@@ -1,3 +1,4 @@
+import base64
 import json
 from unittest.mock import AsyncMock
 
@@ -16,6 +17,9 @@ from app.moderation.schemas import (
     Severity,
 )
 from app.moderation.upstage_gateway import UpstageModerationGateway
+
+VALID_ENFORCE_KEY = base64.b64encode(b"k" * 32).decode("ascii")
+NONCANONICAL_ENFORCE_KEY = VALID_ENFORCE_KEY[:-2] + "t="
 
 
 def build_gateway(client: httpx.AsyncClient) -> UpstageModerationGateway:
@@ -399,7 +403,7 @@ def test_enforce_mode_accepts_complete_moderation_configuration() -> None:
         moderation_mode="enforce",
         upstage_api_key="test-api-key",
         upstage_chat_model="configured-solar-model",
-        moderation_encryption_key="test-encryption-key",
+        moderation_encryption_key=VALID_ENFORCE_KEY,
         content_hash_pepper="test-content-pepper",
         internal_moderation_token="i" * 32,
         moderation_allow_confidence=0.80,
@@ -409,6 +413,37 @@ def test_enforce_mode_accepts_complete_moderation_configuration() -> None:
     assert settings.moderation_mode == "enforce"
     assert settings.upstage_api_key is not None
     assert settings.upstage_api_key.get_secret_value() == "test-api-key"
+
+
+@pytest.mark.parametrize(
+    "invalid_key",
+    (
+        "not-base64!",
+        NONCANONICAL_ENFORCE_KEY,
+        base64.b64encode(b"short").decode("ascii"),
+    ),
+    ids=("non-base64", "noncanonical", "wrong-length"),
+)
+def test_enforce_mode_rejects_invalid_encryption_keys_safely(
+    invalid_key: str,
+) -> None:
+    with pytest.raises(
+        ValidationError, match="enforce moderation encryption key is invalid"
+    ) as caught:
+        Settings(
+            _env_file=None,
+            moderation_mode="enforce",
+            upstage_api_key="test-api-key",
+            upstage_chat_model="configured-solar-model",
+            moderation_encryption_key=invalid_key,
+            content_hash_pepper="test-content-pepper",
+            internal_moderation_token="i" * 32,
+            moderation_allow_confidence=0.80,
+            moderation_block_confidence=0.90,
+        )
+
+    rendered_error = str(caught.value) + repr(caught.value)
+    assert invalid_key not in rendered_error
 
 
 def test_moderation_confidence_thresholds_must_be_ordered() -> None:
@@ -453,7 +488,7 @@ def test_enforce_mode_rejects_whitespace_only_required_values(field: str) -> Non
         "moderation_mode": "enforce",
         "upstage_api_key": "test-api-key",
         "upstage_chat_model": "configured-solar-model",
-        "moderation_encryption_key": "test-encryption-key",
+        "moderation_encryption_key": VALID_ENFORCE_KEY,
         "content_hash_pepper": "test-content-pepper",
         "internal_moderation_token": "i" * 32,
         "moderation_allow_confidence": 0.80,

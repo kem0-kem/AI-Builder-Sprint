@@ -36,11 +36,16 @@ def _decode_base64(value: str, *, field: str) -> bytes:
     return decoded
 
 
+def decode_moderation_encryption_key(value: str) -> bytes:
+    key = _decode_base64(value, field="encryption key")
+    if len(key) != 32:
+        raise ValueError("encryption key must decode to exactly 32 bytes")
+    return key
+
+
 class CommandCipher:
     def __init__(self, encryption_key: str) -> None:
-        key = _decode_base64(encryption_key, field="encryption key")
-        if len(key) != 32:
-            raise ValueError("encryption key must decode to exactly 32 bytes")
+        key = decode_moderation_encryption_key(encryption_key)
         self._aesgcm = AESGCM(key)
 
     def encrypt(self, payload: dict[str, object]) -> EncryptedPayload:
