@@ -2,6 +2,7 @@ package com.apptive.slowtalk
 
 import com.apptive.slowtalk.data.remote.ChatMessageDto
 import com.apptive.slowtalk.data.remote.ChatMessageRequest
+import com.apptive.slowtalk.data.remote.ChatReadRequest
 import com.apptive.slowtalk.data.remote.RetrofitClient
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -56,6 +57,16 @@ object ChatApi {
                 mine = true,
                 id = it.messageId
             )
+        }
+    }
+
+    suspend fun markAsRead(chatRoomId: Int, lastReadMessageId: Int): Result<Int> = runCatching {
+        RetrofitClient.chatApi.markAsRead(
+            chatRoomId = chatRoomId,
+            request = ChatReadRequest(lastReadMessageId)
+        ).let { response ->
+            check(response.success) { "채팅방 읽음 처리에 실패했습니다." }
+            response.unreadCount
         }
     }
 }

@@ -3,6 +3,7 @@ package com.apptive.slowtalk.data.remote
 import kotlinx.serialization.Serializable
 import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Path
 
@@ -21,6 +22,12 @@ interface ChatApiService {
         @Path("chatRoomId") chatRoomId: Int,
         @Body request: ChatMessageRequest
     ): ChatMessageSendResponse
+
+    @PATCH("chat-rooms/{chatRoomId}/read")
+    suspend fun markAsRead(
+        @Path("chatRoomId") chatRoomId: Int,
+        @Body request: ChatReadRequest
+    ): ChatReadResponse
 }
 
 @Serializable
@@ -58,4 +65,14 @@ data class ChatMessageRequest(val content: String)
 data class ChatMessageSendResponse(
     val messageId: Int,
     val createdAt: String
+)
+
+@Serializable
+data class ChatReadRequest(val lastReadMessageId: Int)
+
+@Serializable
+data class ChatReadResponse(
+    val success: Boolean,
+    val lastReadMessageId: Int,
+    val unreadCount: Int
 )

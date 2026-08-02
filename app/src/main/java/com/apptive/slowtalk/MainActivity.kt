@@ -63,21 +63,6 @@ private fun ApptiveApp() {
     val likedFeeds = remember { mutableStateMapOf<Int, Boolean>() }
     val likingFeeds = remember { mutableStateMapOf<Int, Boolean>() }
     val feeds = remember { mutableStateListOf<FeedPost>() }
-    val anonymousConversations = remember {
-        listOf(
-            Conversation("익명의 이웃 01", "오늘 하루는 어떻게 보내셨나요?", "방금 전", unread = true),
-            Conversation("익명의 이웃 02", "저도 그런 하루를 보낸 적이 있어요.", "어제"),
-            Conversation("익명의 이웃 03", "당신의 이야기를 들려줘서 고마워요.", "3일 전")
-        )
-    }
-    val groupConversations = remember {
-        listOf(
-            Conversation("저녁 산책 모임", "이번 주 토요일 저녁 7시 어떠세요?", "방금 전", true, isGroup = true, members = 5),
-            Conversation("그림 초보 모임", "준비물은 연필과 작은 스케치북이에요.", "어제", isGroup = true, members = 8),
-            Conversation("함께 읽는 독서 모임", "다음 책은 투표로 정해봐요.", "2일 전", isGroup = true, members = 6),
-            Conversation("동네 카페 탐방", "이번에는 조용한 카페로 가요.", "3일 전", isGroup = true, members = 4)
-        )
-    }
     val letters = remember {
         listOf(
             Letter("천천히 걸었던 하루", "오늘은 평소보다 조금 느리게 걸어봤어요.", "2026.07.22 · 15:40", true),
@@ -194,8 +179,6 @@ private fun ApptiveApp() {
                 ) { page ->
                     when (page) {
                         0 -> ConversationListScreen(
-                            anonymous = anonymousConversations,
-                            groups = groupConversations,
                             loadRooms = { ChatApi.getRooms() },
                             onOpen = {
                                 screen = Screen.Chat(it.title, it.isGroup, it.chatRoomId)
@@ -364,10 +347,12 @@ private fun ApptiveApp() {
                 title = current.title,
                 isGroup = current.isGroup,
                 chatRoomId = current.chatRoomId,
+                markAsRead = { chatRoomId, lastReadMessageId ->
+                    ChatApi.markAsRead(chatRoomId, lastReadMessageId)
+                },
                 onBack = { screen = Screen.Conversations }
             )
             Screen.CreateGroup -> CreateGroupScreen(
-                availablePeople = anonymousConversations,
                 loadInviteUsers = { keyword -> MeetingApi.getInviteUsers(keyword) },
                 createMeeting = { title, description, inviteUserIds ->
                     MeetingApi.createMeeting(title, description, inviteUserIds)
