@@ -6,8 +6,10 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 
 from app.events.outbox import OutboxEvent
-from app.moderation.command_handlers import ModeratedCommandRegistry
-from app.moderation.command_handlers import ModeratedCommandExecutionFailed
+from app.moderation.command_handlers import (
+    ModeratedCommandExecutionFailed,
+    ModeratedCommandRegistry,
+)
 from app.moderation.crypto import CommandCipher
 from app.moderation.gateway import ModerationProviderUnavailable
 from app.moderation.models import SubmissionStatus
@@ -142,7 +144,7 @@ async def test_three_worker_failures_use_five_thirty_then_manual(session_factory
         submission = await pending(repo)
         registry = ModeratedCommandRegistry()
         retry = worker(StubGateway(ModerationProviderUnavailable()), repo, registry)
-        now = datetime(2026, 8, 2, tzinfo=UTC)
+        now = submission.next_attempt_at
 
         await retry.process(submission.id, now=now)
         current = await repo.get(submission.id)
@@ -238,9 +240,9 @@ async def test_ocr_result_expires_and_cleanup_removes_ciphertext(session_factory
     async with session_factory() as session:
         repo = repository(session)
         submission = await pending(repo, content_type=ContentType.OCR_TEXT)
-        now = datetime(2026, 8, 2, tzinfo=UTC)
+        now = submission.next_attempt_at
         await worker(StubGateway(allow()), repo, ModeratedCommandRegistry()).process(
-            submission.id, now=max(now, submission.next_attempt_at)
+            submission.id, now=now
         )
         current = await repo.get(submission.id)
         assert current is not None
