@@ -203,16 +203,18 @@ private fun ApptiveApp() {
                             onToggleLike = toggleFeedLike,
                             loadFeeds = { FeedApi.getFeeds() },
                             onFeedsLoaded = { remoteFeeds ->
-                                feeds.removeAll { !it.isMine }
-                                feeds.addAll(remoteFeeds.map { it.post })
+                                feeds.clear()
+                                feeds.addAll(remoteFeeds.map { it.post }.distinctBy { it.id })
                                 remoteFeeds.forEach { item ->
                                     likedFeeds[item.post.id] = item.liked
                                 }
                             },
                             loadMyFeeds = { FeedApi.getMyFeeds() },
                             onMyFeedsLoaded = { remoteFeeds ->
-                                feeds.removeAll { it.isMine }
-                                feeds.addAll(remoteFeeds.map { it.post })
+                                val mergedFeeds = feeds.filterNot { it.isMine } +
+                                    remoteFeeds.map { it.post }
+                                feeds.clear()
+                                feeds.addAll(mergedFeeds.distinctBy { it.id })
                                 remoteFeeds.forEach { item ->
                                     likedFeeds[item.post.id] = item.liked
                                 }

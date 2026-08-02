@@ -33,6 +33,7 @@ data class FeedPost(
     val title: String,
     val body: String,
     val comments: MutableList<Comment> = mutableListOf(),
+    var commentCount: Int = comments.sumOf { 1 + it.replies.size },
     val accent: Color,
     val isMine: Boolean = false
 )

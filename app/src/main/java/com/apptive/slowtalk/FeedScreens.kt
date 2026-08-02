@@ -110,7 +110,7 @@ fun FeedScreen(
     val visibleFeeds = when (selectedIndex) {
         FeedIndex.ALL -> feeds.filterNot { it.isMine }
         FeedIndex.MINE -> feeds.filter { it.isMine }
-    }
+    }.distinctBy { it.id }
 
     suspend fun refreshAllFeeds() {
         isAllFeedsLoading = true
@@ -453,7 +453,7 @@ private fun FeedCard(
                         tint = SubtleInk,
                         modifier = Modifier.size(19.dp)
                     )
-                    Text("  댓글 ${post.comments.size}", color = SubtleInk, fontSize = 13.sp)
+                    Text("  댓글 ${post.commentCount}", color = SubtleInk, fontSize = 13.sp)
                 }
             }
         }
@@ -973,11 +973,14 @@ fun FeedDetailScreen(
     }
 
     fun commitComments(updated: List<Comment>) {
+        val updatedCount = updated.sumOf { 1 + it.replies.size }
         comments = updated
         displayedPost.comments.clear()
         displayedPost.comments.addAll(updated)
+        displayedPost.commentCount = updatedCount
         post.comments.clear()
         post.comments.addAll(updated)
+        post.commentCount = updatedCount
     }
 
     fun editCommentAt(parentIndex: Int, replyIndex: Int?, content: String) {
@@ -1340,14 +1343,14 @@ fun FeedDetailScreen(
                     item {
                         FeedDetailCard(
                             post = displayedPost,
-                            commentCount = comments.size,
+                            commentCount = comments.sumOf { 1 + it.replies.size },
                             isLiked = isLiked,
                             onToggleLike = onToggleLike
                         )
                     }
                     item {
                         Text(
-                            "댓글 ${comments.size}",
+                            "댓글 ${comments.sumOf { 1 + it.replies.size }}",
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(top = 4.dp)
                         )

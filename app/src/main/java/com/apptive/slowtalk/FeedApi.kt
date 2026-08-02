@@ -69,6 +69,7 @@ object FeedApi {
                     category = category,
                     title = item.title,
                     body = item.content,
+                    commentCount = item.commentCount,
                     accent = categoryAccent(category),
                     isMine = item.isMine
                 ),
@@ -111,6 +112,7 @@ object FeedApi {
                 title = item.title,
                 body = item.content,
                 comments = comments,
+                commentCount = flatComments.size,
                 accent = categoryAccent(category),
                 isMine = item.isMine
             ),
