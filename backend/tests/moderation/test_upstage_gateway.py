@@ -382,6 +382,17 @@ def test_enforce_mode_requires_provider_and_encryption_secrets() -> None:
         Settings(_env_file=None, moderation_mode="enforce")
 
 
+@pytest.mark.parametrize("environment_name", ("MODERATION_MODE", "JWT_SECRET"))
+def test_blank_core_environment_settings_fail_validation(
+    monkeypatch: pytest.MonkeyPatch,
+    environment_name: str,
+) -> None:
+    monkeypatch.setenv(environment_name, "")
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
 def test_enforce_mode_accepts_complete_moderation_configuration() -> None:
     settings = Settings(
         _env_file=None,

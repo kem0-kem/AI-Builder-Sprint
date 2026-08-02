@@ -48,8 +48,8 @@ def test_env_example_loads_as_incomplete_moderation_configuration() -> None:
 
     settings = Settings(_env_file=env_example)
 
-    assert settings.moderation_allow_confidence is None
-    assert settings.moderation_block_confidence is None
+    assert settings.moderation_allow_confidence == 0.7
+    assert settings.moderation_block_confidence == 0.9
     assert moderation_configuration_complete(settings) is False
 
 

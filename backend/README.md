@@ -30,8 +30,8 @@ python scripts/export_openapi.py openapi/slowtalk-v1.json
   `MODERATION_ALLOW_CONFIDENCE`, and `MODERATION_BLOCK_CONFIDENCE` are configured,
   classifies content and records only bounded metrics without persisting moderation
   submissions, decisions, retries, encrypted commands, or replay state; all outcomes
-  preserve the existing successful API behavior. Blank template values are treated as
-  omitted/incomplete configuration; malformed nonblank values fail settings validation.
+  preserve the existing successful API behavior. Blank optional template values make
+  moderation configuration incomplete; malformed values fail settings validation.
 - `MODERATION_MODE=enforce`: requires all provider, encryption, confidence, and internal
   token settings; pending content returns `202` and blocked content returns `422`.
 - `/api/v1/health` is liveness-only. `/api/v1/ready` returns `503` when the selected
