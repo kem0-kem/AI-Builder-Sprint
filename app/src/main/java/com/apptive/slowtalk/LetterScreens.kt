@@ -75,7 +75,7 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun WriteLetterScreen(
     onHistory: () -> Unit,
-    onMatched: () -> Unit,
+    onMatched: (String) -> Unit,
     onTab: (MainTab) -> Unit
 ) {
     var bodyState by remember {
@@ -227,7 +227,7 @@ fun WriteLetterScreen(
             title = { Text("편지가 전해졌어요") },
             text = { Text("관심사가 비슷한 익명의 이웃과 연결됐습니다. 편지는 첫 메시지로 전달되며 바로 대화를 시작할 수 있어요.") },
             confirmButton = {
-                Button(onClick = { showMatch = false; onMatched() }) {
+                Button(onClick = { showMatch = false; onMatched(bodyState.text) }) {
                     Text("대화방으로 가기")
                 }
             },

@@ -429,7 +429,20 @@ private fun ApptiveApp() {
             )
             Screen.WriteLetter -> WriteLetterScreen(
                 onHistory = { screen = Screen.LetterHistory },
-                onMatched = { screen = Screen.Chat("익명의 이웃 05") },
+                onMatched = { content ->
+                    appScope.launch {
+                        LetterApi.sendForMatch(content).onSuccess { roomId ->
+                            if (roomId == null) {
+                                Toast.makeText(context, "매칭 가능한 이웃을 찾는 중입니다.", Toast.LENGTH_SHORT).show()
+                                screen = Screen.LetterHome
+                            } else {
+                                screen = Screen.Chat("익명의 이웃", roomId = roomId)
+                            }
+                        }.onFailure {
+                            Toast.makeText(context, "편지를 보내지 못했습니다.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                },
                 onTab = { screen = it.toScreen() }
             )
             Screen.LetterHistory -> LetterHistoryScreen(
