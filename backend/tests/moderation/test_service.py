@@ -15,6 +15,7 @@ from app.moderation.schemas import (
 )
 from app.moderation.service import (
     ModerationClassificationUnavailable,
+    ModerationConfidencePolicy,
     classify_normalized,
 )
 
@@ -100,3 +101,32 @@ async def test_classify_normalized_wraps_malformed_provider_result_without_echo(
     rendered = str(caught.value) + repr(caught.value)
     assert submitted_text not in rendered
     assert caught.value.__cause__ is None
+
+
+@pytest.mark.parametrize(
+    ("decision", "confidence", "expected"),
+    (
+        (ModerationDecision.ALLOW, 0.81, ModerationDecision.ALLOW),
+        (ModerationDecision.ALLOW, 0.80, ModerationDecision.ALLOW),
+        (ModerationDecision.ALLOW, 0.79, ModerationDecision.REVIEW),
+        (ModerationDecision.BLOCK, 0.91, ModerationDecision.BLOCK),
+        (ModerationDecision.BLOCK, 0.90, ModerationDecision.BLOCK),
+        (ModerationDecision.BLOCK, 0.89, ModerationDecision.REVIEW),
+        (ModerationDecision.REVIEW, 0.99, ModerationDecision.REVIEW),
+    ),
+)
+def test_confidence_policy_resolves_effective_decision_at_boundaries(
+    decision: ModerationDecision,
+    confidence: float,
+    expected: ModerationDecision,
+) -> None:
+    policy = ModerationConfidencePolicy(0.80, 0.90)
+    raw_assessment = assessment(
+        decision,
+        {ModerationCategory.SPAM}
+        if decision is not ModerationDecision.ALLOW
+        else None,
+    ).model_copy(update={"confidence": confidence})
+
+    assert policy.resolve(raw_assessment) is expected
+    assert raw_assessment.decision is decision

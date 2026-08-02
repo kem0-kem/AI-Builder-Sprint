@@ -79,6 +79,35 @@ class ModerationClassificationUnavailable(RuntimeError):
     pass
 
 
+@dataclass(frozen=True, slots=True)
+class ModerationConfidencePolicy:
+    allow_confidence: float
+    block_confidence: float
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.allow_confidence) is not float
+            or type(self.block_confidence) is not float
+            or not math.isfinite(self.allow_confidence)
+            or not math.isfinite(self.block_confidence)
+            or not 0 <= self.allow_confidence < self.block_confidence <= 1
+        ):
+            raise InvalidModerationConfiguration()
+
+    def resolve(self, assessment: ModerationAssessment) -> ModerationDecision:
+        if (
+            assessment.decision is ModerationDecision.BLOCK
+            and assessment.confidence >= self.block_confidence
+        ):
+            return ModerationDecision.BLOCK
+        if (
+            assessment.decision is ModerationDecision.ALLOW
+            and assessment.confidence >= self.allow_confidence
+        ):
+            return ModerationDecision.ALLOW
+        return ModerationDecision.REVIEW
+
+
 async def classify_normalized(
     gateway: ModerationGateway,
     local_rules: LocalRuleEngine,
@@ -122,18 +151,11 @@ class ModerationOrchestrator:
         block_confidence: float,
         local_rules: LocalRuleEngine | None = None,
     ) -> None:
-        if (
-            type(allow_confidence) is not float
-            or type(block_confidence) is not float
-            or not math.isfinite(allow_confidence)
-            or not math.isfinite(block_confidence)
-            or not 0 <= allow_confidence < block_confidence <= 1
-        ):
-            raise InvalidModerationConfiguration()
         self._gateway = gateway
         self._repository = repository
-        self._allow_confidence = allow_confidence
-        self._block_confidence = block_confidence
+        self._confidence_policy = ModerationConfidencePolicy(
+            allow_confidence, block_confidence
+        )
         self._local_rules = local_rules or LocalRuleEngine()
 
     async def evaluate(self, command: ModerationCommand) -> ModerationOutcome:
@@ -155,19 +177,14 @@ class ModerationOrchestrator:
             submission = await self._repository.create_pending(normalized_command, None)
             return ModerationOutcome.pending(submission.id)
 
-        if (
-            assessment.decision is ModerationDecision.BLOCK
-            and assessment.confidence >= self._block_confidence
-        ):
+        effective_decision = self._confidence_policy.resolve(assessment)
+        if effective_decision is ModerationDecision.BLOCK:
             await self._repository.create_blocked(
                 normalized_command, _assessment_for_storage(assessment)
             )
             return ModerationOutcome.blocked(assessment.categories)
 
-        if (
-            assessment.decision is ModerationDecision.ALLOW
-            and assessment.confidence >= self._allow_confidence
-        ):
+        if effective_decision is ModerationDecision.ALLOW:
             return ModerationOutcome.immediate(assessment)
 
         submission = await self._repository.create_pending(
@@ -191,17 +208,22 @@ class ModerationOrchestrator:
 class ShadowModerationOrchestrator:
     """Classify content without retaining a moderation submission or command."""
 
-    __slots__ = ("_gateway", "_local_rules", "_metrics")
+    __slots__ = ("_confidence_policy", "_gateway", "_local_rules", "_metrics")
 
     def __init__(
         self,
         gateway: ModerationGateway,
         metrics: ModerationMetrics,
+        allow_confidence: float,
+        block_confidence: float,
         *,
         local_rules: LocalRuleEngine | None = None,
     ) -> None:
         self._gateway = gateway
         self._metrics = metrics
+        self._confidence_policy = ModerationConfidencePolicy(
+            allow_confidence, block_confidence
+        )
         self._local_rules = local_rules or LocalRuleEngine()
 
     async def evaluate(self, command: ModerationCommand) -> ModerationOutcome:
@@ -219,7 +241,7 @@ class ShadowModerationOrchestrator:
 
         self._metrics.record_decision(
             normalized_command.content_type,
-            assessment.decision,
+            self._confidence_policy.resolve(assessment),
             assessment.categories,
             (perf_counter() - started) * 1000,
         )

@@ -69,7 +69,12 @@ async def get_moderation_orchestrator(
             model=settings.upstage_chat_model,
         )
         if settings.moderation_mode == "shadow":
-            yield ShadowModerationOrchestrator(gateway, moderation_metrics)
+            yield ShadowModerationOrchestrator(
+                gateway,
+                moderation_metrics,
+                settings.moderation_allow_confidence,
+                settings.moderation_block_confidence,
+            )
             return
 
         if (
