@@ -1,10 +1,12 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import AnyHttpUrl, Field, SecretStr, model_validator
+from pydantic import AnyHttpUrl, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.moderation.crypto import decode_moderation_encryption_key
+
+MATCHING_EMBEDDING_DIMENSIONS = 1024
 
 
 class Settings(BaseSettings):
@@ -26,12 +28,25 @@ class Settings(BaseSettings):
     upstage_api_key: SecretStr | None = None
     upstage_base_url: AnyHttpUrl = AnyHttpUrl("https://api.upstage.ai/v1")
     upstage_chat_model: str | None = None
+    upstage_embedding_model: str | None = None
+    embedding_dimensions: int = MATCHING_EMBEDDING_DIMENSIONS
+    match_min_similarity: float | None = Field(default=None, ge=0, le=1)
+    matching_mode: Literal["disabled", "shadow", "enforce"] = "disabled"
     moderation_mode: Literal["shadow", "enforce"] = "shadow"
     moderation_allow_confidence: float | None = Field(default=None, ge=0, le=1)
     moderation_block_confidence: float | None = Field(default=None, ge=0, le=1)
     moderation_encryption_key: SecretStr | None = None
     content_hash_pepper: SecretStr | None = None
     internal_moderation_token: SecretStr | None = None
+
+    @field_validator("embedding_dimensions")
+    @classmethod
+    def validate_embedding_dimensions(cls, value: int) -> int:
+        if value != MATCHING_EMBEDDING_DIMENSIONS:
+            raise ValueError(
+                f"Solar Embedding 2 requires {MATCHING_EMBEDDING_DIMENSIONS} dimensions"
+            )
+        return value
 
     @model_validator(mode="after")
     def validate_moderation(self) -> "Settings":
