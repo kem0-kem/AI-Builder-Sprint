@@ -62,6 +62,7 @@ private fun ApptiveApp() {
     var screen by remember { mutableStateOf<Screen>(if (isLoggedIn) Screen.Feed else Screen.Login) }
     var profileReturnScreen by remember { mutableStateOf<Screen>(Screen.Feed) }
     var conversationIndex by remember { mutableStateOf(0) }
+    var feedShowsMine by remember { mutableStateOf(false) }
     var lastBackPressTime by remember { mutableLongStateOf(0L) }
     val likedFeeds = remember { mutableStateMapOf<String, Boolean>() }
     val likingFeeds = remember { mutableStateMapOf<String, Boolean>() }
@@ -198,6 +199,8 @@ private fun ApptiveApp() {
                         )
                         1 -> FeedScreen(
                             feeds = feeds,
+                            selectedMine = feedShowsMine,
+                            onSelectedMineChange = { feedShowsMine = it },
                             onOpenFeed = { screen = Screen.FeedDetail(it) },
                             isLiked = { likedFeeds[it] == true },
                             onToggleLike = toggleFeedLike,

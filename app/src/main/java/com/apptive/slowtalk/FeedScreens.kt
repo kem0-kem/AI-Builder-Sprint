@@ -88,6 +88,8 @@ private enum class FeedIndex { ALL, MINE }
 @Composable
 fun FeedScreen(
     feeds: List<FeedPost>,
+    selectedMine: Boolean,
+    onSelectedMineChange: (Boolean) -> Unit,
     onOpenFeed: (String) -> Unit,
     isLiked: (String) -> Boolean,
     onToggleLike: (String) -> Unit,
@@ -101,7 +103,7 @@ fun FeedScreen(
     showBottomBar: Boolean = true
 ) {
     var isRefreshing by remember { mutableStateOf(false) }
-    var selectedIndex by remember { mutableStateOf(FeedIndex.ALL) }
+    val selectedIndex = if (selectedMine) FeedIndex.MINE else FeedIndex.ALL
     var isAllFeedsLoading by remember { mutableStateOf(false) }
     var allFeedsLoadFailed by remember { mutableStateOf(false) }
     var isMyFeedsLoading by remember { mutableStateOf(false) }
@@ -190,7 +192,7 @@ fun FeedScreen(
                     stickyHeader {
                         FeedIndexSelector(
                             selected = selectedIndex,
-                            onSelected = { selectedIndex = it }
+                            onSelected = { onSelectedMineChange(it == FeedIndex.MINE) }
                         )
                     }
                     if (visibleFeeds.isEmpty()) {
