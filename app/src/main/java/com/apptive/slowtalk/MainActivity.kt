@@ -129,8 +129,6 @@ private fun ApptiveApp() {
 
     LaunchedEffect(Unit) {
         feeds.clear()
-        anonymousConversations.clear()
-        groupConversations.clear()
         if (AuthSession.refreshToken != null) {
             val restored = authRepository.restoreSession()
             screen = if (restored) Screen.Feed else Screen.Auth
@@ -153,8 +151,8 @@ private fun ApptiveApp() {
                 items.forEach { likedFeeds[it.post.id] = it.liked }
             }
             Screen.Conversations -> ChatApi.getRooms().onSuccess { rooms ->
-                anonymousConversations.clear()
-                groupConversations.clear()
+                anonymousConversations.removeAll { it.roomId != null }
+                groupConversations.removeAll { it.roomId != null }
                 anonymousConversations.addAll(rooms.filterNot { it.isGroup })
                 groupConversations.addAll(rooms.filter { it.isGroup })
             }

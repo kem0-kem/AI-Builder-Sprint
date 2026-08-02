@@ -198,8 +198,8 @@ fun ChatScreen(title: String, isGroup: Boolean, roomId: String?, onBack: () -> U
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     LaunchedEffect(roomId) {
-        messages.clear()
         if (roomId != null) {
+            messages.clear()
             ChatApi.getMessages(roomId).onSuccess { messages.addAll(it) }.onFailure {
                 Toast.makeText(context, "대화를 불러오지 못했습니다.", Toast.LENGTH_SHORT).show()
             }
@@ -266,9 +266,7 @@ fun ChatScreen(title: String, isGroup: Boolean, roomId: String?, onBack: () -> U
                                 val content = textState.text.trim()
                                 messages.add(ChatMessage("나", content, "지금", true))
                                 textState = TextFieldValue("")
-                                if (roomId == null) {
-                                    Toast.makeText(context, "서버 대화방이 아닙니다.", Toast.LENGTH_SHORT).show()
-                                } else {
+                                if (roomId != null) {
                                     scope.launch {
                                         ChatApi.sendMessage(roomId, content).onSuccess { message ->
                                             val last = messages.lastOrNull()
