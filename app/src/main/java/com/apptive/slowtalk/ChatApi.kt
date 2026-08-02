@@ -5,6 +5,9 @@ import com.apptive.slowtalk.data.remote.ChatMessageDto
 import com.apptive.slowtalk.data.remote.InviteCandidateDto
 import com.apptive.slowtalk.data.remote.MeetingCreateRequest
 import com.apptive.slowtalk.data.remote.RetrofitClient
+import java.time.OffsetDateTime
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 data class InviteCandidate(val id: String, val name: String)
@@ -17,7 +20,7 @@ object ChatApi {
             Conversation(
                 title = room.name ?: "익명의 이웃",
                 preview = "새로운 대화",
-                time = room.createdAt,
+                time = relativeTime(room.createdAt),
                 isGroup = room.type == "GROUP",
                 roomId = room.id
             )
@@ -72,7 +75,20 @@ object ChatApi {
     private fun toMessage(item: ChatMessageDto) = ChatMessage(
         sender = item.sender.displayName,
         body = item.content,
-        time = item.createdAt,
+        time = relativeTime(item.createdAt),
         mine = item.sender.isMe
     )
+
+    private fun relativeTime(value: String): String = runCatching {
+        val localDate = OffsetDateTime.parse(value)
+            .atZoneSameInstant(ZoneId.systemDefault())
+            .toLocalDate()
+        val days = ChronoUnit.DAYS.between(localDate, java.time.LocalDate.now()).coerceAtLeast(0)
+        when (days) {
+            0L -> "방금 전"
+            1L -> "어제"
+            in 2L..6L -> "${days}일 전"
+            else -> "${localDate.monthValue}월 ${localDate.dayOfMonth}일"
+        }
+    }.getOrDefault(value)
 }
