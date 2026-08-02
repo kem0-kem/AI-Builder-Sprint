@@ -34,6 +34,7 @@ import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Flight
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Report
@@ -378,6 +379,13 @@ private fun FeedCard(
                     .clickable { onOpenFeed(post.id) }
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    val categoryIcon = when (post.category) {
+                        "일상 이야기" -> Icons.Outlined.Eco
+                        "마음과 고민" -> Icons.Outlined.FavoriteBorder
+                        "취미 생활" -> Icons.Outlined.Palette
+                        "질문" -> Icons.AutoMirrored.Outlined.HelpOutline
+                        else -> Icons.Outlined.AutoAwesome
+                    }
                     Surface(
                         modifier = Modifier.size(30.dp),
                         shape = CircleShape,
@@ -385,7 +393,7 @@ private fun FeedCard(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
-                                Icons.Outlined.AutoAwesome,
+                                categoryIcon,
                                 contentDescription = null,
                                 tint = post.accent,
                                 modifier = Modifier.size(16.dp)
@@ -862,14 +870,14 @@ private val feedCategoryVisuals = listOf(
     FeedCategoryVisual(1, "일상 이야기", Icons.Outlined.Eco, Color(0xFF54B978), Color(0xFFEAF7ED)),
     FeedCategoryVisual(2, "마음과 고민", Icons.Outlined.FavoriteBorder, Color(0xFFE76E91), Color(0xFFFFEFF3)),
     FeedCategoryVisual(3, "취미 생활", Icons.Outlined.Palette, Purple, PurpleSoft),
-    FeedCategoryVisual(4, "질문", Icons.Outlined.MoreHoriz, SubtleInk, Color(0xFFF4F1ED))
+    FeedCategoryVisual(4, "질문", Icons.AutoMirrored.Outlined.HelpOutline, SubtleInk, Color(0xFFF4F1ED))
 )
 
 private fun FeedCategoryResult.toVisual(): FeedCategoryVisual = when (name) {
     "일상 이야기" -> FeedCategoryVisual(id, name, Icons.Outlined.Eco, Color(0xFF54B978), Color(0xFFEAF7ED))
     "마음과 고민" -> FeedCategoryVisual(id, name, Icons.Outlined.FavoriteBorder, Color(0xFFE76E91), Color(0xFFFFEFF3))
     "취미 생활" -> FeedCategoryVisual(id, name, Icons.Outlined.Palette, Purple, PurpleSoft)
-    else -> FeedCategoryVisual(id, name, Icons.Outlined.MoreHoriz, SubtleInk, Color(0xFFF4F1ED))
+    else -> FeedCategoryVisual(id, name, Icons.AutoMirrored.Outlined.HelpOutline, SubtleInk, Color(0xFFF4F1ED))
 }
 
 @Composable

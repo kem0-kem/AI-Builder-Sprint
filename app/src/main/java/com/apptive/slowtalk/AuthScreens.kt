@@ -220,8 +220,11 @@ fun SignUpScreen(
     var showPasswordErrorDialog by remember { mutableStateOf(false) }
     var showEmailExistsDialog by remember { mutableStateOf(false) }
     var showEmailAvailableDialog by remember { mutableStateOf(false) }
+    var showUsernameExistsDialog by remember { mutableStateOf(false) }
+    var showUsernameAvailableDialog by remember { mutableStateOf(false) }
     
     var emailCheckResult by remember { mutableStateOf<Boolean?>(null) }
+    var usernameCheckResult by remember { mutableStateOf<Boolean?>(null) }
 
     PaperBackground {
         Scaffold(
@@ -267,12 +270,38 @@ fun SignUpScreen(
                 
                 Spacer(Modifier.height(8.dp))
                 
-                AuthInputField(
-                    value = nameState,
-                    onValueChange = { nameState = it },
-                    placeholder = "이름을 입력해주세요",
-                    leadingIcon = Icons.Outlined.PersonOutline
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AuthInputField(
+                        value = nameState,
+                        onValueChange = { 
+                            nameState = it 
+                            usernameCheckResult = null
+                        },
+                        placeholder = "아이디를 입력해주세요",
+                        leadingIcon = Icons.Outlined.PersonOutline,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            if (nameState.text.isNotBlank()) {
+                                viewModel.checkUsername(nameState.text.trim()) { available ->
+                                    usernameCheckResult = available
+                                    if (available) {
+                                        showUsernameAvailableDialog = true
+                                    } else {
+                                        showUsernameExistsDialog = true
+                                    }
+                                }
+                            }
+                        },
+                        modifier = Modifier.height(56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Purple)
+                    ) {
+                        Text("중복 확인", fontSize = 12.sp)
+                    }
+                }
                 
                 Spacer(Modifier.height(12.dp))
                 
@@ -346,7 +375,8 @@ fun SignUpScreen(
                                     emailState.text.trim().isNotEmpty() && 
                                     passwordState.text.length >= 8 &&
                                     confirmPasswordState.text.isNotEmpty() &&
-                                    emailCheckResult == true
+                                    emailCheckResult == true &&
+                                    usernameCheckResult == true
 
                 Button(
                     onClick = { 
@@ -411,6 +441,81 @@ fun SignUpScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     TextButton(onClick = { showEmailAvailableDialog = false }) {
+                        Text("확인", color = Purple, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
+                }
+            },
+            containerColor = BlockSurface,
+            shape = RoundedCornerShape(24.dp)
+        )
+    }
+
+    if (showUsernameAvailableDialog) {
+        AlertDialog(
+            onDismissRequest = { showUsernameAvailableDialog = false },
+            title = {
+                Text(
+                    text = "사용 가능",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Ink,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            text = {
+                Text(
+                    text = "사용 가능한 아이디입니다.",
+                    fontSize = 15.sp,
+                    color = SubtleInk,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    TextButton(onClick = { showUsernameAvailableDialog = false }) {
+                        Text("확인", color = Purple, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
+                }
+            },
+            containerColor = BlockSurface,
+            shape = RoundedCornerShape(24.dp)
+        )
+    }
+
+    if (showUsernameExistsDialog) {
+        AlertDialog(
+            onDismissRequest = { showUsernameExistsDialog = false },
+            title = {
+                Text(
+                    text = "이미 사용 중인 아이디에요",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Ink,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            text = {
+                Text(
+                    text = "이미 사용 중인 아이디입니다.\n다른 아이디를 입력해주세요.",
+                    fontSize = 15.sp,
+                    color = SubtleInk,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 22.sp,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    TextButton(onClick = { showUsernameExistsDialog = false }) {
                         Text("확인", color = Purple, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
                 }

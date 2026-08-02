@@ -15,6 +15,9 @@ interface AuthApi {
     @GET("auth/check-email")
     suspend fun checkEmail(@Query("email") email: String): EmailCheckResponse
 
+    @GET("auth/check-username")
+    suspend fun checkUsername(@Query("username") username: String): EmailCheckResponse
+
     @POST("auth/logout")
     suspend fun logout(): LogoutResponse
 }

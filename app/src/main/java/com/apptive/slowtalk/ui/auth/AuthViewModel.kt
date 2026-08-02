@@ -65,6 +65,18 @@ class AuthViewModel(
         }
     }
 
+    fun checkUsername(username: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            repository.checkUsername(username)
+                .onSuccess { available ->
+                    onResult(available)
+                }
+                .onFailure {
+                    onResult(false)
+                }
+        }
+    }
+
     fun logout(onSuccess: () -> Unit) {
         viewModelScope.launch {
             _uiState.value = AuthUiState.Loading

@@ -47,6 +47,19 @@ class AuthRepository(private val api: AuthApi = RetrofitClient.authApi) {
         }
     }
 
+    suspend fun checkUsername(username: String): Result<Boolean> {
+        if (MOCK_MODE) {
+            // "admin"만 중복된 것으로 처리
+            return Result.success(username != "admin")
+        }
+        return try {
+            val response = api.checkUsername(username)
+            Result.success(response.available)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun logout(): Result<String> {
         if (MOCK_MODE) {
             return Result.success("로그아웃 되었습니다.")
