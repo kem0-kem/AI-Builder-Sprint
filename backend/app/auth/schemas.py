@@ -1,4 +1,19 @@
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from typing import Annotated
+
+from pydantic import BaseModel, BeforeValidator, ConfigDict, EmailStr, Field
+
+USERNAME_PATTERN = r"^[a-z0-9_]+$"
+
+
+def normalize_username(value: str) -> str:
+    return value.lower()
+
+
+Username = Annotated[
+    str,
+    Field(min_length=3, max_length=30, pattern=USERNAME_PATTERN),
+    BeforeValidator(normalize_username),
+]
 
 
 class SignupRequest(BaseModel):
@@ -7,6 +22,7 @@ class SignupRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     nickname: str = Field(min_length=1, max_length=30)
+    username: Username | None = None
 
 
 class LoginRequest(BaseModel):

@@ -1,13 +1,17 @@
+from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime, timedelta
+from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.routing import APIRoute
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.auth.dependencies import CurrentUserId, Session
 from app.auth.models import RefreshToken, User
-from app.auth.schemas import LoginRequest, RefreshRequest, SignupRequest, TokenPair
+from app.auth.schemas import LoginRequest, RefreshRequest, SignupRequest, TokenPair, Username
 from app.auth.security import (
     create_access_token,
     hash_password,
@@ -17,10 +21,27 @@ from app.auth.security import (
 )
 from app.common.responses import success
 from app.core.config import get_settings
-from app.core.errors import ApiError
+from app.core.errors import ApiError, validation_error_handler
 from app.core.rate_limit import login_limiter
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+class UsernameValidationRoute(APIRoute):
+    def get_route_handler(
+        self,
+    ) -> Callable[[Request], Coroutine[Any, Any, Response]]:
+        route_handler = super().get_route_handler()
+
+        async def handle(request: Request) -> Response:
+            try:
+                return await route_handler(request)
+            except RequestValidationError as exc:
+                response = await validation_error_handler(request, exc)
+                response.status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
+                return response
+
+        return handle
 
 
 async def issue_pair(session: Session, user_id: UUID) -> TokenPair:
@@ -42,10 +63,31 @@ async def issue_pair(session: Session, user_id: UUID) -> TokenPair:
     )
 
 
+async def raise_signup_conflict(
+    session: Session, *, email: str, username: str | None
+) -> None:
+    if username is not None:
+        username_exists = await session.scalar(
+            select(User.id).where(User.username == username)
+        )
+        if username_exists is not None:
+            raise ApiError(
+                "USERNAME_ALREADY_EXISTS",
+                "이미 사용 중인 아이디입니다.",
+                409,
+            )
+    email_exists = await session.scalar(select(User.id).where(User.email == email))
+    if email_exists is not None:
+        raise ApiError("EMAIL_ALREADY_EXISTS", "이미 사용 중인 이메일입니다.", 409)
+
+
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
 async def signup(request: SignupRequest, session: Session) -> dict[str, object]:
+    email = request.email.lower()
+    await raise_signup_conflict(session, email=email, username=request.username)
     user = User(
-        email=request.email.lower(),
+        email=email,
+        username=request.username,
         password_hash=hash_password(request.password),
         nickname=request.nickname,
     )
@@ -54,7 +96,12 @@ async def signup(request: SignupRequest, session: Session) -> dict[str, object]:
         await session.flush()
     except IntegrityError as exc:
         await session.rollback()
-        raise ApiError("EMAIL_ALREADY_EXISTS", "이미 사용 중인 이메일입니다.", 409) from exc
+        await raise_signup_conflict(session, email=email, username=request.username)
+        raise ApiError(
+            "SIGNUP_CONFLICT",
+            "회원가입 정보를 사용할 수 없습니다.",
+            409,
+        ) from exc
     pair = await issue_pair(session, user.id)
     await session.commit()
     return success({"userId": str(user.id), **pair.model_dump(by_alias=True)})
@@ -105,3 +152,19 @@ async def email_availability(
 ) -> dict[str, object]:
     exists = await session.scalar(select(User.id).where(User.email == email.lower()))
     return success({"available": exists is None})
+
+
+async def check_username(
+    session: Session,
+    username: Annotated[Username, Query(description="확인할 아이디")],
+) -> dict[str, object]:
+    exists = await session.scalar(select(User.id).where(User.username == username))
+    return success({"available": exists is None})
+
+
+router.add_api_route(
+    "/check-username",
+    check_username,
+    methods=["GET"],
+    route_class_override=UsernameValidationRoute,
+)

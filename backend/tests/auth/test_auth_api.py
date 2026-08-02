@@ -1,3 +1,4 @@
+import pytest
 from httpx import AsyncClient
 
 
@@ -37,3 +38,66 @@ async def test_email_availability(client: AsyncClient) -> None:
         "/api/v1/auth/email-availability", params={"email": "new@example.com"}
     )
     assert available.json()["data"] == {"available": True}
+
+
+async def test_username_availability_and_case_normalization(client: AsyncClient) -> None:
+    available = await client.get(
+        "/api/v1/auth/check-username", params={"username": "Test_User"}
+    )
+    assert available.status_code == 200
+    assert available.json()["data"] == {"available": True}
+
+    created = await client.post(
+        "/api/v1/auth/signup",
+        json={
+            "email": "username@example.com",
+            "password": "strong-pass",
+            "nickname": "display name",
+            "username": "Test_User",
+        },
+    )
+    assert created.status_code == 201
+
+    unavailable = await client.get(
+        "/api/v1/auth/check-username", params={"username": "TEST_USER"}
+    )
+    assert unavailable.status_code == 200
+    assert unavailable.json()["data"] == {"available": False}
+
+
+async def test_duplicate_username_signup_is_rejected(client: AsyncClient) -> None:
+    first = {
+        "email": "first-username@example.com",
+        "password": "strong-pass",
+        "nickname": "first",
+        "username": "same_user",
+    }
+    second = {**first, "email": "second-username@example.com", "nickname": "second"}
+
+    assert (await client.post("/api/v1/auth/signup", json=first)).status_code == 201
+    duplicate = await client.post("/api/v1/auth/signup", json=second)
+
+    assert duplicate.status_code == 409
+    assert duplicate.json()["error"]["code"] == "USERNAME_ALREADY_EXISTS"
+
+
+@pytest.mark.parametrize("username", ["ab", "has-hyphen", "한글id"])
+async def test_username_availability_rejects_invalid_values(
+    client: AsyncClient, username: str
+) -> None:
+    response = await client.get(
+        "/api/v1/auth/check-username", params={"username": username}
+    )
+    assert response.status_code == 422
+
+
+async def test_legacy_signup_without_username_still_works(client: AsyncClient) -> None:
+    response = await client.post(
+        "/api/v1/auth/signup",
+        json={
+            "email": "legacy@example.com",
+            "password": "strong-pass",
+            "nickname": "legacy user",
+        },
+    )
+    assert response.status_code == 201
