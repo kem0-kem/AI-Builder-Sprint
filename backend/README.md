@@ -55,4 +55,13 @@ python scripts/export_openapi.py openapi/slowtalk-v1.json
   and readiness success. This value is the startup contract-check result, not a live
   provider-health signal. Probe text and vector values are never included.
 
+## Username compatibility rollout
+
+- `username` is optional during the compatibility rollout so existing signup clients
+  continue to work without changes.
+- `GET /api/v1/auth/check-username` is an advisory availability check; the database
+  unique index remains authoritative if concurrent signup requests race.
+- Usernames must contain 3-30 ASCII letters, digits, or underscores. Accepted values
+  are normalized to lowercase before storage and comparison.
+
 피드 작성은 OCR을 제공하지 않습니다. `/feeds/feedback`은 제목과 본문 텍스트만 받습니다.

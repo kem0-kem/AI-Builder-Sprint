@@ -8,6 +8,7 @@ def test_required_contract_and_removed_feed_ocr() -> None:
     paths = create_app().openapi()["paths"]
     required = {
         "/api/v1/auth/signup",
+        "/api/v1/auth/check-username",
         "/api/v1/users/me",
         "/api/v1/letters",
         "/api/v1/chat-rooms",
@@ -22,6 +23,18 @@ def test_required_contract_and_removed_feed_ocr() -> None:
     }
     assert required <= set(paths)
     assert "/api/v1/feeds/ocr" not in paths
+
+
+def test_username_availability_contract() -> None:
+    operation = create_app().openapi()["paths"]["/api/v1/auth/check-username"]["get"]
+    username = next(
+        parameter for parameter in operation["parameters"] if parameter["name"] == "username"
+    )
+
+    assert username["required"] is True
+    assert username["schema"]["minLength"] == 3
+    assert username["schema"]["maxLength"] == 30
+    assert username["schema"]["pattern"] == "^[a-z0-9_]+$"
 
 
 def test_readiness_documents_incomplete_configuration_response() -> None:
