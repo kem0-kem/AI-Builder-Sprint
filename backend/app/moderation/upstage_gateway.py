@@ -77,7 +77,7 @@ class UpstageModerationGateway:
                 headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
                 json=request_json,
             )
-        except httpx.HTTPError:
+        except (httpx.HTTPError, UnicodeEncodeError):
             raise ModerationProviderUnavailable("moderation provider unavailable") from None
 
         try:

@@ -62,6 +62,16 @@ async def test_gateway_propagates_unexpected_client_post_errors(
 
 
 @pytest.mark.asyncio
+async def test_gateway_maps_request_encoding_failure_to_provider_unavailable() -> None:
+    async with httpx.AsyncClient(base_url="https://api.upstage.ai/v1") as client:
+        with pytest.raises(ModerationProviderUnavailable) as caught:
+            await build_gateway(client).classify(ContentType.FEED, "\ud800")
+
+    assert str(caught.value) == "moderation provider unavailable"
+    assert caught.value.__cause__ is None
+
+
+@pytest.mark.asyncio
 @respx.mock
 async def test_gateway_sends_only_type_and_text() -> None:
     route = respx.post("https://api.upstage.ai/v1/chat/completions").mock(
