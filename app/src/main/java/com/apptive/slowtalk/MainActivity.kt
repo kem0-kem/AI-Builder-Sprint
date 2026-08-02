@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.apptive.slowtalk.ui.auth.AuthViewModel
+import com.apptive.slowtalk.ui.letter.LetterViewModel
 import com.apptive.slowtalk.ui.profile.ProfileViewModel
 import com.apptive.slowtalk.ui.reflection.ReflectionViewModel
 import com.apptive.slowtalk.ui.theme.SlowTalkTheme
@@ -54,6 +55,7 @@ private fun ApptiveApp() {
     val profileViewModel: ProfileViewModel = viewModel()
     val authViewModel: AuthViewModel = viewModel()
     val reflectionViewModel: ReflectionViewModel = viewModel()
+    val letterViewModel: LetterViewModel = viewModel()
     var isLoggedIn by remember { mutableStateOf(false) }
     var screen by remember { mutableStateOf<Screen>(if (isLoggedIn) Screen.Feed else Screen.Login) }
     var profileReturnScreen by remember { mutableStateOf<Screen>(Screen.Feed) }
@@ -376,6 +378,9 @@ private fun ApptiveApp() {
                 }
             )
             Screen.WriteLetter -> WriteLetterScreen(
+                viewModel = letterViewModel,
+                profileViewModel = profileViewModel,
+                onBack = { screen = Screen.LetterHome },
                 onHistory = { screen = Screen.LetterHistory },
                 onMatched = { screen = Screen.Chat("익명의 이웃 05") },
                 onTab = { screen = it.toScreen() }
