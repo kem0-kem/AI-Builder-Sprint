@@ -140,6 +140,22 @@ def moderation_configuration_complete(settings: Settings) -> bool:
     return True
 
 
+def matching_configuration_complete(settings: Settings) -> bool:
+    if settings.matching_mode == "disabled":
+        return True
+    provider_values = (
+        settings.upstage_api_key.get_secret_value()
+        if settings.upstage_api_key is not None
+        else None,
+        settings.upstage_embedding_model,
+        settings.match_min_similarity,
+    )
+    return not any(
+        value is None or (isinstance(value, str) and not value.strip())
+        for value in provider_values
+    )
+
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings()

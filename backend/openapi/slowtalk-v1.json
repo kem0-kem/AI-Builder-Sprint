@@ -49,7 +49,7 @@
             }
           },
           "503": {
-            "description": "Moderation configuration is incomplete"
+            "description": "Application dependencies are not ready"
           }
         }
       }

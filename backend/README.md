@@ -42,4 +42,17 @@ python scripts/export_openapi.py openapi/slowtalk-v1.json
   completeness, and fallback status, and does not probe the moderation provider.
 - Metrics use only content type, decision, policy category, and bounded latency buckets.
 
+## Semantic matching rollout
+
+- `MATCHING_MODE=disabled` skips the embedding provider probe.
+- `MATCHING_MODE=shadow` or `MATCHING_MODE=enforce` requires `UPSTAGE_API_KEY`,
+  `UPSTAGE_EMBEDDING_MODEL`, and `MATCH_MIN_SIMILARITY`. Application startup sends one
+  fixed Korean query probe to Upstage and requires an exact 1024-dimensional finite
+  vector before matching is reported ready.
+- Query text uses the `embedding-query` provider alias. Delivered source letters use
+  the `embedding-passage` alias and preserve provider batch index ordering.
+- `/api/v1/ready` exposes only matching mode, configured model name, expected dimensions,
+  and readiness success. This value is the startup contract-check result, not a live
+  provider-health signal. Probe text and vector values are never included.
+
 피드 작성은 OCR을 제공하지 않습니다. `/feeds/feedback`은 제목과 본문 텍스트만 받습니다.

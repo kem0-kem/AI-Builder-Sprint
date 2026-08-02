@@ -27,9 +27,7 @@ def test_required_contract_and_removed_feed_ocr() -> None:
 def test_readiness_documents_incomplete_configuration_response() -> None:
     responses = create_app().openapi()["paths"]["/api/v1/ready"]["get"]["responses"]
 
-    assert responses["503"]["description"] == (
-        "Moderation configuration is incomplete"
-    )
+    assert responses["503"]["description"] == "Application dependencies are not ready"
 
 
 def test_moderated_writes_document_async_and_blocked_responses() -> None:

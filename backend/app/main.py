@@ -1,5 +1,6 @@
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from time import perf_counter
 
 from fastapi import APIRouter, FastAPI, Request
@@ -21,6 +22,7 @@ from app.core.errors import (
 )
 from app.feeds.router import router as feed_router
 from app.letters.router import router as letter_router
+from app.matching.dependencies import EmbeddingReadiness, check_embedding_readiness
 from app.meetings.router import router as meeting_router
 from app.moderation.router import router as moderation_router
 from app.profiles.router import router as profile_router
@@ -30,7 +32,17 @@ from app.reports.router import router as report_router
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    application = FastAPI(title=settings.app_name, version="1.0.0")
+
+    @asynccontextmanager
+    async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+        application.state.embedding_readiness = await check_embedding_readiness(settings)
+        yield
+
+    application = FastAPI(
+        title=settings.app_name,
+        version="1.0.0",
+        lifespan=lifespan,
+    )
     application.add_exception_handler(ApiError, api_error_handler)
     application.add_exception_handler(RequestValidationError, validation_error_handler)
     application.add_exception_handler(HTTPException, http_error_handler)
@@ -61,7 +73,7 @@ def create_app() -> FastAPI:
         tags=["system"],
         response_model=dict[str, object],
         responses={
-            503: {"description": "Moderation configuration is incomplete"},
+            503: {"description": "Application dependencies are not ready"},
         },
     )
     async def ready() -> JSONResponse:
@@ -70,18 +82,30 @@ def create_app() -> FastAPI:
             settings.app_environment in {"development", "test"}
             and settings.allow_development_moderation_fallback
         )
-        is_ready = moderation_configured or fallback_allowed
+        moderation_ready = moderation_configured or fallback_allowed
         fallback_active = not moderation_configured and fallback_allowed
+        matching_readiness = getattr(
+            application.state,
+            "embedding_readiness",
+            EmbeddingReadiness(
+                mode=settings.matching_mode,
+                model=settings.upstage_embedding_model,
+                expected_dimensions=settings.embedding_dimensions,
+                ready=settings.matching_mode == "disabled",
+            ),
+        )
+        is_ready = moderation_ready and matching_readiness.ready
+        data: dict[str, object] = {
+            "status": "ready" if is_ready else "not_ready",
+            "moderationMode": settings.moderation_mode,
+            "moderationConfigured": moderation_configured,
+            "fallbackActive": fallback_active,
+        }
+        if settings.matching_mode != "disabled":
+            data["matching"] = matching_readiness.model_dump()
         return JSONResponse(
             status_code=200 if is_ready else 503,
-            content=success(
-                {
-                    "status": "ready" if is_ready else "not_ready",
-                    "moderationMode": settings.moderation_mode,
-                    "moderationConfigured": moderation_configured,
-                    "fallbackActive": fallback_active,
-                }
-            ),
+            content=success(data),
         )
 
     application.include_router(router)
