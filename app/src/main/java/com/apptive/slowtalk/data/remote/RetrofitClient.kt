@@ -32,9 +32,13 @@ object RetrofitClient {
             }
             chain.proceed(authenticatedRequest)
         }
-        .addInterceptor(HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
-        })
+        .apply {
+            if (BuildConfig.DEBUG) {
+                addInterceptor(HttpLoggingInterceptor().apply {
+                    level = HttpLoggingInterceptor.Level.BODY
+                })
+            }
+        }
         .build()
 
     private val retrofit = Retrofit.Builder()

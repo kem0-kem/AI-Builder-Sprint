@@ -24,6 +24,22 @@ pytest -q
 python scripts/export_openapi.py openapi/slowtalk-v1.json
 ```
 
+## Railway deployment
+
+1. Create a Railway Postgres service, then create a backend service from this repository.
+2. Set the backend service **Root Directory** to `/backend` and its config file path to
+   `/backend/railway.toml`. The included pre-deploy command runs `alembic upgrade head`.
+3. Reference the Postgres service's `DATABASE_URL` in the backend service variables.
+   Railway's normal `postgresql://` URL is converted to the async driver form automatically.
+4. Set `APP_ENVIRONMENT=production`, a new 32+ character `JWT_SECRET`, and the required
+   moderation/matching variables. Do not copy the local `.env` file to Railway.
+5. Generate a public domain and check `/api/v1/health` and `/api/v1/ready`.
+
+For a browser frontend, set `CORS_ORIGINS` to a JSON array such as
+`["https://your-frontend.up.railway.app"]`. Android does not require CORS. Build a release
+APK with `-PAPI_BASE_URL=https://your-api.up.railway.app/api/v1/`; do not bake secrets into
+the APK.
+
 ## Moderation rollout
 
 - `MODERATION_MODE=shadow`: when `UPSTAGE_API_KEY`, `UPSTAGE_CHAT_MODEL`,

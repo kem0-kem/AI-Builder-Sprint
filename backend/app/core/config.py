@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     allow_development_moderation_fallback: bool = False
     api_prefix: str = "/api/v1"
     database_url: str = "postgresql+asyncpg://slowtalk:slowtalk@localhost:5432/slowtalk"
+    cors_origins: list[AnyHttpUrl] = Field(default_factory=list)
     jwt_secret: str = Field("development-only-secret-change-me", min_length=32)
     access_token_ttl_seconds: int = 900
     refresh_token_ttl_seconds: int = 2_592_000
@@ -38,6 +39,18 @@ class Settings(BaseSettings):
     moderation_encryption_key: SecretStr | None = None
     content_hash_pepper: SecretStr | None = None
     internal_moderation_token: SecretStr | None = None
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def normalize_database_url(cls, value: object) -> str:
+        """Accept Railway's standard Postgres URL in addition to local async URLs."""
+        if not isinstance(value, str):
+            raise ValueError("database URL must be a string")
+        if value.startswith("postgres://"):
+            return "postgresql+asyncpg://" + value.removeprefix("postgres://")
+        if value.startswith("postgresql://"):
+            return "postgresql+asyncpg://" + value.removeprefix("postgresql://")
+        return value
 
     @field_validator("embedding_dimensions")
     @classmethod
