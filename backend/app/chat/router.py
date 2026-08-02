@@ -14,7 +14,7 @@ from app.chat.service import ChatCommandHandler
 from app.common.responses import page, success
 from app.core.errors import ApiError
 from app.db.session import get_session
-from app.moderation.dependencies import Moderation
+from app.moderation.dependencies import MODERATION_RESPONSES, Moderation
 from app.moderation.models import SubmissionStatus
 from app.moderation.repository import ModerationCommand
 from app.moderation.schemas import ContentType
@@ -113,6 +113,7 @@ async def list_messages(
     "/chat-rooms/{room_id}/messages",
     status_code=status.HTTP_201_CREATED,
     response_model=None,
+    responses=MODERATION_RESPONSES,
 )
 async def create_message(
     room_id: UUID,

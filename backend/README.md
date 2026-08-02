@@ -24,4 +24,13 @@ pytest -q
 python scripts/export_openapi.py openapi/slowtalk-v1.json
 ```
 
+## Moderation rollout
+
+- `MODERATION_MODE=shadow`: when provider and storage settings are configured, records
+  moderation decisions and metrics while preserving the existing successful API behavior.
+- `MODERATION_MODE=enforce`: requires all provider, encryption, confidence, and internal
+  token settings; pending content returns `202` and blocked content returns `422`.
+- `/api/v1/health` is liveness-only. `/api/v1/ready` reports the validated moderation mode.
+- Metrics use only content type, decision, policy category, and bounded latency buckets.
+
 피드 작성은 OCR을 제공하지 않습니다. `/feeds/feedback`은 제목과 본문 텍스트만 받습니다.

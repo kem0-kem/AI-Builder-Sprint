@@ -55,6 +55,12 @@ def create_app() -> FastAPI:
     async def health() -> dict[str, object]:
         return success({"status": "alive"})
 
+    @router.get("/ready", tags=["system"])
+    async def ready() -> dict[str, object]:
+        return success(
+            {"status": "ready", "moderationMode": settings.moderation_mode}
+        )
+
     application.include_router(router)
     application.include_router(auth_router, prefix=settings.api_prefix)
     application.include_router(profile_router, prefix=settings.api_prefix)

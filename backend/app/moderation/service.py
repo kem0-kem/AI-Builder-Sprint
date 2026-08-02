@@ -1,12 +1,14 @@
 import math
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
+from time import perf_counter
 from uuid import UUID, uuid4
 
 from pydantic import ValidationError
 
 from app.moderation.gateway import ModerationGateway, ModerationProviderUnavailable
 from app.moderation.local_rules import LocalRuleEngine, LocalRuleResult, normalize_text
+from app.moderation.metrics import ModerationMetrics
 from app.moderation.models import SubmissionStatus
 from app.moderation.repository import (
     LOCAL_RULE_PROVENANCE,
@@ -162,6 +164,56 @@ class ModerationOrchestrator:
                 idempotency_key=str(uuid4()),
             )
         )
+
+
+class RecordingModerationOrchestrator:
+    def __init__(
+        self,
+        inner: ModerationOrchestrator,
+        metrics: ModerationMetrics,
+        *,
+        shadow: bool,
+    ) -> None:
+        self._inner = inner
+        self._metrics = metrics
+        self._shadow = shadow
+
+    async def evaluate(self, command: ModerationCommand) -> ModerationOutcome:
+        started = perf_counter()
+        outcome = await self._inner.evaluate(command)
+        decision, categories = _outcome_labels(outcome)
+        self._metrics.record_decision(
+            command.content_type,
+            decision,
+            categories,
+            (perf_counter() - started) * 1000,
+        )
+        return ModerationOutcome(http_status=200) if self._shadow else outcome
+
+    async def evaluate_ocr(self, owner_id: UUID, text: str) -> ModerationOutcome:
+        return await self.evaluate(
+            ModerationCommand(
+                owner_id=owner_id,
+                content_type=ContentType.OCR_TEXT,
+                operation="OCR_TEXT",
+                text=text,
+                payload={"text": text},
+                idempotency_key=str(uuid4()),
+            )
+        )
+
+
+def _outcome_labels(
+    outcome: ModerationOutcome,
+) -> tuple[ModerationDecision, set[ModerationCategory] | frozenset[ModerationCategory]]:
+    if outcome.status is SubmissionStatus.BLOCKED:
+        return ModerationDecision.BLOCK, outcome.categories
+    if outcome.status is SubmissionStatus.PENDING_REVIEW:
+        categories = outcome.assessment.categories if outcome.assessment else set()
+        return ModerationDecision.REVIEW, categories
+    if outcome.assessment is not None:
+        return outcome.assessment.decision, outcome.assessment.categories
+    return ModerationDecision.ALLOW, set()
 
 
 def combine_assessments(

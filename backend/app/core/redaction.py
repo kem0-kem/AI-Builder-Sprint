@@ -3,8 +3,14 @@ from typing import Any
 SENSITIVE_KEYS = {
     "accesstoken",
     "authorization",
+    "ciphertext",
+    "command",
+    "content",
     "email",
+    "embedding",
+    "nonce",
     "password",
+    "payload",
     "refreshtoken",
     "token",
 }

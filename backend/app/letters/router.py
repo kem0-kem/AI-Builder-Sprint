@@ -10,7 +10,7 @@ from app.core.errors import ApiError
 from app.letters.models import Letter, MailboxEntry
 from app.letters.schemas import LetterCreate
 from app.letters.service import LetterCommandHandler, letter_view
-from app.moderation.dependencies import Moderation
+from app.moderation.dependencies import MODERATION_RESPONSES, Moderation
 from app.moderation.models import SubmissionStatus
 from app.moderation.repository import ModerationCommand
 from app.moderation.schemas import ContentType
@@ -18,7 +18,12 @@ from app.moderation.schemas import ContentType
 router = APIRouter(tags=["letters"])
 
 
-@router.post("/letters", status_code=status.HTTP_201_CREATED, response_model=None)
+@router.post(
+    "/letters",
+    status_code=status.HTTP_201_CREATED,
+    response_model=None,
+    responses=MODERATION_RESPONSES,
+)
 async def create_letter(
     request: LetterCreate,
     user_id: CurrentUserId,

@@ -28,6 +28,29 @@
         }
       }
     },
+    "/api/v1/ready": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Ready",
+        "operationId": "ready_api_v1_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Ready Api V1 Ready Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/signup": {
       "post": {
         "tags": [
@@ -538,23 +561,15 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Create Letter Api V1 Letters Post"
-                }
+                "schema": {}
               }
             }
           },
+          "202": {
+            "description": "Content accepted for moderation review"
+          },
           "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
+            "description": "Content blocked by policy"
           }
         }
       },
@@ -864,23 +879,15 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Create Message Api V1 Chat Rooms  Room Id  Messages Post"
-                }
+                "schema": {}
               }
             }
           },
+          "202": {
+            "description": "Content accepted for moderation review"
+          },
           "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
+            "description": "Content blocked by policy"
           }
         }
       }
@@ -1100,6 +1107,127 @@
         }
       }
     },
+    "/api/v1/moderation-submissions/{submission_id}": {
+      "get": {
+        "tags": [
+          "moderation"
+        ],
+        "summary": "Get Submission",
+        "operationId": "get_submission_api_v1_moderation_submissions__submission_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "submission_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Submission Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Submission Api V1 Moderation Submissions  Submission Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/internal/moderation-submissions/{submission_id}/decision": {
+      "post": {
+        "tags": [
+          "moderation"
+        ],
+        "summary": "Decide Submission",
+        "operationId": "decide_submission_api_v1_internal_moderation_submissions__submission_id__decision_post",
+        "parameters": [
+          {
+            "name": "submission_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Submission Id"
+            }
+          },
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualDecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Decide Submission Api V1 Internal Moderation Submissions  Submission Id  Decision Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/feed-categories": {
       "get": {
         "tags": [
@@ -1245,23 +1373,15 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Create Feed Api V1 Feeds Post"
-                }
+                "schema": {}
               }
             }
           },
+          "202": {
+            "description": "Content accepted for moderation review"
+          },
           "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
+            "description": "Content blocked by policy"
           }
         }
       }
@@ -1353,23 +1473,15 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Patch Feed Api V1 Feeds  Feed Id  Patch"
-                }
+                "schema": {}
               }
             }
           },
+          "202": {
+            "description": "Content accepted for moderation review"
+          },
           "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
+            "description": "Content blocked by policy"
           }
         }
       },
@@ -1670,23 +1782,15 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Create Comment Api V1 Feeds  Feed Id  Comments Post"
-                }
+                "schema": {}
               }
             }
           },
+          "202": {
+            "description": "Content accepted for moderation review"
+          },
           "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
+            "description": "Content blocked by policy"
           }
         }
       }
@@ -1730,23 +1834,15 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Patch Comment Api V1 Comments  Comment Id  Patch"
-                }
+                "schema": {}
               }
             }
           },
+          "202": {
+            "description": "Content accepted for moderation review"
+          },
           "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
+            "description": "Content blocked by policy"
           }
         }
       },
@@ -1872,23 +1968,15 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Letter Ocr Api V1 Letters Ocr Post"
-                }
+                "schema": {}
               }
             }
           },
+          "202": {
+            "description": "Content accepted for moderation review"
+          },
           "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
+            "description": "Content blocked by policy"
           }
         },
         "security": [
@@ -1920,23 +2008,15 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Report Ocr Api V1 Reports Ocr Post"
-                }
+                "schema": {}
               }
             }
           },
+          "202": {
+            "description": "Content accepted for moderation review"
+          },
           "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
+            "description": "Content blocked by policy"
           }
         },
         "security": [
@@ -2138,23 +2218,15 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Create Report Api V1 Reports Post"
-                }
+                "schema": {}
               }
             }
           },
+          "202": {
+            "description": "Content accepted for moderation review"
+          },
           "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
+            "description": "Content blocked by policy"
           }
         },
         "security": [
@@ -2451,6 +2523,27 @@
         ],
         "title": "LoginRequest"
       },
+      "ManualDecisionRequest": {
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/ModerationDecision"
+          },
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/ModerationCategory"
+            },
+            "type": "array",
+            "uniqueItems": true,
+            "title": "Categories"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "title": "ManualDecisionRequest"
+      },
       "MeetingCreate": {
         "properties": {
           "title": {
@@ -2509,6 +2602,28 @@
           "content"
         ],
         "title": "MessageCreate"
+      },
+      "ModerationCategory": {
+        "type": "string",
+        "enum": [
+          "HATE",
+          "HARASSMENT",
+          "SEXUAL",
+          "VIOLENCE",
+          "SELF_HARM",
+          "PERSONAL_DATA",
+          "SPAM"
+        ],
+        "title": "ModerationCategory"
+      },
+      "ModerationDecision": {
+        "type": "string",
+        "enum": [
+          "ALLOW",
+          "REVIEW",
+          "BLOCK"
+        ],
+        "title": "ModerationDecision"
       },
       "ProfilePatch": {
         "properties": {

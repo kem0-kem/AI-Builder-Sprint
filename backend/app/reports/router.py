@@ -11,7 +11,7 @@ from app.auth.dependencies import CurrentUserId, Session
 from app.common.responses import page, success
 from app.core.errors import ApiError
 from app.core.rate_limit import report_limiter
-from app.moderation.dependencies import Moderation, moderation_response
+from app.moderation.dependencies import MODERATION_RESPONSES, Moderation, moderation_response
 from app.moderation.repository import ModerationCommand
 from app.moderation.schemas import ContentType
 from app.reports.models import AnalysisSnapshot, ReflectionReport
@@ -66,6 +66,7 @@ async def analyze_report(
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(report_limiter)],
     response_model=None,
+    responses=MODERATION_RESPONSES,
 )
 async def create_report(
     request: ReportCreate,

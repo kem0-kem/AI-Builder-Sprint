@@ -14,7 +14,7 @@ from app.common.responses import success
 from app.core.config import get_settings
 from app.core.errors import ApiError
 from app.core.rate_limit import ai_limiter
-from app.moderation.dependencies import Moderation, moderation_response
+from app.moderation.dependencies import MODERATION_RESPONSES, Moderation, moderation_response
 
 router = APIRouter(tags=["ai"])
 Assistant = Annotated[WritingAssistantGateway, Depends(get_writing_assistant)]
@@ -61,7 +61,10 @@ async def ocr_response(
 
 
 @router.post(
-    "/letters/ocr", dependencies=[Depends(ai_limiter)], response_model=None
+    "/letters/ocr",
+    dependencies=[Depends(ai_limiter)],
+    response_model=None,
+    responses=MODERATION_RESPONSES,
 )
 async def letter_ocr(
     user_id: CurrentUserId,
@@ -74,7 +77,10 @@ async def letter_ocr(
 
 
 @router.post(
-    "/reports/ocr", dependencies=[Depends(ai_limiter)], response_model=None
+    "/reports/ocr",
+    dependencies=[Depends(ai_limiter)],
+    response_model=None,
+    responses=MODERATION_RESPONSES,
 )
 async def report_ocr(
     user_id: CurrentUserId,

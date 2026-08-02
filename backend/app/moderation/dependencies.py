@@ -1,5 +1,5 @@
 from collections.abc import AsyncIterator
-from typing import Annotated
+from typing import Annotated, Any
 
 import httpx
 from fastapi import Depends
@@ -10,17 +10,35 @@ from app.common.responses import success
 from app.core.config import get_settings
 from app.core.errors import ApiError
 from app.moderation.crypto import CommandCipher
+from app.moderation.metrics import moderation_metrics
 from app.moderation.models import SubmissionStatus
 from app.moderation.repository import ModerationRepository
-from app.moderation.service import ModerationOrchestrator, ModerationOutcome
+from app.moderation.service import (
+    ModerationOrchestrator,
+    ModerationOutcome,
+    RecordingModerationOrchestrator,
+)
 from app.moderation.upstage_gateway import UpstageModerationGateway
+
+MODERATION_RESPONSES: dict[int | str, dict[str, Any]] = {
+    202: {"description": "Content accepted for moderation review"},
+    422: {"description": "Content blocked by policy"},
+}
 
 
 async def get_moderation_orchestrator(
     session: Session,
-) -> AsyncIterator[ModerationOrchestrator | None]:
+) -> AsyncIterator[ModerationOrchestrator | RecordingModerationOrchestrator | None]:
     settings = get_settings()
-    if settings.moderation_mode != "enforce":
+    required = (
+        settings.upstage_api_key,
+        settings.upstage_chat_model,
+        settings.moderation_encryption_key,
+        settings.content_hash_pepper,
+        settings.moderation_allow_confidence,
+        settings.moderation_block_confidence,
+    )
+    if any(value is None for value in required):
         yield None
         return
 
@@ -39,7 +57,7 @@ async def get_moderation_orchestrator(
     async with httpx.AsyncClient(
         base_url=str(settings.upstage_base_url), timeout=10.0
     ) as client:
-        yield ModerationOrchestrator(
+        inner = ModerationOrchestrator(
             UpstageModerationGateway(
                 client=client,
                 api_key=settings.upstage_api_key,
@@ -49,10 +67,14 @@ async def get_moderation_orchestrator(
             settings.moderation_allow_confidence,
             settings.moderation_block_confidence,
         )
+        yield RecordingModerationOrchestrator(
+            inner, moderation_metrics, shadow=settings.moderation_mode == "shadow"
+        )
 
 
 Moderation = Annotated[
-    ModerationOrchestrator | None, Depends(get_moderation_orchestrator)
+    ModerationOrchestrator | RecordingModerationOrchestrator | None,
+    Depends(get_moderation_orchestrator),
 ]
 
 

@@ -5,6 +5,7 @@ from app.core.errors import ApiError
 from app.moderation.command_handlers import ModeratedCommandRegistry
 from app.moderation.gateway import ModerationGateway
 from app.moderation.local_rules import LocalRuleEngine
+from app.moderation.metrics import moderation_metrics
 from app.moderation.models import ContentSubmission, SubmissionStatus
 from app.moderation.repository import (
     LOCAL_RULE_PROVENANCE,
@@ -162,6 +163,8 @@ class ModerationRetryWorker:
             await self._accept_lost_transition(
                 submission, won, equivalent=SubmissionStatus.MANUAL_REVIEW
             )
+            if won:
+                moderation_metrics.manual_reviews[submission.content_type.value] += 1
             return
         won = await self._repository.resolve_retry(
             submission,
@@ -169,6 +172,8 @@ class ModerationRetryWorker:
             next_attempt_at=now + RETRY_DELAYS[completed_attempts],
             assessment=assessment,
         )
+        if won:
+            moderation_metrics.retries[submission.content_type.value] += 1
         if not won:
             current = await self._repository.get(submission.id)
             if current is None or (

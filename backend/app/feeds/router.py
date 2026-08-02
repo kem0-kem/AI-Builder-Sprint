@@ -19,7 +19,7 @@ from app.feeds.schemas import (
     ReportCreate,
 )
 from app.feeds.service import FeedCommandHandler
-from app.moderation.dependencies import Moderation, moderation_response
+from app.moderation.dependencies import MODERATION_RESPONSES, Moderation, moderation_response
 from app.moderation.repository import ModerationCommand
 from app.moderation.schemas import ContentType
 
@@ -121,7 +121,12 @@ async def list_feeds(
     )
 
 
-@router.post("/feeds", status_code=status.HTTP_201_CREATED, response_model=None)
+@router.post(
+    "/feeds",
+    status_code=status.HTTP_201_CREATED,
+    response_model=None,
+    responses=MODERATION_RESPONSES,
+)
 async def create_feed(
     request: FeedCreate,
     user_id: CurrentUserId,
@@ -155,7 +160,7 @@ async def get_feed(feed_id: UUID, user_id: CurrentUserId, session: Session) -> d
     return success(await feed_view(session, await require_feed(session, feed_id), user_id))
 
 
-@router.patch("/feeds/{feed_id}", response_model=None)
+@router.patch("/feeds/{feed_id}", response_model=None, responses=MODERATION_RESPONSES)
 async def patch_feed(
     feed_id: UUID,
     request: FeedPatch,
@@ -276,6 +281,7 @@ async def list_comments(
     "/feeds/{feed_id}/comments",
     status_code=status.HTTP_201_CREATED,
     response_model=None,
+    responses=MODERATION_RESPONSES,
 )
 async def create_comment(
     feed_id: UUID,
@@ -310,7 +316,9 @@ async def create_comment(
     return success(comment_view(result.comment, user_id))
 
 
-@router.patch("/comments/{comment_id}", response_model=None)
+@router.patch(
+    "/comments/{comment_id}", response_model=None, responses=MODERATION_RESPONSES
+)
 async def patch_comment(
     comment_id: UUID,
     request: CommentPatch,
