@@ -18,7 +18,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 
 object RetrofitClient {
-    private const val FALLBACK_BASE_URL = "https://api.example.com/"
+    private const val FALLBACK_BASE_URL = "https://backend-production-2f6a.up.railway.app/api/v1/"
     private val baseUrl = BuildConfig.API_BASE_URL
         .ifBlank { FALLBACK_BASE_URL }
         .let { if (it.endsWith("/")) it else "$it/" }
