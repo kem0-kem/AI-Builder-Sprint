@@ -1,6 +1,7 @@
 package com.apptive.slowtalk.data.remote
 
-import retrofit2.converter.kotlinx.serialization.asConverterFactory
+import com.apptive.slowtalk.BuildConfig
+import com.apptive.slowtalk.data.auth.AuthSession
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -9,10 +10,13 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
+import retrofit2.converter.kotlinx.serialization.asConverterFactory
 
 object RetrofitClient {
-    // API가 완성되지 않았으므로 베이스 URL은 플레이스홀더로 설정합니다.
-    private const val BASE_URL = "https://api.example.com/" 
+    private const val FALLBACK_BASE_URL = "https://api.example.com/"
+    private val baseUrl = BuildConfig.API_BASE_URL
+        .ifBlank { FALLBACK_BASE_URL }
+        .let { if (it.endsWith("/")) it else "$it/" }
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -20,13 +24,28 @@ object RetrofitClient {
     }
 
     private val okHttpClient = OkHttpClient.Builder()
-        .addInterceptor(HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
-        })
+        .addInterceptor { chain ->
+            val request = chain.request()
+            val token = AuthSession.accessToken
+                ?: BuildConfig.API_AUTH_TOKEN.takeIf { it.isNotBlank() }
+            val authenticatedRequest = if (token == null || request.header("Authorization") != null) {
+                request
+            } else {
+                request.newBuilder().header("Authorization", "Bearer $token").build()
+            }
+            chain.proceed(authenticatedRequest)
+        }
+        .apply {
+            if (BuildConfig.DEBUG) {
+                addInterceptor(HttpLoggingInterceptor().apply {
+                    level = HttpLoggingInterceptor.Level.BODY
+                })
+            }
+        }
         .build()
 
     private val retrofit = Retrofit.Builder()
-        .baseUrl(BASE_URL)
+        .baseUrl(baseUrl)
         .client(okHttpClient)
         .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
         .build()
@@ -42,12 +61,15 @@ object RetrofitClient {
     val reportApi: ReportApi = retrofit.create(ReportApi::class.java)
 
     fun openChatWebSocket(chatRoomId: Int, listener: WebSocketListener): WebSocket {
-        val socketBaseUrl = BASE_URL
+        val socketBaseUrl = baseUrl
             .replaceFirst("https://", "wss://")
             .replaceFirst("http://", "ws://")
             .trimEnd('/')
         val request = Request.Builder()
             .url("$socketBaseUrl/ws/chat/$chatRoomId")
+            .apply {
+                AuthSession.accessToken?.let { header("Authorization", "Bearer $it") }
+            }
             .build()
         return okHttpClient.newWebSocket(request, listener)
     }

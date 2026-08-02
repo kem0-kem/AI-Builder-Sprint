@@ -93,7 +93,7 @@ class ProfileViewModel(
         }
     }
 
-    fun updateInterests(interestIds: List<Int>, onComplete: () -> Unit) {
+    fun updateInterests(interestIds: List<String>, onComplete: () -> Unit) {
         viewModelScope.launch {
             interestRepository.updateMyInterests(interestIds)
                 .onSuccess { 

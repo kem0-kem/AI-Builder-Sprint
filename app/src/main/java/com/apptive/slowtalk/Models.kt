@@ -7,8 +7,8 @@ sealed interface Screen {
     data object SignUp : Screen
     data object Feed : Screen
     data object WriteFeed : Screen
-    data class EditFeed(val feedId: Int) : Screen
-    data class FeedDetail(val feedId: Int) : Screen
+    data class EditFeed(val feedId: String) : Screen
+    data class FeedDetail(val feedId: String) : Screen
     data object Conversations : Screen
     data class Chat(
         val title: String,
@@ -28,7 +28,7 @@ sealed interface Screen {
 }
 
 data class FeedPost(
-    val id: Int,
+    val id: String,
     val category: String,
     val title: String,
     val body: String,
@@ -43,7 +43,7 @@ data class Comment(
     val time: String,
     val isMine: Boolean = false,
     val replies: List<Comment> = emptyList(),
-    val id: Int? = null
+    val id: String? = null
 )
 
 data class Conversation(

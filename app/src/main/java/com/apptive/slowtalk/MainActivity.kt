@@ -34,11 +34,13 @@ import com.apptive.slowtalk.ui.letter.LetterViewModel
 import com.apptive.slowtalk.ui.profile.ProfileViewModel
 import com.apptive.slowtalk.ui.reflection.ReflectionViewModel
 import com.apptive.slowtalk.ui.theme.SlowTalkTheme
+import com.apptive.slowtalk.data.auth.AuthSession
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AuthSession.initialize(applicationContext)
         setContent {
             SlowTalkTheme {
                 ApptiveApp()
@@ -56,13 +58,13 @@ private fun ApptiveApp() {
     val authViewModel: AuthViewModel = viewModel()
     val reflectionViewModel: ReflectionViewModel = viewModel()
     val letterViewModel: LetterViewModel = viewModel()
-    var isLoggedIn by remember { mutableStateOf(false) }
+    var isLoggedIn by remember { mutableStateOf(AuthSession.isSignedIn) }
     var screen by remember { mutableStateOf<Screen>(if (isLoggedIn) Screen.Feed else Screen.Login) }
     var profileReturnScreen by remember { mutableStateOf<Screen>(Screen.Feed) }
     var conversationIndex by remember { mutableStateOf(0) }
     var lastBackPressTime by remember { mutableLongStateOf(0L) }
-    val likedFeeds = remember { mutableStateMapOf<Int, Boolean>() }
-    val likingFeeds = remember { mutableStateMapOf<Int, Boolean>() }
+    val likedFeeds = remember { mutableStateMapOf<String, Boolean>() }
+    val likingFeeds = remember { mutableStateMapOf<String, Boolean>() }
     val feeds = remember { mutableStateListOf<FeedPost>() }
     val letters = remember {
         listOf(
@@ -73,7 +75,7 @@ private fun ApptiveApp() {
         )
     }
     val mainPagerState = rememberPagerState(initialPage = 1, pageCount = { 3 })
-    val toggleFeedLike: (Int) -> Unit = { feedId ->
+    val toggleFeedLike: (String) -> Unit = { feedId ->
         if (likingFeeds[feedId] != true) {
             val wasLiked = likedFeeds[feedId] == true
             val requestedLike = !wasLiked

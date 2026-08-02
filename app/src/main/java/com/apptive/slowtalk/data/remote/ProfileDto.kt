@@ -1,6 +1,26 @@
 package com.apptive.slowtalk.data.remote
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+
+@Serializable
+data class ProfilePayloadDto(
+    val id: String? = null,
+    val nickname: String,
+    val bio: String? = null,
+    val interests: List<ProfileInterestDto> = emptyList(),
+    val region: RegionDto? = null,
+    val statistics: StatisticsDto? = null
+)
+
+@Serializable
+data class ProfileInterestDto(val id: String, val name: String)
+
+@Serializable
+data class ProfilePatchRequest(
+    val nickname: String,
+    val bio: String
+)
 
 @Serializable
 data class UserProfileDto(
@@ -40,16 +60,16 @@ data class ProfileUpdateResponse(
 
 @Serializable
 data class InterestDto(
-    val interestId: Int,
+    @SerialName("id") val interestId: String,
     val name: String
 )
 
 @Serializable
 data class InterestUpdateRequest(
-    val interestIds: List<Int>
+    val interestIds: List<String>
 )
 
 @Serializable
 data class InterestUpdateResponse(
-    val interestIds: List<Int>
+    val interestIds: List<String>
 )
