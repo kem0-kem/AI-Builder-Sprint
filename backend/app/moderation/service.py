@@ -75,6 +75,44 @@ class InvalidModerationCommand(ValueError):
         super().__init__("invalid moderation command")
 
 
+class ModerationClassificationUnavailable(RuntimeError):
+    pass
+
+
+async def classify_normalized(
+    gateway: ModerationGateway,
+    local_rules: LocalRuleEngine,
+    command: ModerationCommand,
+) -> ModerationAssessment:
+    """Classify an already-normalized command without storing any state."""
+
+    local = local_rules.inspect(command.text)
+    if local.decision is ModerationDecision.BLOCK:
+        return _local_block_assessment(local)
+
+    try:
+        untrusted_assessment = await gateway.classify(command.content_type, command.text)
+        provider_assessment = ModerationAssessment.model_validate(
+            untrusted_assessment.model_dump()
+        )
+        if (
+            provider_assessment.provider_request_id is not None
+            and provider_assessment.provider_request_id in command.text
+        ):
+            provider_assessment = provider_assessment.model_copy(
+                update={"provider_request_id": None}
+            )
+    except (
+        AttributeError,
+        ModerationProviderUnavailable,
+        TypeError,
+        ValidationError,
+    ):
+        raise ModerationClassificationUnavailable() from None
+
+    return combine_assessments(local, provider_assessment)
+
+
 class ModerationOrchestrator:
     def __init__(
         self,
@@ -110,29 +148,13 @@ class ModerationOrchestrator:
             return ModerationOutcome.blocked(local.categories)
 
         try:
-            untrusted_assessment = await self._gateway.classify(
-                normalized_command.content_type, normalized_command.text
+            assessment = await classify_normalized(
+                self._gateway, self._local_rules, normalized_command
             )
-            provider_assessment = ModerationAssessment.model_validate(
-                untrusted_assessment.model_dump()
-            )
-            if (
-                provider_assessment.provider_request_id is not None
-                and provider_assessment.provider_request_id in normalized_command.text
-            ):
-                provider_assessment = provider_assessment.model_copy(
-                    update={"provider_request_id": None}
-                )
-        except (
-            AttributeError,
-            ModerationProviderUnavailable,
-            TypeError,
-            ValidationError,
-        ):
+        except ModerationClassificationUnavailable:
             submission = await self._repository.create_pending(normalized_command, None)
             return ModerationOutcome.pending(submission.id)
 
-        assessment = combine_assessments(local, provider_assessment)
         if (
             assessment.decision is ModerationDecision.BLOCK
             and assessment.confidence >= self._block_confidence
