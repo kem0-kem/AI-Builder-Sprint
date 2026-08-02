@@ -12,6 +12,7 @@ from app.chat.service import ChatCommandHandler
 from app.common.responses import success
 from app.core.config import get_settings
 from app.core.errors import ApiError
+from app.feeds.service import FeedCommandHandler
 from app.letters.service import LetterCommandHandler
 from app.moderation.command_handlers import ModeratedCommandRegistry
 from app.moderation.crypto import CommandCipher
@@ -24,6 +25,7 @@ from app.moderation.schemas import (
     ModerationDecision,
     Severity,
 )
+from app.reports.service import ReportCommandHandler
 
 router = APIRouter(tags=["moderation"])
 
@@ -58,8 +60,40 @@ def get_command_registry(session: Session) -> ModeratedCommandRegistry:
     ) -> UUID:
         return (await ChatCommandHandler(session).execute(owner_id, command, key)).resource_id
 
+    async def create_feed(owner_id: UUID, command: dict[str, object], key: str) -> UUID:
+        return (await FeedCommandHandler(session).create_feed(owner_id, command, key)).resource_id
+
+    async def patch_feed(owner_id: UUID, command: dict[str, object], key: str) -> UUID:
+        return (await FeedCommandHandler(session).patch_feed(owner_id, command, key)).resource_id
+
+    async def create_comment(
+        owner_id: UUID, command: dict[str, object], key: str
+    ) -> UUID:
+        return (
+            await FeedCommandHandler(session).create_comment(owner_id, command, key)
+        ).resource_id
+
+    async def patch_comment(
+        owner_id: UUID, command: dict[str, object], key: str
+    ) -> UUID:
+        return (
+            await FeedCommandHandler(session).patch_comment(owner_id, command, key)
+        ).resource_id
+
+    async def create_report(
+        owner_id: UUID, command: dict[str, object], key: str
+    ) -> UUID:
+        return (
+            await ReportCommandHandler(session).create_report(owner_id, command, key)
+        ).resource_id
+
     registry.register("CREATE_LETTER", create_letter)
     registry.register("CREATE_CHAT_MESSAGE", create_chat_message)
+    registry.register("CREATE_FEED", create_feed)
+    registry.register("PATCH_FEED", patch_feed)
+    registry.register("CREATE_COMMENT", create_comment)
+    registry.register("PATCH_COMMENT", patch_comment)
+    registry.register("CREATE_REPORT", create_report)
     return registry
 
 

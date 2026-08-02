@@ -1,8 +1,9 @@
 from datetime import UTC, datetime
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Query, Response, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
@@ -17,6 +18,10 @@ from app.feeds.schemas import (
     FeedPatch,
     ReportCreate,
 )
+from app.feeds.service import FeedCommandHandler
+from app.moderation.dependencies import Moderation, moderation_response
+from app.moderation.repository import ModerationCommand
+from app.moderation.schemas import ContentType
 
 router = APIRouter(tags=["feeds"])
 
@@ -116,16 +121,33 @@ async def list_feeds(
     )
 
 
-@router.post("/feeds", status_code=status.HTTP_201_CREATED)
+@router.post("/feeds", status_code=status.HTTP_201_CREATED, response_model=None)
 async def create_feed(
-    request: FeedCreate, user_id: CurrentUserId, session: Session
-) -> dict[str, object]:
+    request: FeedCreate,
+    user_id: CurrentUserId,
+    session: Session,
+    moderation: Moderation,
+) -> dict[str, object] | JSONResponse:
     if await session.get(FeedCategory, request.category_id) is None:
         raise ApiError("VALIDATION_ERROR", "존재하지 않는 피드 카테고리입니다.", 400)
-    feed = Feed(author_id=user_id, **request.model_dump())
-    session.add(feed)
-    await session.commit()
-    return success(await feed_view(session, feed, user_id))
+    payload = request.model_dump(by_alias=True, mode="json")
+    key = str(uuid4())
+    if moderation is not None:
+        outcome = await moderation.evaluate(
+            ModerationCommand(
+                owner_id=user_id,
+                content_type=ContentType.FEED,
+                operation="CREATE_FEED",
+                text=f"{request.title}\n{request.content}",
+                payload=payload,
+                idempotency_key=key,
+            )
+        )
+        response = await moderation_response(outcome, session)
+        if response is not None:
+            return response
+    result = await FeedCommandHandler(session).create_feed(user_id, payload, key)
+    return success(await feed_view(session, result.feed, user_id))
 
 
 @router.get("/feeds/{feed_id}")
@@ -133,24 +155,42 @@ async def get_feed(feed_id: UUID, user_id: CurrentUserId, session: Session) -> d
     return success(await feed_view(session, await require_feed(session, feed_id), user_id))
 
 
-@router.patch("/feeds/{feed_id}")
+@router.patch("/feeds/{feed_id}", response_model=None)
 async def patch_feed(
     feed_id: UUID,
     request: FeedPatch,
     user_id: CurrentUserId,
     session: Session,
-) -> dict[str, object]:
+    moderation: Moderation,
+) -> dict[str, object] | JSONResponse:
     feed = await require_feed(session, feed_id)
     if feed.author_id != user_id:
         raise ApiError("RESOURCE_FORBIDDEN", "본인의 피드만 수정할 수 있습니다.", 403)
     changes = request.model_dump(exclude_unset=True)
     if "category_id" in changes and await session.get(FeedCategory, changes["category_id"]) is None:
         raise ApiError("VALIDATION_ERROR", "존재하지 않는 피드 카테고리입니다.", 400)
-    for field, value in changes.items():
-        setattr(feed, field, value)
-    feed.updated_at = datetime.now(UTC)
-    await session.commit()
-    return success(await feed_view(session, feed, user_id))
+    payload = request.model_dump(by_alias=True, mode="json", exclude_unset=True)
+    payload["feedId"] = str(feed_id)
+    moderated_text = "\n".join(
+        value for value in (request.title, request.content) if value is not None
+    )
+    key = str(uuid4())
+    if moderation is not None and moderated_text:
+        outcome = await moderation.evaluate(
+            ModerationCommand(
+                owner_id=user_id,
+                content_type=ContentType.FEED,
+                operation="PATCH_FEED",
+                text=moderated_text,
+                payload=payload,
+                idempotency_key=key,
+            )
+        )
+        response = await moderation_response(outcome, session)
+        if response is not None:
+            return response
+    result = await FeedCommandHandler(session).patch_feed(user_id, payload, key)
+    return success(await feed_view(session, result.feed, user_id))
 
 
 @router.delete("/feeds/{feed_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -232,42 +272,74 @@ async def list_comments(
     return page([comment_view(item, user_id) for item in items], next_cursor=None)
 
 
-@router.post("/feeds/{feed_id}/comments", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/feeds/{feed_id}/comments",
+    status_code=status.HTTP_201_CREATED,
+    response_model=None,
+)
 async def create_comment(
     feed_id: UUID,
     request: CommentCreate,
     user_id: CurrentUserId,
     session: Session,
-) -> dict[str, object]:
+    moderation: Moderation,
+) -> dict[str, object] | JSONResponse:
     await require_feed(session, feed_id)
     if request.parent_comment_id is not None:
         parent = await require_comment(session, request.parent_comment_id)
         if parent.feed_id != feed_id or parent.parent_comment_id is not None:
             raise ApiError("VALIDATION_ERROR", "답글은 최상위 댓글에만 작성할 수 있습니다.", 400)
-    comment = Comment(
-        feed_id=feed_id,
-        author_id=user_id,
-        parent_comment_id=request.parent_comment_id,
-        content=request.content,
-    )
-    session.add(comment)
-    await session.commit()
-    return success(comment_view(comment, user_id))
+    payload = request.model_dump(by_alias=True, mode="json")
+    payload["feedId"] = str(feed_id)
+    key = str(uuid4())
+    if moderation is not None:
+        outcome = await moderation.evaluate(
+            ModerationCommand(
+                owner_id=user_id,
+                content_type=ContentType.COMMENT,
+                operation="CREATE_COMMENT",
+                text=request.content,
+                payload=payload,
+                idempotency_key=key,
+            )
+        )
+        response = await moderation_response(outcome, session)
+        if response is not None:
+            return response
+    result = await FeedCommandHandler(session).create_comment(user_id, payload, key)
+    return success(comment_view(result.comment, user_id))
 
 
-@router.patch("/comments/{comment_id}")
+@router.patch("/comments/{comment_id}", response_model=None)
 async def patch_comment(
     comment_id: UUID,
     request: CommentPatch,
     user_id: CurrentUserId,
     session: Session,
-) -> dict[str, object]:
+    moderation: Moderation,
+) -> dict[str, object] | JSONResponse:
     comment = await require_comment(session, comment_id)
     if comment.author_id != user_id:
         raise ApiError("RESOURCE_FORBIDDEN", "본인의 댓글만 수정할 수 있습니다.", 403)
-    comment.content = request.content
-    await session.commit()
-    return success(comment_view(comment, user_id))
+    payload = request.model_dump(by_alias=True, mode="json")
+    payload["commentId"] = str(comment_id)
+    key = str(uuid4())
+    if moderation is not None:
+        outcome = await moderation.evaluate(
+            ModerationCommand(
+                owner_id=user_id,
+                content_type=ContentType.COMMENT,
+                operation="PATCH_COMMENT",
+                text=request.content,
+                payload=payload,
+                idempotency_key=key,
+            )
+        )
+        response = await moderation_response(outcome, session)
+        if response is not None:
+            return response
+    result = await FeedCommandHandler(session).patch_comment(user_id, payload, key)
+    return success(comment_view(result.comment, user_id))
 
 
 @router.delete("/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)

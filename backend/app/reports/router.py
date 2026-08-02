@@ -1,10 +1,9 @@
-import hashlib
-import unicodedata
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 
 from app.ai.gateway import WritingAssistantGateway, WritingContext, get_writing_assistant
@@ -12,16 +11,15 @@ from app.auth.dependencies import CurrentUserId, Session
 from app.common.responses import page, success
 from app.core.errors import ApiError
 from app.core.rate_limit import report_limiter
+from app.moderation.dependencies import Moderation, moderation_response
+from app.moderation.repository import ModerationCommand
+from app.moderation.schemas import ContentType
 from app.reports.models import AnalysisSnapshot, ReflectionReport
 from app.reports.schemas import ReportAnalyzeRequest, ReportCreate
+from app.reports.service import ReportCommandHandler, source_hash
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 Assistant = Annotated[WritingAssistantGateway, Depends(get_writing_assistant)]
-
-
-def source_hash(content: str) -> str:
-    normalized = unicodedata.normalize("NFC", content).strip().replace("\r\n", "\n")
-    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def report_view(report: ReflectionReport) -> dict[str, object]:
@@ -63,10 +61,18 @@ async def analyze_report(
     return success({"analysisId": str(snapshot.id), "summary": snapshot.summary, "feedback": cards})
 
 
-@router.post("", status_code=status.HTTP_201_CREATED, dependencies=[Depends(report_limiter)])
+@router.post(
+    "",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(report_limiter)],
+    response_model=None,
+)
 async def create_report(
-    request: ReportCreate, user_id: CurrentUserId, session: Session
-) -> dict[str, object]:
+    request: ReportCreate,
+    user_id: CurrentUserId,
+    session: Session,
+    moderation: Moderation,
+) -> dict[str, object] | JSONResponse:
     snapshot = await session.get(AnalysisSnapshot, request.analysis_id)
     now = datetime.now(UTC)
     expires_at = snapshot.expires_at.replace(tzinfo=UTC) if snapshot else now
@@ -76,16 +82,24 @@ async def create_report(
         raise ApiError("RESOURCE_CONFLICT", "분석 결과가 만료되었거나 이미 사용되었습니다.", 409)
     if snapshot.source_hash != source_hash(request.content):
         raise ApiError("RESOURCE_CONFLICT", "분석한 원문과 저장할 원문이 다릅니다.", 409)
-    report = ReflectionReport(
-        owner_id=user_id,
-        content=request.content,
-        summary=snapshot.summary,
-        feedback=snapshot.feedback,
-    )
-    snapshot.consumed_at = now
-    session.add(report)
-    await session.commit()
-    return success(report_view(report))
+    payload = request.model_dump(by_alias=True, mode="json")
+    key = str(uuid4())
+    if moderation is not None:
+        outcome = await moderation.evaluate(
+            ModerationCommand(
+                owner_id=user_id,
+                content_type=ContentType.REPORT,
+                operation="CREATE_REPORT",
+                text=request.content,
+                payload=payload,
+                idempotency_key=key,
+            )
+        )
+        response = await moderation_response(outcome, session)
+        if response is not None:
+            return response
+    result = await ReportCommandHandler(session).create_report(user_id, payload, key)
+    return success(report_view(result.report))
 
 
 @router.get("")

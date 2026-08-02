@@ -3,12 +3,16 @@ from typing import Annotated
 
 import httpx
 from fastapi import Depends
+from fastapi.responses import JSONResponse
 
 from app.auth.dependencies import Session
+from app.common.responses import success
 from app.core.config import get_settings
+from app.core.errors import ApiError
 from app.moderation.crypto import CommandCipher
+from app.moderation.models import SubmissionStatus
 from app.moderation.repository import ModerationRepository
-from app.moderation.service import ModerationOrchestrator
+from app.moderation.service import ModerationOrchestrator, ModerationOutcome
 from app.moderation.upstage_gateway import UpstageModerationGateway
 
 
@@ -50,3 +54,28 @@ async def get_moderation_orchestrator(
 Moderation = Annotated[
     ModerationOrchestrator | None, Depends(get_moderation_orchestrator)
 ]
+
+
+async def moderation_response(
+    outcome: ModerationOutcome, session: Session
+) -> JSONResponse | None:
+    if outcome.status is SubmissionStatus.PENDING_REVIEW:
+        await session.commit()
+        return JSONResponse(
+            status_code=202,
+            content=success(
+                {
+                    "moderationStatus": outcome.status.value,
+                    "submissionId": str(outcome.submission_id),
+                }
+            ),
+        )
+    if outcome.status is SubmissionStatus.BLOCKED:
+        await session.commit()
+        raise ApiError(
+            "CONTENT_POLICY_VIOLATION",
+            "콘텐츠 정책을 확인해 주세요.",
+            422,
+            {"categories": sorted(category.value for category in outcome.categories)},
+        )
+    return None

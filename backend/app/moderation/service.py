@@ -1,7 +1,7 @@
 import math
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pydantic import ValidationError
 
@@ -14,6 +14,7 @@ from app.moderation.repository import (
     ModerationRepository,
 )
 from app.moderation.schemas import (
+    ContentType,
     ModerationAssessment,
     ModerationCategory,
     ModerationDecision,
@@ -149,6 +150,18 @@ class ModerationOrchestrator:
             normalized_command, _assessment_for_storage(assessment)
         )
         return ModerationOutcome.pending(submission.id)
+
+    async def evaluate_ocr(self, owner_id: UUID, text: str) -> ModerationOutcome:
+        return await self.evaluate(
+            ModerationCommand(
+                owner_id=owner_id,
+                content_type=ContentType.OCR_TEXT,
+                operation="OCR_TEXT",
+                text=text,
+                payload={"text": text},
+                idempotency_key=str(uuid4()),
+            )
+        )
 
 
 def combine_assessments(
