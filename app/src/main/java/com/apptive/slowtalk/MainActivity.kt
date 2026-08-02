@@ -97,14 +97,14 @@ private fun ApptiveApp() {
         )
     }
     val anonymousConversations = remember {
-        listOf(
+        mutableStateListOf(
             Conversation("익명의 이웃 01", "오늘 하루는 어떻게 보내셨나요?", "방금 전", unread = true),
             Conversation("익명의 이웃 02", "저도 그런 하루를 보낸 적이 있어요.", "어제"),
             Conversation("익명의 이웃 03", "당신의 이야기를 들려줘서 고마워요.", "3일 전")
         )
     }
     val groupConversations = remember {
-        listOf(
+        mutableStateListOf(
             Conversation("저녁 산책 모임", "이번 주 토요일 저녁 7시 어떠세요?", "방금 전", true, isGroup = true, members = 5),
             Conversation("그림 초보 모임", "준비물은 연필과 작은 스케치북이에요.", "어제", isGroup = true, members = 8),
             Conversation("함께 읽는 독서 모임", "다음 책은 투표로 정해봐요.", "2일 전", isGroup = true, members = 6),
@@ -190,7 +190,18 @@ private fun ApptiveApp() {
                         0 -> ConversationListScreen(
                             anonymous = anonymousConversations,
                             groups = groupConversations,
-                            onOpen = { screen = Screen.Chat(it.title, it.isGroup) },
+                            onOpen = { conversation ->
+                                val conversations = if (conversation.isGroup) {
+                                    groupConversations
+                                } else {
+                                    anonymousConversations
+                                }
+                                val index = conversations.indexOf(conversation)
+                                if (index >= 0) {
+                                    conversations[index] = conversation.copy(unread = false)
+                                }
+                                screen = Screen.Chat(conversation.title, conversation.isGroup)
+                            },
                             onCreateGroup = { screen = Screen.CreateGroup },
                             onProfile = {
                                 profileReturnScreen = Screen.Conversations

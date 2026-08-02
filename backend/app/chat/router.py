@@ -3,13 +3,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import JSONResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import CurrentUserId, Session
 from app.auth.security import decode_access_token
 from app.chat.models import ChatMessage, ChatParticipant, ChatRoom
-from app.chat.schemas import MessageCreate, ReadPositionUpdate
+from app.chat.schemas import ChatRoomReadUpdate, MessageCreate, ReadPositionUpdate
 from app.chat.service import ChatCommandHandler
 from app.common.responses import page, success
 from app.core.errors import ApiError
@@ -161,6 +161,21 @@ async def create_message(
     return success(await message_view(session, result.message, user_id))
 
 
+@router.patch("/chat-rooms/{room_id}/read")
+async def mark_room_read(
+    room_id: UUID,
+    request: ChatRoomReadUpdate,
+    user_id: CurrentUserId,
+    session: Session,
+) -> dict[str, object]:
+    message, unread_count = await set_read_position(
+        session, room_id, user_id, request.last_read_message_id
+    )
+    return success(
+        {"lastReadMessageId": str(message.id), "unreadCount": unread_count}
+    )
+
+
 @router.put("/chat-rooms/{room_id}/read-position")
 async def update_read_position(
     room_id: UUID,
@@ -168,13 +183,43 @@ async def update_read_position(
     user_id: CurrentUserId,
     session: Session,
 ) -> dict[str, object]:
-    participant = await require_participant(session, room_id, user_id)
-    message = await session.get(ChatMessage, request.message_id)
-    if message is None or message.room_id != room_id:
-        raise ApiError("VALIDATION_ERROR", "채팅방에 속하지 않은 메시지입니다.", 400)
-    participant.last_read_message_id = message.id
-    await session.commit()
+    message, _ = await set_read_position(session, room_id, user_id, request.message_id)
     return success({"messageId": str(message.id)})
+
+
+async def set_read_position(
+    session: Session,
+    room_id: UUID,
+    user_id: UUID,
+    message_id: UUID,
+) -> tuple[ChatMessage, int]:
+    participant = await require_participant(session, room_id, user_id)
+    target = await session.get(ChatMessage, message_id)
+    if target is None or target.room_id != room_id:
+        raise ApiError("VALIDATION_ERROR", "Message does not belong to this chat room.", 400)
+
+    effective = target
+    if participant.last_read_message_id is not None:
+        current = await session.get(ChatMessage, participant.last_read_message_id)
+        if (
+            current is not None
+            and current.room_id == room_id
+            and current.created_at > target.created_at
+        ):
+            effective = current
+
+    participant.last_read_message_id = effective.id
+    unread_count = await session.scalar(
+        select(func.count())
+        .select_from(ChatMessage)
+        .where(
+            ChatMessage.room_id == room_id,
+            ChatMessage.created_at > effective.created_at,
+            ChatMessage.sender_id != user_id,
+        )
+    )
+    await session.commit()
+    return effective, int(unread_count or 0)
 
 
 @router.websocket("/ws/chat-rooms/{room_id}")

@@ -14,3 +14,9 @@ class ReadPositionUpdate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     message_id: UUID = Field(alias="messageId")
+
+
+class ChatRoomReadUpdate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    last_read_message_id: UUID = Field(alias="lastReadMessageId")

@@ -6,16 +6,17 @@ from tests.letters.test_letter_delivery import register
 
 
 async def test_chat_message_is_idempotent_and_updates_read_position(client: AsyncClient) -> None:
-    alice = await register(client, "alice-chat@example.com", "앨리스")
-    bob = await register(client, "bob-chat@example.com", "밥")
+    alice = await register(client, "alice-chat@example.com", "Alice")
+    bob = await register(client, "bob-chat@example.com", "Bob")
+    charlie = await register(client, "charlie-chat@example.com", "Charlie")
     delivery = await client.post(
         "/api/v1/letters",
         headers={**alice, "Idempotency-Key": str(uuid4())},
-        json={"content": "첫 편지", "match": True},
+        json={"content": "hello", "match": True},
     )
     room_id = delivery.json()["data"]["chatRoom"]["id"]
     client_message_id = str(uuid4())
-    payload = {"clientMessageId": client_message_id, "content": "반가워요"}
+    payload = {"clientMessageId": client_message_id, "content": "first message"}
     first = await client.post(f"/api/v1/chat-rooms/{room_id}/messages", headers=bob, json=payload)
     repeated = await client.post(
         f"/api/v1/chat-rooms/{room_id}/messages", headers=bob, json=payload
@@ -23,9 +24,64 @@ async def test_chat_message_is_idempotent_and_updates_read_position(client: Asyn
     assert first.status_code == 201
     assert first.json()["data"]["id"] == repeated.json()["data"]["id"]
 
+    second = await client.post(
+        f"/api/v1/chat-rooms/{room_id}/messages",
+        headers=bob,
+        json={"clientMessageId": str(uuid4()), "content": "second message"},
+    )
+    assert second.status_code == 201
+
+    read_first = await client.patch(
+        f"/api/v1/chat-rooms/{room_id}/read",
+        headers=alice,
+        json={"lastReadMessageId": first.json()["data"]["id"]},
+    )
+    assert read_first.status_code == 200
+    assert read_first.json()["data"] == {
+        "lastReadMessageId": first.json()["data"]["id"],
+        "unreadCount": 1,
+    }
+
+    read_latest = await client.patch(
+        f"/api/v1/chat-rooms/{room_id}/read",
+        headers=alice,
+        json={"lastReadMessageId": second.json()["data"]["id"]},
+    )
+    assert read_latest.status_code == 200
+    assert read_latest.json()["data"] == {
+        "lastReadMessageId": second.json()["data"]["id"],
+        "unreadCount": 0,
+    }
+
+    regressed = await client.patch(
+        f"/api/v1/chat-rooms/{room_id}/read",
+        headers=alice,
+        json={"lastReadMessageId": first.json()["data"]["id"]},
+    )
+    assert regressed.status_code == 200
+    assert regressed.json()["data"] == {
+        "lastReadMessageId": second.json()["data"]["id"],
+        "unreadCount": 0,
+    }
+
+    outsider = await client.patch(
+        f"/api/v1/chat-rooms/{room_id}/read",
+        headers=charlie,
+        json={"lastReadMessageId": second.json()["data"]["id"]},
+    )
+    assert outsider.status_code == 404
+
+    invalid_message = await client.patch(
+        f"/api/v1/chat-rooms/{room_id}/read",
+        headers=alice,
+        json={"lastReadMessageId": str(uuid4())},
+    )
+    assert invalid_message.status_code == 400
+
     read = await client.put(
         f"/api/v1/chat-rooms/{room_id}/read-position",
         headers=alice,
         json={"messageId": first.json()["data"]["id"]},
     )
     assert read.status_code == 200
+    assert read.json()["data"] == {"messageId": second.json()["data"]["id"]}

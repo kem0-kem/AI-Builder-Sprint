@@ -895,6 +895,66 @@
         }
       }
     },
+    "/api/v1/chat-rooms/{room_id}/read": {
+      "patch": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Mark Room Read",
+        "operationId": "mark_room_read_api_v1_chat_rooms__room_id__read_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Room Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRoomReadUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Mark Room Read Api V1 Chat Rooms  Room Id  Read Patch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/chat-rooms/{room_id}/read-position": {
       "put": {
         "tags": [
@@ -2319,6 +2379,20 @@
           "image"
         ],
         "title": "Body_report_ocr_api_v1_reports_ocr_post"
+      },
+      "ChatRoomReadUpdate": {
+        "properties": {
+          "lastReadMessageId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Lastreadmessageid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lastReadMessageId"
+        ],
+        "title": "ChatRoomReadUpdate"
       },
       "CommentCreate": {
         "properties": {
