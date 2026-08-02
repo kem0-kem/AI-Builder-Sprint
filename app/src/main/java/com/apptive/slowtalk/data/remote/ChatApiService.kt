@@ -1,65 +1,78 @@
 package com.apptive.slowtalk.data.remote
 
 import kotlinx.serialization.Serializable
-import retrofit2.Response
 import retrofit2.http.Body
-import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Path
 
 interface ChatApiService {
     @GET("chat-rooms")
-    suspend fun getRooms(): ApiEnvelope<List<ChatRoomDto>>
+    suspend fun getChatRooms(): List<ChatRoomSummaryDto>
 
-    @GET("chat-rooms/{roomId}/messages")
-    suspend fun getMessages(@Path("roomId") roomId: String): ApiEnvelope<List<ChatMessageDto>>
+    @GET("chat-rooms/{chatRoomId}")
+    suspend fun getChatRoom(@Path("chatRoomId") chatRoomId: Int): ChatRoomInfoDto
 
-    @POST("chat-rooms/{roomId}/messages")
-    suspend fun createMessage(
-        @Path("roomId") roomId: String,
-        @Body request: ChatMessageCreateRequest
-    ): ApiEnvelope<ChatMessageDto>
+    @GET("chat-rooms/{chatRoomId}/messages")
+    suspend fun getMessages(@Path("chatRoomId") chatRoomId: Int): List<ChatMessageDto>
 
-    @DELETE("chat-rooms/{roomId}")
-    suspend fun leaveRoom(@Path("roomId") roomId: String): Response<Unit>
+    @POST("chat-rooms/{chatRoomId}/messages")
+    suspend fun sendMessage(
+        @Path("chatRoomId") chatRoomId: Int,
+        @Body request: ChatMessageRequest
+    ): ChatMessageSendResponse
 
-    @GET("meeting-invite-candidates")
-    suspend fun getInviteCandidates(): ApiEnvelope<List<InviteCandidateDto>>
-
-    @POST("meetings")
-    suspend fun createMeeting(@Body request: MeetingCreateRequest): ApiEnvelope<MeetingDto>
+    @PATCH("chat-rooms/{chatRoomId}/read")
+    suspend fun markAsRead(
+        @Path("chatRoomId") chatRoomId: Int,
+        @Body request: ChatReadRequest
+    ): ChatReadResponse
 }
 
 @Serializable
-data class ChatRoomDto(val id: String, val type: String, val name: String? = null, val createdAt: String)
+data class ChatRoomSummaryDto(
+    val chatRoomId: Int,
+    val type: String,
+    val roomName: String? = null,
+    val lastMessage: String? = null,
+    val lastMessageAt: String? = null,
+    val unreadCount: Int = 0
+)
+
+@Serializable
+data class ChatRoomInfoDto(
+    val chatRoomId: Int,
+    val type: String,
+    val roomName: String? = null,
+    val participantCount: Int? = null,
+    val createdAt: String
+)
 
 @Serializable
 data class ChatMessageDto(
-    val id: String,
+    val messageId: Int,
+    val type: String,
+    val sender: String,
     val content: String,
-    val createdAt: String,
-    val sender: ChatSenderDto
+    val createdAt: String
 )
 
 @Serializable
-data class ChatSenderDto(val displayName: String, val isMe: Boolean)
+data class ChatMessageRequest(val content: String)
 
 @Serializable
-data class ChatMessageCreateRequest(val clientMessageId: String, val content: String)
-
-@Serializable
-data class InviteCandidateDto(val candidateId: String, val displayName: String)
-
-@Serializable
-data class MeetingCreateRequest(
-    val title: String,
-    val description: String? = null,
-    val inviteCandidateIds: List<String>
+data class ChatMessageSendResponse(
+    val messageId: Int,
+    val createdAt: String
 )
 
 @Serializable
-data class MeetingDto(val id: String, val title: String, val chatRoom: MeetingChatRoomDto)
+data class ChatReadRequest(val lastReadMessageId: Int)
 
 @Serializable
-data class MeetingChatRoomDto(val id: String, val type: String)
+data class ChatReadResponse(
+    val success: Boolean,
+    val lastReadMessageId: Int,
+    val unreadCount: Int
+)

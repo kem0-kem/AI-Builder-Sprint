@@ -6,7 +6,7 @@ import com.apptive.slowtalk.data.remote.RetrofitClient
 class RegionRepository(private val api: RegionApi = RetrofitClient.regionApi) {
 
     // API가 완성되기 전까지 true로 설정하여 테스트합니다.
-    private val MOCK_MODE = false
+    private val MOCK_MODE = true
 
     suspend fun getProvinces(): Result<List<String>> {
         if (MOCK_MODE) {

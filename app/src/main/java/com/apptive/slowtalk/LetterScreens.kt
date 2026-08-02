@@ -1,14 +1,19 @@
 package com.apptive.slowtalk
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.launch
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
@@ -34,30 +39,31 @@ import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.People
+import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material.icons.outlined.Verified
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.runtime.collectAsState
-import com.apptive.slowtalk.ui.profile.ProfileViewModel
-import com.apptive.slowtalk.ui.profile.ProfileUiState
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,25 +72,103 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.apptive.slowtalk.ui.letter.LetterUiState
+import com.apptive.slowtalk.ui.letter.LetterViewModel
+import com.apptive.slowtalk.ui.profile.ProfileUiState
+import com.apptive.slowtalk.ui.profile.ProfileViewModel
+import java.io.File
+import java.io.FileOutputStream
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WriteLetterScreen(
+    viewModel: LetterViewModel,
+    profileViewModel: ProfileViewModel,
+    onBack: () -> Unit,
     onHistory: () -> Unit,
-    onMatched: (String) -> Unit,
+    onMatched: () -> Unit,
     onTab: (MainTab) -> Unit
 ) {
-    var bodyState by remember {
-        mutableStateOf(
-            TextFieldValue("오늘은 평소보다 조금 느리게 걸어봤어요.\n\n늘 빠르게만 지나치던 길들이\n천천히 바라보니 이렇게 예쁘더라고요.\n\n여러분의 하루는 어땠나요?")
-        )
+    val context = LocalContext.current
+    val uiState by viewModel.uiState.collectAsState()
+    val body by viewModel.content.collectAsState()
+    val aiFeedback by viewModel.aiFeedback.collectAsState()
+    
+    val profileState by profileViewModel.uiState.collectAsState()
+    val provinces by profileViewModel.provinces.collectAsState()
+    val districts by profileViewModel.districts.collectAsState()
+    val subDistricts by profileViewModel.subDistricts.collectAsState()
+
+    val currentProfile = (profileState as? ProfileUiState.Success)?.profile
+    
+    var matchEnabled by remember { mutableStateOf(true) }
+    var showLocationSheet by remember { mutableStateOf(false) }
+    var selectedProvince by remember { mutableStateOf(currentProfile?.region?.province ?: "서울특별시") }
+    var selectedDistrict by remember { mutableStateOf(currentProfile?.region?.district ?: "마포구") }
+    var selectedNeighborhood by remember { mutableStateOf(currentProfile?.region?.subDistrict) }
+    var showCompletionDialog by remember { mutableStateOf(false) }
+    
+    var expandedLevel by remember { mutableStateOf<ResidenceLevel?>(null) }
+    val locationSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    // OCR Launchers
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            val file = uriToFile(context, it)
+            if (file != null) viewModel.performOcr(file)
+        }
     }
-    var showMatch by remember { mutableStateOf(false) }
-    var showOcr by remember { mutableStateOf(false) }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        bitmap?.let {
+            val file = File(context.cacheDir, "letter_capture_${System.currentTimeMillis()}.jpg")
+            val fos = FileOutputStream(file)
+            it.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, fos)
+            fos.close()
+            viewModel.performOcr(file)
+        }
+    }
+
+    LaunchedEffect(uiState) {
+        if (uiState is LetterUiState.Success) {
+            showCompletionDialog = true
+            viewModel.resetState()
+        }
+    }
+
+    LaunchedEffect(currentProfile) {
+        currentProfile?.let {
+            selectedProvince = it.region.province
+            selectedDistrict = it.region.district
+            selectedNeighborhood = it.region.subDistrict
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        profileViewModel.fetchProvinces()
+    }
+
+    LaunchedEffect(selectedProvince) {
+        if (selectedProvince.isNotEmpty()) profileViewModel.fetchDistricts(selectedProvince)
+    }
+
+    LaunchedEffect(selectedProvince, selectedDistrict) {
+        if (selectedProvince.isNotEmpty() && selectedDistrict.isNotEmpty()) {
+            profileViewModel.fetchSubDistricts(selectedProvince, selectedDistrict)
+        }
+    }
+
     PaperBackground {
         Scaffold(
             containerColor = Color.Transparent,
@@ -100,9 +184,12 @@ fun WriteLetterScreen(
             ) {
                 item {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onBack) { 
+                            Icon(Icons.Outlined.ArrowBack, "뒤로") 
+                        }
                         Column(Modifier.weight(1f)) {
-                            Text("편지 쓰기", fontSize = 29.sp, fontWeight = FontWeight.ExtraBold)
-                            Text("익명의 이웃에게 당신의 이야기를 들려주세요.", color = SubtleInk, fontSize = 13.sp)
+                            Text("편지 쓰기", fontSize = 26.sp, fontWeight = FontWeight.ExtraBold)
+                            Text("익명의 이웃에게 당신의 이야기를 들려주세요.", color = SubtleInk, fontSize = 12.sp)
                         }
                         IconButton(onClick = onHistory) { Icon(Icons.Outlined.History, "이전 편지") }
                     }
@@ -113,27 +200,48 @@ fun WriteLetterScreen(
                         colors = CardDefaults.cardColors(BlockSurface),
                         elevation = CardDefaults.cardElevation(2.dp)
                     ) {
-                        Column(Modifier.padding(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Outlined.Edit, null, tint = Purple)
-                                Text("  오늘의 편지", color = Purple, fontWeight = FontWeight.Bold)
-                                Spacer(Modifier.weight(1f))
-                                Text("${bodyState.text.length} / 1,000자", color = Purple, fontSize = 11.sp)
-                            }
-                            OutlinedTextField(
-                                value = bodyState,
-                                onValueChange = { if (it.text.length <= 1000) bodyState = it },
-                                modifier = Modifier.fillMaxWidth().height(300.dp),
-                                placeholder = { Text("당신의 하루를 천천히 들려주세요.") }
+                        Box(Modifier.fillMaxWidth()) {
+                            // Background illustration
+                            Image(
+                                painter = painterResource(R.drawable.letter_home_illustration),
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(140.dp)
+                                    .align(Alignment.BottomEnd)
+                                    .padding(end = 12.dp, bottom = 12.dp),
+                                alpha = 0.15f
                             )
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(onClick = {}) {
-                                    Icon(Icons.Outlined.Image, null)
-                                    Text("  사진")
+                            
+                            Column(Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Outlined.Edit, null, tint = Purple)
+                                    Text("  오늘의 편지", color = Purple, fontWeight = FontWeight.Bold)
+                                    Spacer(Modifier.weight(1f))
+                                    Text("${body.length} / 1,000자", color = Purple.copy(alpha = 0.7f), fontSize = 11.sp)
                                 }
-                                OutlinedButton(onClick = { showOcr = true }) {
-                                    Icon(Icons.Outlined.CameraAlt, null)
-                                    Text("  손편지 OCR")
+                                OutlinedTextField(
+                                    value = body,
+                                    onValueChange = { viewModel.updateContent(it.take(1000)) },
+                                    modifier = Modifier.fillMaxWidth().height(260.dp),
+                                    placeholder = { Text("당신의 하루를 천천히 들려주세요.", fontSize = 14.sp) },
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = Color.Transparent,
+                                        unfocusedBorderColor = Color.Transparent,
+                                        focusedContainerColor = Color.Transparent,
+                                        unfocusedContainerColor = Color.Transparent
+                                    )
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    IconBox(Icons.Outlined.Image, onClick = { galleryLauncher.launch("image/*") })
+                                    IconBox(Icons.Outlined.CameraAlt, onClick = { cameraLauncher.launch() })
+                                    
+                                    if (uiState is LetterUiState.Loading) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(20.dp).align(Alignment.CenterVertically),
+                                            color = Purple,
+                                            strokeWidth = 2.dp
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -149,19 +257,62 @@ fun WriteLetterScreen(
                                 Icon(Icons.Outlined.AutoAwesome, null, tint = Purple)
                                 Text("  AI 편지 도우미", color = Purple, fontWeight = FontWeight.ExtraBold)
                                 Spacer(Modifier.weight(1f))
-                                Text("실시간 분석 중", color = Purple, fontSize = 10.sp)
+                                Text(
+                                    if (uiState is LetterUiState.Loading) "분석 중..." else "실시간 분석",
+                                    color = Purple,
+                                    fontSize = 10.sp
+                                )
                             }
                             Spacer(Modifier.height(12.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Outlined.Verified, null, tint = Color(0xFF51BF86))
-                                Column(Modifier.padding(start = 9.dp)) {
-                                    Text("좋은 흐름이에요!", color = Color(0xFF23A664), fontWeight = FontWeight.Bold)
-                                    Text("상대방이 부담 없이 읽기 좋은 문장입니다.", color = SubtleInk, fontSize = 11.sp)
+                            
+                            val warning = aiFeedback?.warning
+                            if (warning?.exists == true) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Outlined.WarningAmber, null, tint = Color(0xFFE98175))
+                                    Text(
+                                        text = warning.message ?: "주의가 필요한 표현이 있습니다.",
+                                        color = Color(0xFFE98175),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(start = 8.dp)
+                                    )
+                                }
+                            } else {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Outlined.Verified, null, tint = Color(0xFF51BF86))
+                                    Column(Modifier.padding(start = 9.dp)) {
+                                        Text("좋은 흐름이에요!", color = Color(0xFF23A664), fontWeight = FontWeight.Bold)
+                                        Text("상대방이 부담 없이 읽기 좋은 문장입니다.", color = SubtleInk, fontSize = 11.sp)
+                                    }
                                 }
                             }
+                            
                             HorizontalDivider(Modifier.padding(vertical = 12.dp), color = Color.White)
-                            Text("더 따뜻해지는 작은 팁", color = Purple, fontWeight = FontWeight.Bold)
-                            Text("• 감정을 표현해주셔서 좋아요.\n• 마지막 인사도 따뜻해서 기분 좋은 편지가 될 것 같아요.", fontSize = 12.sp, lineHeight = 19.sp)
+                            Text("더 따뜻해지는 작은 팁", color = Purple, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            val tips = aiFeedback?.tips ?: listOf("감정을 표현해주셔서 좋아요.", "마지막 인사도 따뜻하게 남겨보세요.")
+                            tips.forEach { tip ->
+                                Text("• $tip", fontSize = 12.sp, lineHeight = 19.sp)
+                            }
+                            
+                            Spacer(Modifier.height(14.dp))
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color.White.copy(alpha = 0.5f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Outlined.MailOutline, null, tint = Purple, modifier = Modifier.size(16.dp))
+                                    Text(
+                                        " 따뜻한 공감 표현 예시",
+                                        modifier = Modifier.weight(1f),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text("더보기", fontSize = 11.sp, color = SubtleInk, modifier = Modifier.clickable { })
+                                }
+                            }
                         }
                     }
                 }
@@ -170,76 +321,226 @@ fun WriteLetterScreen(
                         Column(Modifier.padding(16.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Outlined.Lock, null, tint = Purple)
-                                Text("  공개 범위", color = Purple, fontWeight = FontWeight.Bold)
+                                Text("  공개 범위 및 전송 설정", color = Purple, fontWeight = FontWeight.Bold)
                             }
-                            Spacer(Modifier.height(10.dp))
+                            Spacer(Modifier.height(12.dp))
+                            
+                            // Location Selector
                             Surface(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { showLocationSheet = true },
                                 shape = RoundedCornerShape(14.dp),
                                 color = Color(0xFFF9F7F4)
                             ) {
                                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Outlined.LocationOn, null, tint = Purple)
-                                    Text("  서울 마포구", Modifier.weight(1f), fontWeight = FontWeight.Medium)
-                                    Icon(Icons.Outlined.ChevronRight, null)
+                                    val locationText = buildResidenceLabel(selectedProvince, selectedDistrict, selectedNeighborhood)
+                                    Text("  $locationText", Modifier.weight(1f), fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                                    Icon(Icons.Outlined.ChevronRight, null, tint = SubtleInk)
                                 }
                             }
-                            Text("익명으로 작성되어 누구에게 썼는지 알 수 없어요.", color = SubtleInk, fontSize = 11.sp, modifier = Modifier.padding(top = 10.dp))
+                            
+                            Spacer(Modifier.height(14.dp))
+                            
+                            // Match Toggle
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { matchEnabled = !matchEnabled },
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    if (matchEnabled) Icons.Outlined.Verified else Icons.Outlined.RadioButtonUnchecked,
+                                    null,
+                                    tint = if (matchEnabled) Purple else SubtleInk
+                                )
+                                Column(Modifier.padding(start = 10.dp)) {
+                                    Text("이웃에게 편지 보내기", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    Text("체크 해제 시 매칭 없이 기록만 남겨요.", color = SubtleInk, fontSize = 11.sp)
+                                }
+                            }
                         }
                     }
                 }
                 item {
                     Button(
-                        onClick = { showMatch = true },
-                        enabled = bodyState.text.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        onClick = { 
+                            viewModel.createLetter(
+                                match = matchEnabled,
+                                province = selectedProvince,
+                                district = selectedDistrict,
+                                subDistrict = selectedNeighborhood
+                            )
+                        },
+                        enabled = body.isNotBlank() && uiState !is LetterUiState.Loading,
+                        modifier = Modifier.fillMaxWidth().height(58.dp),
                         shape = RoundedCornerShape(28.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Purple)
                     ) {
                         Icon(Icons.Outlined.Send, null)
-                        Text("  편지 보내기", fontWeight = FontWeight.Bold)
+                        Text(
+                            text = if (matchEnabled) "  편지 보내기" else "  편지 기록하기",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp
+                        )
                     }
                 }
             }
         }
     }
 
-    if (showOcr) {
-        AlertDialog(
-            onDismissRequest = { showOcr = false },
-            icon = { Icon(Icons.Outlined.CameraAlt, null, tint = Purple) },
-            title = { Text("손편지 가져오기") },
-            text = { Text("손글씨 사진을 읽어 편지 본문으로 옮기는 OCR 데모입니다.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    bodyState = TextFieldValue("오늘 하루도 잘 보내셨나요?\n손으로 적은 마음을 천천히 전해봅니다.\n작은 기쁨이 오래 머무는 하루이길 바라요.")
-                    showOcr = false
-                }) { Text("샘플 인식하기") }
+    if (showLocationSheet) {
+        ModalBottomSheet(
+            onDismissRequest = {
+                expandedLevel = null
+                showLocationSheet = false
             },
-            dismissButton = { TextButton(onClick = { showOcr = false }) { Text("취소") } }
-        )
+            sheetState = locationSheetState,
+            containerColor = BlockSurface,
+            shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
+            dragHandle = null
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (expandedLevel != null) {
+                            Modifier.fillMaxHeight(0.96f)
+                        } else {
+                            Modifier
+                        }
+                    )
+                    .padding(horizontal = 24.dp)
+                    .padding(top = 16.dp, bottom = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Spacer(Modifier.size(48.dp))
+                    Text(
+                        "거주지 설정",
+                        modifier = Modifier.weight(1f),
+                        fontSize = 21.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                    IconButton(onClick = { showLocationSheet = false }) {
+                        Icon(Icons.Outlined.Close, null, tint = SubtleInk)
+                    }
+                }
+                
+                if (expandedLevel == ResidenceLevel.PROVINCE) {
+                    ResidenceOptionsAbove(
+                        modifier = Modifier.weight(1f),
+                        options = provinces,
+                        selected = selectedProvince,
+                        onSelect = { 
+                            selectedProvince = it
+                            selectedDistrict = ""
+                            selectedNeighborhood = null
+                            expandedLevel = null
+                        }
+                    )
+                }
+                ResidenceSelectRow("시 · 도", selectedProvince, expandedLevel == ResidenceLevel.PROVINCE) {
+                    expandedLevel = if (expandedLevel == ResidenceLevel.PROVINCE) null else ResidenceLevel.PROVINCE
+                }
+
+                if (expandedLevel == ResidenceLevel.DISTRICT) {
+                    ResidenceOptionsAbove(
+                        modifier = Modifier.weight(1f),
+                        options = districts,
+                        selected = selectedDistrict,
+                        onSelect = { 
+                            selectedDistrict = it
+                            selectedNeighborhood = null
+                            expandedLevel = null
+                        }
+                    )
+                }
+                ResidenceSelectRow("시 · 군 · 구", selectedDistrict, expandedLevel == ResidenceLevel.DISTRICT) {
+                    expandedLevel = if (expandedLevel == ResidenceLevel.DISTRICT) null else ResidenceLevel.DISTRICT
+                }
+
+                if (expandedLevel == ResidenceLevel.NEIGHBORHOOD) {
+                    ResidenceOptionsAbove(
+                        modifier = Modifier.weight(1f),
+                        options = listOf("선택 안 함") + subDistricts,
+                        selected = selectedNeighborhood ?: "선택 안 함",
+                        onSelect = { 
+                            selectedNeighborhood = it.takeUnless { it == "선택 안 함" }
+                            expandedLevel = null
+                        }
+                    )
+                }
+                ResidenceSelectRow("동 · 읍 · 면 (선택)", selectedNeighborhood ?: "선택 안 함", expandedLevel == ResidenceLevel.NEIGHBORHOOD) {
+                    expandedLevel = if (expandedLevel == ResidenceLevel.NEIGHBORHOOD) null else ResidenceLevel.NEIGHBORHOOD
+                }
+
+                Button(
+                    onClick = { showLocationSheet = false },
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Purple)
+                ) {
+                    Text("확인", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
     }
 
-    if (showMatch) {
+    if (showCompletionDialog) {
         AlertDialog(
-            onDismissRequest = { showMatch = false },
-            icon = { Icon(Icons.Outlined.MailOutline, null, tint = Purple) },
-            title = { Text("편지가 전해졌어요") },
-            text = { Text("관심사가 비슷한 익명의 이웃과 연결됐습니다. 편지는 첫 메시지로 전달되며 바로 대화를 시작할 수 있어요.") },
+            onDismissRequest = { showCompletionDialog = false },
+            icon = { Icon(if (matchEnabled) Icons.Outlined.MailOutline else Icons.Outlined.History, null, tint = Purple) },
+            title = { Text(if (matchEnabled) "편지가 전해졌어요" else "편지가 저장되었어요") },
+            text = { 
+                Text(
+                    if (matchEnabled) "관심사가 비슷한 익명의 이웃과 연결됐습니다. 편지는 첫 메시지로 전달되며 바로 대화를 시작할 수 있어요."
+                    else "편지가 전송되지 않고 내 보관함에 안전하게 저장되었습니다."
+                ) 
+            },
             confirmButton = {
-                Button(onClick = { showMatch = false; onMatched(bodyState.text) }) {
-                    Text("대화방으로 가기")
+                Button(onClick = { 
+                    showCompletionDialog = false
+                    if (matchEnabled) onMatched() else onHistory()
+                }) {
+                    Text(if (matchEnabled) "대화방으로 가기" else "보관함으로 가기")
                 }
             },
-            dismissButton = { TextButton(onClick = { showMatch = false }) { Text("계속 둘러보기") } }
+            dismissButton = { 
+                TextButton(onClick = { 
+                    showCompletionDialog = false
+                    onHistory() 
+                }) { 
+                    Text("닫기") 
+                } 
+            }
         )
     }
 }
 
 @Composable
-fun LetterHistoryScreen(letters: List<Letter>, onBack: () -> Unit, onOpen: (Letter) -> Unit) {
+fun LetterHistoryScreen(
+    letters: List<Letter>,
+    loadLetters: suspend (String?) -> Result<List<Letter>>,
+    onBack: () -> Unit,
+    onOpen: (Letter) -> Unit
+) {
     var filter by remember { mutableStateOf(0) }
-    val visible = letters.filter { filter == 0 || (filter == 1 && !it.received) || (filter == 2 && it.received) }
+    var remoteLetters by remember { mutableStateOf<List<Letter>?>(null) }
+    val requestedType = when (filter) {
+        1 -> "SENT"
+        2 -> "RECEIVED"
+        else -> null
+    }
+    LaunchedEffect(filter) {
+        remoteLetters = null
+        loadLetters(requestedType).onSuccess { remoteLetters = it }
+    }
+    val visible = (remoteLetters ?: letters).filter {
+        filter == 0 || (filter == 1 && !it.received) || (filter == 2 && it.received)
+    }
     PaperBackground {
         Scaffold(containerColor = Color.Transparent) { padding ->
             LazyColumn(
@@ -298,7 +599,17 @@ fun LetterHistoryScreen(letters: List<Letter>, onBack: () -> Unit, onOpen: (Lett
 }
 
 @Composable
-fun LetterDetailScreen(letter: Letter, onBack: () -> Unit) {
+fun LetterDetailScreen(
+    letter: Letter,
+    loadLetter: suspend (Int) -> Result<Letter>,
+    onBack: () -> Unit
+) {
+    var displayedLetter by remember(letter.id, letter.title) { mutableStateOf(letter) }
+    LaunchedEffect(letter.id) {
+        letter.id?.let { id ->
+            loadLetter(id).onSuccess { displayedLetter = it }
+        }
+    }
     PaperBackground {
         Scaffold(containerColor = Color.Transparent) { padding ->
             Column(Modifier.fillMaxSize().padding(padding).padding(20.dp)) {
@@ -306,9 +617,9 @@ fun LetterDetailScreen(letter: Letter, onBack: () -> Unit) {
                     IconButton(onClick = onBack) { Icon(Icons.Outlined.ArrowBack, "뒤로") }
                     Text("이전 편지", fontSize = 27.sp, fontWeight = FontWeight.ExtraBold)
                 }
-                Text(if (letter.received) "받은 편지" else "보낸 편지", color = Purple, fontWeight = FontWeight.Bold)
-                Text(letter.title, fontSize = 25.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(vertical = 8.dp))
-                Text(letter.date, color = SubtleInk, fontSize = 12.sp)
+                Text(if (displayedLetter.received) "받은 편지" else "보낸 편지", color = Purple, fontWeight = FontWeight.Bold)
+                Text(displayedLetter.title, fontSize = 25.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(vertical = 8.dp))
+                Text(displayedLetter.date, color = SubtleInk, fontSize = 12.sp)
                 Spacer(Modifier.height(16.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -316,7 +627,7 @@ fun LetterDetailScreen(letter: Letter, onBack: () -> Unit) {
                     colors = CardDefaults.cardColors(PurpleSoft.copy(alpha = 0.6f))
                 ) {
                     Text(
-                        "안녕하세요.\n\n오늘은 평소보다 조금 느리게 걸어봤어요.\n그 길에서 작은 행복들을 많이 발견했어요.\n\n늘 빠르게만 지나치던 것들이 천천히 바라보니 이렇게 예쁘더라고요.\n\n여러분의 하루는 어땠나요?\n오늘도 따뜻한 하루 보내세요.\n\n– 익명의 이웃 드림",
+                        displayedLetter.content.ifBlank { displayedLetter.preview },
                         modifier = Modifier.padding(24.dp),
                         fontSize = 15.sp,
                         lineHeight = 27.sp
@@ -340,8 +651,8 @@ fun ProfileEditScreen(
     
     val currentProfile = (uiState as? ProfileUiState.Success)?.profile
 
-    var nicknameState by remember { mutableStateOf(TextFieldValue(currentProfile?.nickname ?: "지연")) }
-    var introState by remember { mutableStateOf(TextFieldValue(currentProfile?.bio ?: "")) }
+    var nickname by remember { mutableStateOf(currentProfile?.nickname ?: "지연") }
+    var intro by remember { mutableStateOf(currentProfile?.bio ?: "") }
     
     // 지역 정보 파싱 (기존 로직 유지하되 서버 데이터 우선)
     val serverLocation = currentProfile?.let { 
@@ -396,8 +707,8 @@ fun ProfileEditScreen(
                             "저장",
                             modifier = Modifier.clickable {
                                 viewModel.updateProfile(
-                                    nickname = nicknameState.text,
-                                    bio = introState.text,
+                                    nickname = nickname,
+                                    bio = intro,
                                     interest = currentProfile?.interest ?: "",
                                     province = selectedProvince,
                                     district = selectedDistrict,
@@ -424,8 +735,8 @@ fun ProfileEditScreen(
                 item {
                     Text("닉네임", fontWeight = FontWeight.Bold)
                     OutlinedTextField(
-                        value = nicknameState,
-                        onValueChange = { nicknameState = it },
+                        value = nickname,
+                        onValueChange = { nickname = it },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
@@ -433,8 +744,8 @@ fun ProfileEditScreen(
                 item {
                     Text("소개", fontWeight = FontWeight.Bold)
                     OutlinedTextField(
-                        value = introState,
-                        onValueChange = { introState = it },
+                        value = intro,
+                        onValueChange = { intro = it },
                         modifier = Modifier.fillMaxWidth().height(110.dp)
                     )
                 }
@@ -769,5 +1080,33 @@ private fun Stat(icon: androidx.compose.ui.graphics.vector.ImageVector, value: S
         Icon(icon, null, tint = Purple)
         Text(value, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
         Text(label, color = SubtleInk, fontSize = 10.sp)
+    }
+}
+
+@Composable
+private fun IconBox(icon: ImageVector, onClick: () -> Unit = {}) {
+    Surface(
+        modifier = Modifier.size(48.dp).clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        color = Color.Transparent,
+        border = BorderStroke(1.dp, LineColor)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = SubtleInk, modifier = Modifier.size(22.dp))
+        }
+    }
+}
+
+private fun uriToFile(context: android.content.Context, uri: Uri): File? {
+    return try {
+        val inputStream = context.contentResolver.openInputStream(uri) ?: return null
+        val file = File(context.cacheDir, "temp_letter_${System.currentTimeMillis()}.jpg")
+        val outputStream = FileOutputStream(file)
+        inputStream.copyTo(outputStream)
+        inputStream.close()
+        outputStream.close()
+        file
+    } catch (e: Exception) {
+        null
     }
 }

@@ -1,94 +1,124 @@
 package com.apptive.slowtalk
 
-import com.apptive.slowtalk.data.remote.ChatMessageCreateRequest
 import com.apptive.slowtalk.data.remote.ChatMessageDto
-import com.apptive.slowtalk.data.remote.InviteCandidateDto
-import com.apptive.slowtalk.data.remote.MeetingCreateRequest
+import com.apptive.slowtalk.data.remote.ChatMessageRequest
+import com.apptive.slowtalk.data.remote.ChatReadRequest
 import com.apptive.slowtalk.data.remote.RetrofitClient
-import java.time.OffsetDateTime
-import java.time.ZoneId
-import java.time.temporal.ChronoUnit
-import java.util.UUID
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import okhttp3.Response
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
 
-data class InviteCandidate(val id: String, val name: String)
+data class ChatRoomInfo(
+    val id: Int,
+    val isGroup: Boolean,
+    val name: String?,
+    val participantCount: Int?
+)
 
 object ChatApi {
     suspend fun getRooms(): Result<List<Conversation>> = runCatching {
-        val response = RetrofitClient.chatApi.getRooms()
-        check(response.ok) { "대화 목록을 불러오지 못했습니다." }
-        response.data.orEmpty().map { room ->
+        RetrofitClient.chatApi.getChatRooms().map { room ->
+            val isGroup = room.type == "GROUP"
             Conversation(
-                title = room.name ?: "익명의 이웃",
-                preview = "새로운 대화",
-                time = relativeTime(room.createdAt),
-                isGroup = room.type == "GROUP",
-                roomId = room.id
+                title = room.roomName ?: "익명의 이웃 ${room.chatRoomId.toString().padStart(2, '0')}",
+                preview = room.lastMessage.orEmpty(),
+                time = displayTime(room.lastMessageAt),
+                unread = room.unreadCount > 0,
+                isGroup = isGroup,
+                members = if (isGroup) 0 else 1,
+                chatRoomId = room.chatRoomId
             )
         }
     }
 
-    suspend fun getMessages(roomId: String): Result<List<ChatMessage>> = runCatching {
-        val response = RetrofitClient.chatApi.getMessages(roomId)
-        check(response.ok) { "메시지를 불러오지 못했습니다." }
-        response.data.orEmpty().asReversed().map(::toMessage)
+    suspend fun getRoom(chatRoomId: Int): Result<ChatRoomInfo> = runCatching {
+        RetrofitClient.chatApi.getChatRoom(chatRoomId).let {
+            ChatRoomInfo(
+                id = it.chatRoomId,
+                isGroup = it.type == "GROUP",
+                name = it.roomName,
+                participantCount = it.participantCount
+            )
+        }
     }
 
-    suspend fun sendMessage(roomId: String, content: String): Result<ChatMessage> = runCatching {
-        val response = RetrofitClient.chatApi.createMessage(
-            roomId,
-            ChatMessageCreateRequest(UUID.randomUUID().toString(), content)
-        )
-        check(response.ok && response.data != null) { "메시지를 전송하지 못했습니다." }
-        toMessage(response.data)
+    suspend fun getMessages(chatRoomId: Int): Result<List<ChatMessage>> = runCatching {
+        RetrofitClient.chatApi.getMessages(chatRoomId).map { it.toModel() }
     }
 
-    suspend fun getInviteCandidates(): Result<List<InviteCandidate>> = runCatching {
-        val response = RetrofitClient.chatApi.getInviteCandidates()
-        check(response.ok) { "초대할 이웃을 불러오지 못했습니다." }
-        response.data.orEmpty().map { InviteCandidate(it.candidateId, it.displayName) }
+    suspend fun sendMessage(chatRoomId: Int, content: String): Result<ChatMessage> = runCatching {
+        RetrofitClient.chatApi.sendMessage(chatRoomId, ChatMessageRequest(content)).let {
+            ChatMessage(
+                sender = "나",
+                body = content,
+                time = displayTime(it.createdAt),
+                mine = true,
+                id = it.messageId
+            )
+        }
     }
 
-    suspend fun createMeeting(
-        title: String,
-        description: String,
-        candidateIds: List<String>
-    ): Result<Conversation> = runCatching {
-        val response = RetrofitClient.chatApi.createMeeting(
-            MeetingCreateRequest(title, description.ifBlank { null }, candidateIds)
-        )
-        check(response.ok && response.data != null) { "모임 대화를 만들지 못했습니다." }
-        Conversation(
-            title = response.data.title,
-            preview = "새 모임 대화",
-            time = "방금 전",
-            isGroup = true,
-            members = candidateIds.size + 1,
-            roomId = response.data.chatRoom.id
-        )
+    suspend fun markAsRead(chatRoomId: Int, lastReadMessageId: Int): Result<Int> = runCatching {
+        RetrofitClient.chatApi.markAsRead(
+            chatRoomId = chatRoomId,
+            request = ChatReadRequest(lastReadMessageId)
+        ).let { response ->
+            check(response.success) { "채팅방 읽음 처리에 실패했습니다." }
+            response.unreadCount
+        }
     }
+}
 
-    suspend fun leaveRoom(roomId: String): Result<Unit> = runCatching {
-        val response = RetrofitClient.chatApi.leaveRoom(roomId)
-        check(response.isSuccessful) { "대화를 삭제하지 못했습니다." }
-    }
-
-    private fun toMessage(item: ChatMessageDto) = ChatMessage(
-        sender = item.sender.displayName,
-        body = item.content,
-        time = relativeTime(item.createdAt),
-        mine = item.sender.isMe
+class ChatSocketConnection(
+    private val socket: WebSocket
+) {
+    fun send(content: String): Boolean = socket.send(
+        Json.encodeToString(ChatMessageRequest(content))
     )
 
-    private fun relativeTime(value: String): String = runCatching {
-        val localDate = OffsetDateTime.parse(value)
-            .atZoneSameInstant(ZoneId.systemDefault())
-            .toLocalDate()
-        val days = ChronoUnit.DAYS.between(localDate, java.time.LocalDate.now()).coerceAtLeast(0)
-        when (days) {
-            0L -> "방금 전"
-            1L -> "어제"
-            in 2L..6L -> "${days}일 전"
-            else -> "${localDate.monthValue}월 ${localDate.dayOfMonth}일"
-        }
-    }.getOrDefault(value)
+    fun close() {
+        socket.close(1000, "screen closed")
+    }
+}
+
+object ChatSocket {
+    private val json = Json { ignoreUnknownKeys = true }
+
+    fun connect(
+        chatRoomId: Int,
+        onMessage: (ChatMessage) -> Unit,
+        onFailure: () -> Unit
+    ): ChatSocketConnection {
+        val socket = RetrofitClient.openChatWebSocket(
+            chatRoomId,
+            object : WebSocketListener() {
+                override fun onMessage(webSocket: WebSocket, text: String) {
+                    runCatching {
+                        json.decodeFromString<ChatMessageDto>(text).toModel()
+                    }.onSuccess(onMessage)
+                }
+
+                override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                    onFailure()
+                }
+            }
+        )
+        return ChatSocketConnection(socket)
+    }
+}
+
+private fun ChatMessageDto.toModel(): ChatMessage = ChatMessage(
+    sender = sender,
+    body = content,
+    time = displayTime(createdAt),
+    mine = sender == "나" || sender == "글쓴이",
+    id = messageId,
+    type = type
+)
+
+private fun displayTime(value: String?): String {
+    if (value.isNullOrBlank()) return ""
+    return value.substringAfter('T', value).take(5)
 }

@@ -7,7 +7,7 @@ import com.apptive.slowtalk.data.remote.UserProfileDto
 
 class ProfileRepository(private val api: ProfileApi = RetrofitClient.profileApi) {
 
-    private val MOCK_MODE = false
+    private val MOCK_MODE = true
 
     suspend fun getMyProfile(): Result<UserProfileDto> {
         if (MOCK_MODE) {

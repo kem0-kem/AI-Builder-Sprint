@@ -1,5 +1,9 @@
 package com.apptive.slowtalk
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.launch
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -39,10 +43,13 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,18 +59,62 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.apptive.slowtalk.ui.reflection.ReflectionUiState
+import com.apptive.slowtalk.ui.reflection.ReflectionViewModel
+import java.io.File
+import java.io.FileOutputStream
 
 @Composable
 fun WriteReflectionScreen(
+    viewModel: ReflectionViewModel,
     onBack: () -> Unit,
     onFinish: (String) -> Unit,
     onProfile: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val uiState by viewModel.uiState.collectAsState()
     var textState by remember { mutableStateOf(TextFieldValue("")) }
+
+    // Launcher for Gallery
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            val file = uriToFile(context, it)
+            if (file != null) {
+                viewModel.performOcr(file)
+            }
+        }
+    }
+
+    // Launcher for Camera
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        bitmap?.let {
+            val file = File(context.cacheDir, "camera_capture_${System.currentTimeMillis()}.jpg")
+            val fos = FileOutputStream(file)
+            it.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, fos)
+            fos.close()
+            viewModel.performOcr(file)
+        }
+    }
+
+    LaunchedEffect(uiState) {
+        if (uiState is ReflectionUiState.OcrSuccess) {
+            val ocrText = (uiState as ReflectionUiState.OcrSuccess).content
+            textState = TextFieldValue(ocrText)
+            viewModel.resetState()
+        } else if (uiState is ReflectionUiState.Success) {
+            onFinish(textState.text)
+            viewModel.resetState()
+        }
+    }
     
     PaperBackground {
         Column(
@@ -210,8 +261,16 @@ fun WriteReflectionScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                IconBox(Icons.Outlined.Image)
-                                IconBox(Icons.Outlined.CameraAlt)
+                                IconBox(Icons.Outlined.Image, onClick = { galleryLauncher.launch("image/*") })
+                                IconBox(Icons.Outlined.CameraAlt, onClick = { cameraLauncher.launch() })
+                            }
+                            
+                            if (uiState is ReflectionUiState.Loading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp).padding(bottom = 8.dp),
+                                    color = Purple,
+                                    strokeWidth = 2.dp
+                                )
                             }
                             
                             // Envelope Decoration placeholder
@@ -228,7 +287,7 @@ fun WriteReflectionScreen(
                 Spacer(Modifier.height(24.dp))
                 
                 Button(
-                    onClick = { if (textState.text.isNotBlank()) onFinish(textState.text) },
+                    onClick = { if (textState.text.isNotBlank()) viewModel.createReport(textState.text) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(60.dp),
@@ -237,7 +296,7 @@ fun WriteReflectionScreen(
                         containerColor = Purple,
                         disabledContainerColor = Purple.copy(alpha = 0.5f)
                     ),
-                    enabled = textState.text.isNotBlank()
+                    enabled = textState.text.isNotBlank() && uiState !is ReflectionUiState.Loading
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = null)
@@ -272,9 +331,9 @@ fun WriteReflectionScreen(
 }
 
 @Composable
-private fun IconBox(icon: ImageVector) {
+private fun IconBox(icon: ImageVector, onClick: () -> Unit = {}) {
     Surface(
-        modifier = Modifier.size(54.dp),
+        modifier = Modifier.size(54.dp).clickable(onClick = onClick),
         shape = RoundedCornerShape(14.dp),
         color = Color.Transparent,
         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEEEAE5))
@@ -285,14 +344,35 @@ private fun IconBox(icon: ImageVector) {
     }
 }
 
+private fun uriToFile(context: android.content.Context, uri: Uri): File? {
+    return try {
+        val inputStream = context.contentResolver.openInputStream(uri) ?: return null
+        val file = File(context.cacheDir, "temp_reflection_${System.currentTimeMillis()}.jpg")
+        val outputStream = FileOutputStream(file)
+        inputStream.copyTo(outputStream)
+        inputStream.close()
+        outputStream.close()
+        file
+    } catch (e: Exception) {
+        null
+    }
+}
+
 @Composable
 fun ReflectionDetailScreen(
+    viewModel: ReflectionViewModel,
+    content: String,
     title: String,
     date: String = "2026.07.22 · 15:40",
     onBack: () -> Unit,
     onProfile: () -> Unit
 ) {
+    val uiState by viewModel.uiState.collectAsState()
     val scrollState = rememberScrollState()
+
+    LaunchedEffect(Unit) {
+        viewModel.fetchFeedback(content)
+    }
     
     PaperBackground {
         Column(
@@ -361,21 +441,7 @@ fun ReflectionDetailScreen(
                 ) {
                     Box(Modifier.padding(24.dp)) {
                         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            Text("안녕하세요.", color = Ink, fontSize = 16.sp)
-                            Text(
-                                "오늘은 평소보다 조금 느리게 걸어봤어요.\n그 길에서 작은 행복들을 많이 발견했어요.",
-                                color = Ink,
-                                fontSize = 16.sp,
-                                lineHeight = 26.sp
-                            )
-                            Text(
-                                "늘 빠르게만 지나치던 것들이\n천천히 바라보니 이렇게 예쁘더라고요.",
-                                color = Ink,
-                                fontSize = 16.sp,
-                                lineHeight = 26.sp
-                            )
-                            Text("여러분의 하루는 어땠나요?", color = Ink, fontSize = 16.sp)
-                            Text("오늘도 따뜻한 하루 보내세요. 😊", color = Ink, fontSize = 16.sp)
+                            Text(content, color = Ink, fontSize = 16.sp, lineHeight = 26.sp)
                             
                             Text(
                                 "- 익명의 이웃 드림",
@@ -400,6 +466,8 @@ fun ReflectionDetailScreen(
                 Spacer(Modifier.height(40.dp))
                 
                 // Summary Title
+                val feedbackResponse = (uiState as? ReflectionUiState.FeedbackSuccess)?.feedback
+                
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Surface(
                         modifier = Modifier.size(48.dp),
@@ -418,37 +486,35 @@ fun ReflectionDetailScreen(
                     Spacer(Modifier.width(16.dp))
                     Column {
                         Text("오늘의 회고 리포트", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Ink)
-                        Text("편지를 쓰며 오늘의 감정을 정리해 드려요.", fontSize = 13.sp, color = SubtleInk)
+                        Text(
+                            text = feedbackResponse?.summary ?: "편지를 쓰며 오늘의 감정을 정리해 드려요.",
+                            fontSize = 13.sp,
+                            color = SubtleInk
+                        )
                     }
                 }
                 
                 Spacer(Modifier.height(24.dp))
-                
-                // Summary Items
-                SummaryItem(
-                    icon = Icons.Outlined.FavoriteBorder,
-                    label = "느낀 감정",
-                    content = "평온함, 감사함, 여유로움",
-                    description = "작은 것들을 발견하며 마음이 따뜻해졌어요."
-                )
-                SummaryItem(
-                    icon = Icons.Outlined.Eco,
-                    label = "오늘의 배움",
-                    content = "천천히 걸을 때 더 많은 것을 볼 수 있다는 것.",
-                    description = "속도보다 마음의 여유가 더 중요하다는 걸 느꼈어요."
-                )
-                SummaryItem(
-                    icon = Icons.Outlined.AutoAwesome,
-                    label = "내일의 다짐",
-                    content = "잠시 멈춰 주변을 바라보는 시간을 가지기.",
-                    description = "작은 행복을 놓치지 않고 감사하는 하루 보내기."
-                )
-                SummaryItem(
-                    icon = Icons.Outlined.Edit,
-                    label = "한 줄 기록",
-                    content = "빠르게 가는 것도 좋지만,",
-                    description = "천천히 가면 더 오래 기억되는 하루가 된다."
-                )
+
+                if (uiState is ReflectionUiState.Loading) {
+                    Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Purple)
+                    }
+                } else if (feedbackResponse != null) {
+                    feedbackResponse.feedback.forEach { item ->
+                        SummaryItem(
+                            icon = when(item.type) {
+                                "오늘의 배움" -> Icons.Outlined.Eco
+                                "내일의 다짐" -> Icons.Outlined.AutoAwesome
+                                "한 줄 기록" -> Icons.Outlined.Edit
+                                else -> Icons.Outlined.Lightbulb
+                            },
+                            label = item.type,
+                            content = item.title,
+                            description = item.description
+                        )
+                    }
+                }
             }
         }
     }

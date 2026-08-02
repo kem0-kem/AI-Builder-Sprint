@@ -34,6 +34,7 @@ import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Flight
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Report
@@ -90,8 +91,10 @@ fun FeedScreen(
     onOpenFeed: (Int) -> Unit,
     isLiked: (Int) -> Boolean,
     onToggleLike: (Int) -> Unit,
-    loadFeeds: suspend (String) -> Result<List<FeedResult>>,
-    onFeedsLoaded: (List<FeedResult>) -> Unit,
+    loadFeeds: suspend () -> Result<List<MyFeedResult>>,
+    onFeedsLoaded: (List<MyFeedResult>) -> Unit,
+    loadMyFeeds: suspend () -> Result<List<MyFeedResult>>,
+    onMyFeedsLoaded: (List<MyFeedResult>) -> Unit,
     onWrite: () -> Unit,
     onProfile: () -> Unit,
     onTab: (MainTab) -> Unit,
@@ -99,28 +102,50 @@ fun FeedScreen(
 ) {
     var isRefreshing by remember { mutableStateOf(false) }
     var selectedIndex by remember { mutableStateOf(FeedIndex.ALL) }
-    var isFeedsLoading by remember { mutableStateOf(false) }
-    var feedsLoadFailed by remember { mutableStateOf(false) }
+    var isAllFeedsLoading by remember { mutableStateOf(false) }
+    var allFeedsLoadFailed by remember { mutableStateOf(false) }
+    var isMyFeedsLoading by remember { mutableStateOf(false) }
+    var myFeedsLoadFailed by remember { mutableStateOf(false) }
     val refreshScope = rememberCoroutineScope()
-    val visibleFeeds = feeds
+    val visibleFeeds = when (selectedIndex) {
+        FeedIndex.ALL -> feeds.filterNot { it.isMine }
+        FeedIndex.MINE -> feeds.filter { it.isMine }
+    }
 
-    suspend fun refreshFeeds() {
-        isFeedsLoading = true
-        val scope = if (selectedIndex == FeedIndex.MINE) "mine" else "all"
-        loadFeeds(scope).fold(
+    suspend fun refreshAllFeeds() {
+        isAllFeedsLoading = true
+        loadFeeds().fold(
             onSuccess = {
                 onFeedsLoaded(it)
-                feedsLoadFailed = false
+                allFeedsLoadFailed = false
             },
             onFailure = {
-                feedsLoadFailed = true
+                allFeedsLoadFailed = true
             }
         )
-        isFeedsLoading = false
+        isAllFeedsLoading = false
+    }
+
+    suspend fun refreshMyFeeds() {
+        isMyFeedsLoading = true
+        loadMyFeeds().fold(
+            onSuccess = {
+                onMyFeedsLoaded(it)
+                myFeedsLoadFailed = false
+            },
+            onFailure = {
+                myFeedsLoadFailed = true
+            }
+        )
+        isMyFeedsLoading = false
+    }
+
+    LaunchedEffect(Unit) {
+        refreshAllFeeds()
     }
 
     LaunchedEffect(selectedIndex) {
-        refreshFeeds()
+        if (selectedIndex == FeedIndex.MINE) refreshMyFeeds()
     }
 
     PaperBackground {
@@ -142,7 +167,11 @@ fun FeedScreen(
                     if (!isRefreshing) {
                         refreshScope.launch {
                             isRefreshing = true
-                            refreshFeeds()
+                            if (selectedIndex == FeedIndex.MINE) {
+                                refreshMyFeeds()
+                            } else {
+                                refreshAllFeeds()
+                            }
                             isRefreshing = false
                         }
                     }
@@ -166,11 +195,15 @@ fun FeedScreen(
                     }
                     if (visibleFeeds.isEmpty()) {
                         item {
-                            EmptyMyFeedMessage(
-                                loading = isFeedsLoading,
-                                loadFailed = feedsLoadFailed,
+                            EmptyFeedMessage(
+                                mine = selectedIndex == FeedIndex.MINE,
+                                loading = if (selectedIndex == FeedIndex.MINE) isMyFeedsLoading else isAllFeedsLoading,
+                                loadFailed = if (selectedIndex == FeedIndex.MINE) myFeedsLoadFailed else allFeedsLoadFailed,
                                 onRetry = {
-                                    refreshScope.launch { refreshFeeds() }
+                                    refreshScope.launch {
+                                        if (selectedIndex == FeedIndex.MINE) refreshMyFeeds()
+                                        else refreshAllFeeds()
+                                    }
                                 }
                             )
                         }
@@ -249,7 +282,8 @@ private fun FeedIndexSelector(
 }
 
 @Composable
-private fun EmptyMyFeedMessage(
+private fun EmptyFeedMessage(
+    mine: Boolean,
     loading: Boolean,
     loadFailed: Boolean,
     onRetry: () -> Unit
@@ -267,7 +301,11 @@ private fun EmptyMyFeedMessage(
                 strokeWidth = 3.dp
             )
             Spacer(Modifier.height(14.dp))
-            Text("내가 쓴 피드를 불러오고 있어요.", color = SubtleInk, fontSize = 13.sp)
+            Text(
+                if (mine) "내가 쓴 피드를 불러오고 있어요." else "관심사 피드를 불러오고 있어요.",
+                color = SubtleInk,
+                fontSize = 13.sp
+            )
             return@Column
         }
         Surface(
@@ -286,15 +324,22 @@ private fun EmptyMyFeedMessage(
         }
         Spacer(Modifier.height(14.dp))
         Text(
-            if (loadFailed) "피드를 불러오지 못했어요." else "아직 내가 쓴 피드가 없어요.",
+            when {
+                loadFailed -> "피드를 불러오지 못했어요."
+                mine -> "아직 내가 쓴 피드가 없어요."
+                else -> "관심사와 연관된 피드가 없습니다."
+            },
             color = Ink,
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            if (loadFailed) "서버 연결을 확인한 뒤 다시 시도해주세요."
-            else "피드를 작성하면 이곳에서 모아볼 수 있어요.",
+            when {
+                loadFailed -> "서버 연결을 확인한 뒤 다시 시도해주세요."
+                mine -> "피드를 작성하면 이곳에서 모아볼 수 있어요."
+                else -> "관심사를 설정하거나 잠시 후 다시 확인해주세요."
+            },
             color = SubtleInk,
             fontSize = 13.sp,
             textAlign = TextAlign.Center
@@ -334,6 +379,13 @@ private fun FeedCard(
                     .clickable { onOpenFeed(post.id) }
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    val categoryIcon = when (post.category) {
+                        "일상 이야기" -> Icons.Outlined.Eco
+                        "마음과 고민" -> Icons.Outlined.FavoriteBorder
+                        "취미 생활" -> Icons.Outlined.Palette
+                        "질문" -> Icons.AutoMirrored.Outlined.HelpOutline
+                        else -> Icons.Outlined.AutoAwesome
+                    }
                     Surface(
                         modifier = Modifier.size(30.dp),
                         shape = CircleShape,
@@ -341,7 +393,7 @@ private fun FeedCard(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
-                                Icons.Outlined.AutoAwesome,
+                                categoryIcon,
                                 contentDescription = null,
                                 tint = post.accent,
                                 modifier = Modifier.size(16.dp)
@@ -413,15 +465,47 @@ fun WriteFeedScreen(
     onBack: () -> Unit,
     onProfile: () -> Unit,
     initialPost: FeedPost? = null,
-    onPublish: (String, String, String) -> Unit
+    loadCategories: suspend () -> Result<List<FeedCategoryResult>>,
+    requestFeedback: suspend (String, String) -> Result<FeedFeedbackResult>,
+    onSubmit: suspend (Int, String, String, String) -> Result<Int>,
+    onSuccess: (Int, String, String, String) -> Unit
 ) {
-    val categories = feedCategoryVisuals
+    var categories by remember { mutableStateOf(feedCategoryVisuals) }
     var category by remember(initialPost?.id) {
         mutableStateOf(initialPost?.category ?: categories.first().name)
     }
     var title by remember(initialPost?.id) { mutableStateOf(initialPost?.title.orEmpty()) }
     var body by remember(initialPost?.id) { mutableStateOf(initialPost?.body.orEmpty()) }
+    var aiFeedback by remember { mutableStateOf<FeedFeedbackResult?>(null) }
+    var isFeedbackLoading by remember { mutableStateOf(false) }
+    var isSubmitting by remember { mutableStateOf(false) }
+    var submitFailed by remember { mutableStateOf(false) }
+    val submitScope = rememberCoroutineScope()
     val isEditing = initialPost != null
+
+    LaunchedEffect(initialPost?.id) {
+        loadCategories().onSuccess { remoteCategories ->
+            if (remoteCategories.isNotEmpty()) {
+                categories = remoteCategories.map { it.toVisual() }
+                category = initialPost?.category
+                    ?.takeIf { current -> categories.any { it.name == current } }
+                    ?: categories.first().name
+            }
+        }
+    }
+
+    LaunchedEffect(title, body) {
+        if (title.isBlank() || body.isBlank()) {
+            aiFeedback = null
+            isFeedbackLoading = false
+        } else {
+            delay(700)
+            isFeedbackLoading = true
+            requestFeedback(title.trim(), body.trim())
+                .onSuccess { aiFeedback = it }
+            isFeedbackLoading = false
+        }
+    }
 
     PaperBackground {
         Scaffold(containerColor = Color.Transparent) { padding ->
@@ -597,7 +681,11 @@ fun WriteFeedScreen(
                                     color = Purple.copy(alpha = 0.1f)
                                 ) {
                                     Text(
-                                        "실시간 분석 중",
+                                        when {
+                                            isFeedbackLoading -> "분석 중"
+                                            aiFeedback != null -> "분석 완료"
+                                            else -> "입력 대기"
+                                        },
                                         modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
                                         color = Purple,
                                         fontSize = 10.sp,
@@ -619,25 +707,37 @@ fun WriteFeedScreen(
                                         Icon(
                                             Icons.Outlined.CheckCircle,
                                             contentDescription = null,
-                                            tint = Color(0xFF4DB77A),
+                                            tint = if (aiFeedback?.hasWarning == true) {
+                                                Color(0xFFD95C55)
+                                            } else {
+                                                Color(0xFF4DB77A)
+                                            },
                                             modifier = Modifier.size(21.dp)
                                         )
                                         Column(Modifier.padding(start = 9.dp)) {
                                             Text(
-                                                if (body.length < 30) {
-                                                    "조금 더 들려주세요"
+                                                aiFeedback?.warningMessage
+                                                    ?: if (body.length < 30) {
+                                                        "조금 더 들려주세요"
+                                                    } else {
+                                                        "좋은 흐름이에요!"
+                                                    },
+                                                color = if (aiFeedback?.hasWarning == true) {
+                                                    Color(0xFFD95C55)
+                                                } else if (body.length < 30) {
+                                                    Purple
                                                 } else {
-                                                    "좋은 흐름이에요!"
+                                                    Color(0xFF2FAE68)
                                                 },
-                                                color = if (body.length < 30) Purple else Color(0xFF2FAE68),
                                                 fontWeight = FontWeight.Bold
                                             )
                                             Text(
-                                                if (body.length < 30) {
-                                                    "구체적인 순간이 더해지면 이야기가 풍성해져요."
-                                                } else {
-                                                    "편안하고 자연스러운 글이에요."
-                                                },
+                                                aiFeedback?.tips?.firstOrNull()
+                                                    ?: if (body.length < 30) {
+                                                        "구체적인 순간이 더해지면 이야기가 풍성해져요."
+                                                    } else {
+                                                        "편안하고 자연스러운 글이에요."
+                                                    },
                                                 color = SubtleInk,
                                                 fontSize = 11.sp
                                             )
@@ -664,7 +764,11 @@ fun WriteFeedScreen(
                                                 )
                                             }
                                             Text(
-                                                "• 구체적인 순간을 떠올려보세요.\n• 감정을 한 단어로 표현해보세요.",
+                                                aiFeedback?.tips
+                                                    ?.take(2)
+                                                    ?.joinToString("\n") { "• $it" }
+                                                    ?.takeIf { it.isNotBlank() }
+                                                    ?: "• 구체적인 순간을 떠올려보세요.\n• 감정을 한 단어로 표현해보세요.",
                                                 modifier = Modifier.padding(top = 7.dp),
                                                 color = SubtleInk,
                                                 fontSize = 10.sp,
@@ -692,8 +796,26 @@ fun WriteFeedScreen(
                 }
                 item {
                     Button(
-                        onClick = { onPublish(category, title.trim(), body.trim()) },
-                        enabled = title.isNotBlank() && body.isNotBlank(),
+                        onClick = {
+                            val selectedCategory = categories.first { it.name == category }
+                            submitScope.launch {
+                                isSubmitting = true
+                                submitFailed = false
+                                onSubmit(
+                                    selectedCategory.id,
+                                    category,
+                                    title.trim(),
+                                    body.trim()
+                                ).fold(
+                                    onSuccess = { feedId ->
+                                        onSuccess(feedId, category, title.trim(), body.trim())
+                                    },
+                                    onFailure = { submitFailed = true }
+                                )
+                                isSubmitting = false
+                            }
+                        },
+                        enabled = title.isNotBlank() && body.isNotBlank() && !isSubmitting,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(54.dp),
@@ -702,8 +824,23 @@ fun WriteFeedScreen(
                     ) {
                         Icon(Icons.Outlined.Send, null)
                         Text(
-                            if (isEditing) "  수정 완료" else "  피드 올리기 (익명)",
+                            when {
+                                isSubmitting -> "  전송 중..."
+                                isEditing -> "  수정 완료"
+                                else -> "  피드 올리기 (익명)"
+                            },
                             fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                if (submitFailed) {
+                    item {
+                        Text(
+                            "피드를 저장하지 못했습니다. 서버 연결을 확인하고 다시 시도해주세요.",
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center,
+                            color = Color(0xFFD95C55),
+                            fontSize = 12.sp
                         )
                     }
                 }
@@ -722,6 +859,7 @@ fun WriteFeedScreen(
 }
 
 private data class FeedCategoryVisual(
+    val id: Int,
     val name: String,
     val icon: ImageVector,
     val tint: Color,
@@ -729,13 +867,18 @@ private data class FeedCategoryVisual(
 )
 
 private val feedCategoryVisuals = listOf(
-    FeedCategoryVisual("일상 이야기", Icons.Outlined.Eco, Color(0xFF54B978), Color(0xFFEAF7ED)),
-    FeedCategoryVisual("취미 생활", Icons.Outlined.Palette, Purple, PurpleSoft),
-    FeedCategoryVisual("마음과 고민", Icons.Outlined.FavoriteBorder, Color(0xFFE76E91), Color(0xFFFFEFF3)),
-    FeedCategoryVisual("배움과 성장", Icons.Outlined.School, Color(0xFF5C95E8), Color(0xFFEDF4FF)),
-    FeedCategoryVisual("여행과 경험", Icons.Outlined.Flight, Color(0xFF3DBCC1), Color(0xFFEAF9F9)),
-    FeedCategoryVisual("기타", Icons.Outlined.MoreHoriz, SubtleInk, Color(0xFFF4F1ED))
+    FeedCategoryVisual(1, "일상 이야기", Icons.Outlined.Eco, Color(0xFF54B978), Color(0xFFEAF7ED)),
+    FeedCategoryVisual(2, "마음과 고민", Icons.Outlined.FavoriteBorder, Color(0xFFE76E91), Color(0xFFFFEFF3)),
+    FeedCategoryVisual(3, "취미 생활", Icons.Outlined.Palette, Purple, PurpleSoft),
+    FeedCategoryVisual(4, "질문", Icons.AutoMirrored.Outlined.HelpOutline, SubtleInk, Color(0xFFF4F1ED))
 )
+
+private fun FeedCategoryResult.toVisual(): FeedCategoryVisual = when (name) {
+    "일상 이야기" -> FeedCategoryVisual(id, name, Icons.Outlined.Eco, Color(0xFF54B978), Color(0xFFEAF7ED))
+    "마음과 고민" -> FeedCategoryVisual(id, name, Icons.Outlined.FavoriteBorder, Color(0xFFE76E91), Color(0xFFFFEFF3))
+    "취미 생활" -> FeedCategoryVisual(id, name, Icons.Outlined.Palette, Purple, PurpleSoft)
+    else -> FeedCategoryVisual(id, name, Icons.AutoMirrored.Outlined.HelpOutline, SubtleInk, Color(0xFFF4F1ED))
+}
 
 @Composable
 private fun FeedCategoryOption(
@@ -788,6 +931,8 @@ private fun FeedCategoryOption(
 fun FeedDetailScreen(
     post: FeedPost,
     isLiked: Boolean,
+    loadFeed: suspend (Int) -> Result<FeedDetailResult>,
+    onFeedLoaded: (FeedDetailResult) -> Unit,
     onToggleLike: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -795,7 +940,8 @@ fun FeedDetailScreen(
     onBack: () -> Unit
 ) {
     var comment by remember { mutableStateOf("") }
-    var comments by remember(post.remoteId) { mutableStateOf(post.comments.toList()) }
+    var displayedPost by remember(post.id) { mutableStateOf(post) }
+    var comments by remember(post.id) { mutableStateOf(post.comments.toList()) }
     var replyTarget by remember { mutableStateOf<Pair<Int, String>?>(null) }
     var isRefreshing by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
@@ -805,6 +951,18 @@ fun FeedDetailScreen(
     val refreshScope = rememberCoroutineScope()
     val context = LocalContext.current
 
+    suspend fun refreshFeed() {
+        loadFeed(post.id).onSuccess { result ->
+            displayedPost = result.post
+            comments = result.post.comments.toList()
+            onFeedLoaded(result)
+        }
+    }
+
+    LaunchedEffect(post.id) {
+        refreshFeed()
+    }
+
     LaunchedEffect(replyTarget) {
         if (replyTarget != null) {
             commentFocusRequester.requestFocus()
@@ -813,18 +971,11 @@ fun FeedDetailScreen(
 
     fun commitComments(updated: List<Comment>) {
         comments = updated
+        displayedPost.comments.clear()
+        displayedPost.comments.addAll(updated)
         post.comments.clear()
         post.comments.addAll(updated)
     }
-
-    suspend fun refreshComments() {
-        val feedId = post.remoteId ?: return
-        FeedApi.getComments(feedId).onSuccess(::commitComments).onFailure {
-            Toast.makeText(context, "댓글을 불러오지 못했습니다.", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    LaunchedEffect(post.remoteId) { refreshComments() }
 
     fun editCommentAt(parentIndex: Int, replyIndex: Int?, content: String) {
         val target = if (replyIndex == null) {
@@ -848,7 +999,7 @@ fun FeedDetailScreen(
         commitComments(updated)
         target.id?.let { commentId ->
             refreshScope.launch {
-                FeedApi.updateComment(commentId, content).onFailure {
+                FeedApi.updateComment(post.id, commentId, content).onFailure {
                     Toast.makeText(context, "댓글 수정을 서버에 반영하지 못했습니다.", Toast.LENGTH_SHORT).show()
                 }
             }
@@ -877,7 +1028,7 @@ fun FeedDetailScreen(
         commitComments(updated)
         target.id?.let { commentId ->
             refreshScope.launch {
-                FeedApi.deleteComment(commentId).onFailure {
+                FeedApi.deleteComment(post.id, commentId).onFailure {
                     Toast.makeText(context, "댓글을 서버에서 삭제하지 못했습니다.", Toast.LENGTH_SHORT).show()
                 }
             }
@@ -905,11 +1056,11 @@ fun FeedDetailScreen(
             if (index != parentIndex) {
                 parent
             } else if (replyIndex == null) {
-                parent.copy(id = FeedApi.commentRemoteId(commentId))
+                parent.copy(id = commentId)
             } else {
                 parent.copy(
                     replies = parent.replies.mapIndexed { childIndex, reply ->
-                        if (childIndex == replyIndex) reply.copy(id = FeedApi.commentRemoteId(commentId)) else reply
+                        if (childIndex == replyIndex) reply.copy(id = commentId) else reply
                     }
                 )
             }
@@ -1073,7 +1224,7 @@ fun FeedDetailScreen(
                                             updatedComments[it].replies.lastIndex
                                         }
                                         refreshScope.launch {
-                                            FeedApi.createCommentByLocalId(post.id, message)
+                                            FeedApi.createComment(post.id, message)
                                                 .onSuccess { commentId ->
                                                     assignCommentId(
                                                         createdParentIndex,
@@ -1111,7 +1262,7 @@ fun FeedDetailScreen(
                     if (!isRefreshing) {
                         refreshScope.launch {
                             isRefreshing = true
-                            refreshComments()
+                            refreshFeed()
                             isRefreshing = false
                         }
                     }
@@ -1138,7 +1289,7 @@ fun FeedDetailScreen(
                                     expanded = menuExpanded,
                                     onDismissRequest = { menuExpanded = false }
                                 ) {
-                                    if (post.isMine) {
+                                    if (displayedPost.isMine) {
                                         DropdownMenuItem(
                                             text = { Text("수정") },
                                             leadingIcon = {
@@ -1181,7 +1332,7 @@ fun FeedDetailScreen(
                     }
                     item {
                         FeedDetailCard(
-                            post = post,
+                            post = displayedPost,
                             commentCount = comments.size,
                             isLiked = isLiked,
                             onToggleLike = onToggleLike

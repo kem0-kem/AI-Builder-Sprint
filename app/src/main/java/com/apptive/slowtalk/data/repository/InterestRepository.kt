@@ -7,7 +7,7 @@ import com.apptive.slowtalk.data.remote.RetrofitClient
 
 class InterestRepository(private val api: InterestApi = RetrofitClient.interestApi) {
 
-    private val MOCK_MODE = false
+    private val MOCK_MODE = true
 
     suspend fun getAllInterests(): Result<List<InterestDto>> {
         if (MOCK_MODE) {
