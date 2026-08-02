@@ -9,7 +9,7 @@ data class ProfilePayloadDto(
     val nickname: String,
     val bio: String? = null,
     val interests: List<ProfileInterestDto> = emptyList(),
-    val region: RegionDto? = null,
+    val region: ProfileRegionPayloadDto? = null,
     val statistics: StatisticsDto? = null
 )
 
@@ -19,7 +19,8 @@ data class ProfileInterestDto(val id: String, val name: String)
 @Serializable
 data class ProfilePatchRequest(
     val nickname: String,
-    val bio: String
+    val bio: String,
+    val region: RegionPatchDto
 )
 
 @Serializable
@@ -36,7 +37,7 @@ data class ProfileUpdateRequest(
     val nickname: String,
     val bio: String,
     val interest: String,
-    val region: RegionDto
+    val region: RegionPatchDto
 )
 
 @Serializable
@@ -44,6 +45,20 @@ data class RegionDto(
     val province: String,
     val district: String,
     val subDistrict: String?
+)
+
+@Serializable
+data class ProfileRegionPayloadDto(
+    val province: RegionItemDto,
+    val district: RegionItemDto,
+    val subDistrict: RegionItemDto? = null
+)
+
+@Serializable
+data class RegionPatchDto(
+    val provinceCode: String,
+    val districtCode: String,
+    val subDistrictCode: String? = null
 )
 
 @Serializable

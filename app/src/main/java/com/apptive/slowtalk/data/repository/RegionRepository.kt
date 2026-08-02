@@ -3,6 +3,7 @@ package com.apptive.slowtalk.data.repository
 import com.apptive.slowtalk.data.remote.ApiEnvelope
 import com.apptive.slowtalk.data.remote.RegionApi
 import com.apptive.slowtalk.data.remote.RegionItemDto
+import com.apptive.slowtalk.data.remote.RegionPatchDto
 import com.apptive.slowtalk.data.remote.RetrofitClient
 
 class RegionRepository(private val api: RegionApi = RetrofitClient.regionApi) {
@@ -37,6 +38,21 @@ class RegionRepository(private val api: RegionApi = RetrofitClient.regionApi) {
             }
             ?: error("선택한 시·군·구를 찾을 수 없습니다.")
         api.getSubDistricts(districtCode).requireRegionData().map { it.name }
+    }
+
+    suspend fun getRegionPatch(province: String, district: String, subDistrict: String?): Result<RegionPatchDto> = runCatching {
+        val provinceCode = api.getProvinces().requireRegionData()
+            .firstOrNull { it.name == province }?.code
+            ?: error("Selected province was not found.")
+        val districtCode = api.getDistricts(provinceCode).requireRegionData()
+            .firstOrNull { it.name == district }?.code
+            ?: error("Selected district was not found.")
+        val subDistrictCode = subDistrict?.let { name ->
+            api.getSubDistricts(districtCode).requireRegionData()
+                .firstOrNull { it.name == name }?.code
+                ?: error("Selected sub-district was not found.")
+        }
+        RegionPatchDto(provinceCode, districtCode, subDistrictCode)
     }
 }
 

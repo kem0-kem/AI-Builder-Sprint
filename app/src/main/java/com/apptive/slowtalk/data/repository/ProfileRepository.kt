@@ -18,7 +18,8 @@ class ProfileRepository(private val api: ProfileApi = RetrofitClient.profileApi)
         api.updateProfile(
             ProfilePatchRequest(
                 nickname = profile.nickname,
-                bio = profile.bio
+                bio = profile.bio,
+                region = profile.region
             )
         ).requireData()
         "프로필을 수정했습니다."
@@ -29,7 +30,13 @@ private fun ProfilePayloadDto.toUiProfile(): UserProfileDto = UserProfileDto(
     nickname = nickname,
     bio = bio.orEmpty(),
     interest = interests.joinToString(", ") { it.name },
-    region = region ?: RegionDto(province = "", district = "", subDistrict = null),
+    region = region?.let {
+        RegionDto(
+            province = it.province.name,
+            district = it.district.name,
+            subDistrict = it.subDistrict?.name
+        )
+    } ?: RegionDto(province = "", district = "", subDistrict = null),
     statistics = statistics
 )
 
