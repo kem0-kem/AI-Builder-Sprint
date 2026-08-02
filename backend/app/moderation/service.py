@@ -121,23 +121,23 @@ async def classify_normalized(
 
     try:
         untrusted_assessment = await gateway.classify(command.content_type, command.text)
+    except ModerationProviderUnavailable:
+        raise ModerationClassificationUnavailable() from None
+
+    try:
         provider_assessment = ModerationAssessment.model_validate(
             untrusted_assessment.model_dump()
         )
-        if (
-            provider_assessment.provider_request_id is not None
-            and provider_assessment.provider_request_id in command.text
-        ):
-            provider_assessment = provider_assessment.model_copy(
-                update={"provider_request_id": None}
-            )
-    except (
-        AttributeError,
-        ModerationProviderUnavailable,
-        TypeError,
-        ValidationError,
-    ):
+    except (AttributeError, TypeError, ValidationError):
         raise ModerationClassificationUnavailable() from None
+
+    if (
+        provider_assessment.provider_request_id is not None
+        and provider_assessment.provider_request_id in command.text
+    ):
+        provider_assessment = provider_assessment.model_copy(
+            update={"provider_request_id": None}
+        )
 
     return combine_assessments(local, provider_assessment)
 

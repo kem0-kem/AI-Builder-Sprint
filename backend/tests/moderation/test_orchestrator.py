@@ -156,6 +156,20 @@ async def test_provider_failure_quarantines_without_domain_write(
     assert pending_command.text == "provider failure marker"
 
 
+async def test_unexpected_gateway_error_creates_no_moderation_storage(
+    orchestrator: ModerationOrchestrator, gateway: AsyncMock, repository: AsyncMock
+) -> None:
+    gateway_error = KeyError("gateway implementation bug")
+    gateway.classify.side_effect = gateway_error
+
+    with pytest.raises(KeyError) as caught:
+        await orchestrator.evaluate(command("unexpected error marker"))
+
+    assert caught.value is gateway_error
+    repository.create_pending.assert_not_awaited()
+    repository.create_blocked.assert_not_awaited()
+
+
 async def test_contradictory_provider_assessment_is_quarantined(
     orchestrator: ModerationOrchestrator, gateway: AsyncMock, repository: AsyncMock
 ) -> None:

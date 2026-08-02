@@ -83,6 +83,40 @@ async def test_classify_normalized_wraps_provider_unavailable() -> None:
     assert caught.value.__cause__ is None
 
 
+@pytest.mark.parametrize(
+    "gateway_error",
+    [
+        AttributeError("gateway attribute bug"),
+        TypeError("gateway type bug"),
+        KeyError("gateway key bug"),
+        AssertionError("gateway assertion bug"),
+    ],
+)
+async def test_classify_normalized_propagates_unexpected_gateway_errors(
+    gateway_error: Exception,
+) -> None:
+    gateway = AsyncMock()
+    gateway.classify.side_effect = gateway_error
+
+    with pytest.raises(type(gateway_error)) as caught:
+        await classify_normalized(gateway, LocalRuleEngine(), command())
+
+    assert caught.value is gateway_error
+
+
+async def test_classify_normalized_wraps_missing_model_dump_without_echo() -> None:
+    submitted_text = "PRIVATE_MODEL_DUMP_MARKER"
+    gateway = AsyncMock()
+    gateway.classify.return_value = object()
+
+    with pytest.raises(ModerationClassificationUnavailable) as caught:
+        await classify_normalized(gateway, LocalRuleEngine(), command(submitted_text))
+
+    rendered = str(caught.value) + repr(caught.value)
+    assert submitted_text not in rendered
+    assert caught.value.__cause__ is None
+
+
 async def test_classify_normalized_wraps_malformed_provider_result_without_echo() -> None:
     submitted_text = "PRIVATE_SUBMITTED_CONTENT"
     gateway = AsyncMock()

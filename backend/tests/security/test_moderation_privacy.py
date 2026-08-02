@@ -125,6 +125,28 @@ async def test_shadow_provider_failure_is_immediate_and_bounded() -> None:
     assert submitted_text not in repr(metrics)
 
 
+async def test_shadow_unexpected_gateway_error_does_not_record_provider_failure() -> None:
+    gateway_error = AttributeError("gateway implementation bug")
+    metrics = ModerationMetrics()
+    gateway = AsyncMock()
+    gateway.classify.side_effect = gateway_error
+    shadow = ShadowModerationOrchestrator(
+        gateway,
+        metrics,
+        0.80,
+        0.90,
+        local_rules=LocalRuleEngine(),
+    )
+
+    with pytest.raises(AttributeError) as caught:
+        await shadow.evaluate(moderation_command())
+
+    assert caught.value is gateway_error
+    assert metrics.decisions == {}
+    assert metrics.categories == {}
+    assert metrics.latencies == {}
+
+
 @pytest.mark.parametrize(
     ("raw_decision", "confidence", "expected"),
     (
