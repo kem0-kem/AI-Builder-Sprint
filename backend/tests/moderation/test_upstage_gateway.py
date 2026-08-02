@@ -1,4 +1,5 @@
 import json
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -31,6 +32,29 @@ def upstage_response(content: object, *, request_id: str = "request-123") -> htt
         json={"choices": [{"message": {"content": content}}]},
         headers={"x-request-id": request_id},
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "client_error",
+    [
+        TypeError("client implementation type bug"),
+        ValueError("client implementation value bug"),
+        AttributeError("client implementation attribute bug"),
+        KeyError("client implementation key bug"),
+        AssertionError("client implementation assertion bug"),
+    ],
+)
+async def test_gateway_propagates_unexpected_client_post_errors(
+    client_error: Exception,
+) -> None:
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.post.side_effect = client_error
+
+    with pytest.raises(type(client_error)) as caught:
+        await build_gateway(client).classify(ContentType.FEED, "private-input-marker")
+
+    assert caught.value is client_error
 
 
 @pytest.mark.asyncio
@@ -87,6 +111,22 @@ async def test_gateway_parses_all_supported_categories() -> None:
         ModerationCategory.PERSONAL_DATA,
     }
     assert assessment.severity is Severity.HIGH
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_gateway_maps_malformed_response_json_to_provider_unavailable() -> None:
+    respx.post("https://api.upstage.ai/v1/chat/completions").mock(
+        return_value=httpx.Response(200, content=b"not-json")
+    )
+    async with httpx.AsyncClient(base_url="https://api.upstage.ai/v1") as client:
+        with pytest.raises(ModerationProviderUnavailable) as caught:
+            await build_gateway(client).classify(
+                ContentType.FEED, "private-input-marker"
+            )
+
+    assert str(caught.value) == "moderation provider unavailable"
+    assert caught.value.__cause__ is None
 
 
 @pytest.mark.asyncio

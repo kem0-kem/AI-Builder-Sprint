@@ -57,31 +57,40 @@ class UpstageModerationGateway:
         content_type: ContentType,
         text: str,
     ) -> ModerationAssessment:
+        request_json = {
+            "model": self.model,
+            "temperature": 0,
+            "messages": [
+                {"role": "system", "content": MODERATION_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {"type": content_type.value, "text": text},
+                        ensure_ascii=False,
+                    ),
+                },
+            ],
+        }
         try:
             response = await self.client.post(
                 "/chat/completions",
                 headers={"Authorization": f"Bearer {self.api_key.get_secret_value()}"},
-                json={
-                    "model": self.model,
-                    "temperature": 0,
-                    "messages": [
-                        {"role": "system", "content": MODERATION_SYSTEM_PROMPT},
-                        {
-                            "role": "user",
-                            "content": json.dumps(
-                                {"type": content_type.value, "text": text},
-                                ensure_ascii=False,
-                            ),
-                        },
-                    ],
-                },
+                json=request_json,
             )
+        except httpx.HTTPError:
+            raise ModerationProviderUnavailable("moderation provider unavailable") from None
+
+        try:
             response.raise_for_status()
+        except httpx.HTTPError:
+            raise ModerationProviderUnavailable("moderation provider unavailable") from None
+
+        try:
             completion = _UpstageChatCompletion.model_validate(response.json())
             provider_assessment = ProviderModerationAssessment.model_validate_json(
                 completion.choices[0].message.content
             )
-        except (httpx.HTTPError, TypeError, ValueError, ValidationError):
+        except (json.JSONDecodeError, UnicodeDecodeError, ValidationError):
             raise ModerationProviderUnavailable("moderation provider unavailable") from None
 
         return ModerationAssessment(
