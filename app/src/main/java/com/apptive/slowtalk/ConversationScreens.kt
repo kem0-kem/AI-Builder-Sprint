@@ -66,13 +66,14 @@ import kotlinx.coroutines.launch
 @Composable
 fun ConversationListScreen(
     loadRooms: suspend () -> Result<List<Conversation>>,
+    selectedIndex: Int,
+    onSelectedIndexChange: (Int) -> Unit,
     onOpen: (Conversation) -> Unit,
     onCreateGroup: () -> Unit,
     onProfile: () -> Unit,
     onTab: (MainTab) -> Unit,
     showBottomBar: Boolean = true
 ) {
-    var selected by remember { mutableStateOf(0) }
     var rooms by remember { mutableStateOf(emptyList<Conversation>()) }
     var isLoading by remember { mutableStateOf(true) }
     var loadFailed by remember { mutableStateOf(false) }
@@ -94,7 +95,7 @@ fun ConversationListScreen(
     }
 
     LaunchedEffect(Unit) { refreshRooms() }
-    val shown = rooms.filter { it.isGroup == (selected == 1) }
+    val shown = rooms.filter { it.isGroup == (selectedIndex == 1) }
     PaperBackground {
         Scaffold(
             containerColor = Color.Transparent,
@@ -118,8 +119,8 @@ fun ConversationListScreen(
                     ) {
                         listOf("익명 대화", "모임 대화").forEachIndexed { index, label ->
                             FilterChip(
-                                selected = selected == index,
-                                onClick = { selected = index },
+                                selected = selectedIndex == index,
+                                onClick = { onSelectedIndexChange(index) },
                                 label = { Text(label, fontSize = 12.sp) },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = PurpleSoft,
@@ -130,7 +131,7 @@ fun ConversationListScreen(
                     }
                     Spacer(Modifier.height(8.dp))
                 }
-                if (selected == 1) {
+                if (selectedIndex == 1) {
                     item {
                         Card(
                             modifier = Modifier

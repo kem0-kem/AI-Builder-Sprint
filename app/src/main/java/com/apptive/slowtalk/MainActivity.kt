@@ -59,6 +59,7 @@ private fun ApptiveApp() {
     var isLoggedIn by remember { mutableStateOf(false) }
     var screen by remember { mutableStateOf<Screen>(if (isLoggedIn) Screen.Feed else Screen.Login) }
     var profileReturnScreen by remember { mutableStateOf<Screen>(Screen.Feed) }
+    var conversationIndex by remember { mutableStateOf(0) }
     var lastBackPressTime by remember { mutableLongStateOf(0L) }
     val likedFeeds = remember { mutableStateMapOf<Int, Boolean>() }
     val likingFeeds = remember { mutableStateMapOf<Int, Boolean>() }
@@ -180,6 +181,8 @@ private fun ApptiveApp() {
                     when (page) {
                         0 -> ConversationListScreen(
                             loadRooms = { ChatApi.getRooms() },
+                            selectedIndex = conversationIndex,
+                            onSelectedIndexChange = { conversationIndex = it },
                             onOpen = {
                                 screen = Screen.Chat(it.title, it.isGroup, it.chatRoomId)
                             },
