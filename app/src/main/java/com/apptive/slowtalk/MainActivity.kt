@@ -116,6 +116,7 @@ private fun ApptiveApp() {
             Conversation("동네 카페 탐방", "이번에는 조용한 카페로 가요.", "3일 전", isGroup = true, members = 4)
         )
     }
+    val inviteCandidates = remember { mutableStateListOf<Conversation>() }
     val letters = remember {
         listOf(
             Letter("천천히 걸었던 하루", "오늘은 평소보다 조금 느리게 걸어봤어요.", "2026.07.22 · 15:40", true),
@@ -127,6 +128,9 @@ private fun ApptiveApp() {
     val mainPagerState = rememberPagerState(initialPage = 1, pageCount = { 3 })
 
     LaunchedEffect(Unit) {
+        feeds.clear()
+        anonymousConversations.clear()
+        groupConversations.clear()
         if (AuthSession.refreshToken != null) {
             val restored = authRepository.restoreSession()
             screen = if (restored) Screen.Feed else Screen.Auth
@@ -137,6 +141,35 @@ private fun ApptiveApp() {
     LaunchedEffect(mainPagerState.settledPage) {
         if (screen.isMainTab()) {
             screen = mainPagerState.settledPage.toMainScreen()
+        }
+    }
+
+    LaunchedEffect(screen, AuthSession.accessToken) {
+        if (!AuthSession.isSignedIn) return@LaunchedEffect
+        when (screen) {
+            Screen.Feed -> FeedApi.getFeeds("all").onSuccess { items ->
+                feeds.clear()
+                feeds.addAll(items.map { it.post })
+                items.forEach { likedFeeds[it.post.id] = it.liked }
+            }
+            Screen.Conversations -> ChatApi.getRooms().onSuccess { rooms ->
+                anonymousConversations.clear()
+                groupConversations.clear()
+                anonymousConversations.addAll(rooms.filterNot { it.isGroup })
+                groupConversations.addAll(rooms.filter { it.isGroup })
+            }
+            Screen.CreateGroup -> ChatApi.getInviteCandidates().onSuccess { candidates ->
+                inviteCandidates.clear()
+                inviteCandidates.addAll(candidates.map {
+                    Conversation(
+                        title = it.name,
+                        preview = "모임에 초대할 수 있는 이웃",
+                        time = "",
+                        inviteCandidateId = it.id
+                    )
+                })
+            }
+            else -> Unit
         }
     }
 
@@ -221,7 +254,7 @@ private fun ApptiveApp() {
                                 if (index >= 0) {
                                     conversations[index] = conversation.copy(unread = false)
                                 }
-                                screen = Screen.Chat(conversation.title, conversation.isGroup)
+                                screen = Screen.Chat(conversation.title, conversation.isGroup, conversation.roomId)
                             },
                             onCreateGroup = { screen = Screen.CreateGroup },
                             onProfile = {
@@ -238,9 +271,9 @@ private fun ApptiveApp() {
                             onToggleLike = { id ->
                                 likedFeeds[id] = likedFeeds[id] != true
                             },
-                            loadMyFeeds = { FeedApi.getMyFeeds() },
-                            onMyFeedsLoaded = { remoteFeeds ->
-                                feeds.removeAll { it.isMine }
+                            loadFeeds = { scope -> FeedApi.getFeeds(scope) },
+                            onFeedsLoaded = { remoteFeeds ->
+                                feeds.clear()
                                 feeds.addAll(remoteFeeds.map { it.post })
                                 remoteFeeds.forEach { item ->
                                     likedFeeds[item.post.id] = item.liked
@@ -275,18 +308,15 @@ private fun ApptiveApp() {
                     screen = Screen.Profile
                 },
                 onPublish = { category, title, body ->
-                    feeds.add(
-                        0,
-                        FeedPost(
-                            id = (feeds.maxOfOrNull { it.id } ?: 0) + 1,
-                            category = category,
-                            title = title,
-                            body = body,
-                            accent = Purple,
-                            isMine = true
-                        )
-                    )
-                    screen = Screen.Feed
+                    appScope.launch {
+                        FeedApi.createFeed(category, title, body).onSuccess { result ->
+                            feeds.add(0, result.post)
+                            likedFeeds[result.post.id] = result.liked
+                            screen = Screen.Feed
+                        }.onFailure {
+                            Toast.makeText(context, "피드를 작성하지 못했습니다.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
             )
             is Screen.EditFeed -> {
@@ -313,9 +343,11 @@ private fun ApptiveApp() {
                             screen = Screen.FeedDetail(post.id)
                             if (FeedApi.isConfigured) {
                                 appScope.launch {
+                                    val remoteId = post.remoteId ?: return@launch
+                                    val categoryId = post.categoryId ?: return@launch
                                     FeedApi.updateFeed(
-                                        feedId = post.id,
-                                        categoryId = feedCategoryId(category),
+                                        feedId = remoteId,
+                                        categoryId = categoryId,
                                         title = title,
                                         content = body
                                     ).onFailure {
@@ -347,7 +379,8 @@ private fun ApptiveApp() {
                         Toast.makeText(context, "피드가 삭제되었습니다.", Toast.LENGTH_SHORT).show()
                         if (FeedApi.isConfigured) {
                             appScope.launch {
-                                FeedApi.deleteFeed(post.id).onFailure {
+                                val remoteId = post.remoteId ?: return@launch
+                                FeedApi.deleteFeed(remoteId).onFailure {
                                     Toast.makeText(
                                         context,
                                         "서버에서 피드를 삭제하지 못했습니다.",
@@ -377,12 +410,22 @@ private fun ApptiveApp() {
             is Screen.Chat -> ChatScreen(
                 title = current.title,
                 isGroup = current.isGroup,
+                roomId = current.roomId,
                 onBack = { screen = Screen.Conversations }
             )
             Screen.CreateGroup -> CreateGroupScreen(
-                availablePeople = anonymousConversations,
+                availablePeople = inviteCandidates,
                 onBack = { screen = Screen.Conversations },
-                onCreate = { title -> screen = Screen.Chat(title, isGroup = true) }
+                onCreate = { title, description, candidateIds ->
+                    appScope.launch {
+                        ChatApi.createMeeting(title, description, candidateIds).onSuccess { room ->
+                            groupConversations.add(0, room)
+                            screen = Screen.Chat(room.title, isGroup = true, roomId = room.roomId)
+                        }.onFailure {
+                            Toast.makeText(context, "모임 대화를 만들지 못했습니다.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
             )
             Screen.WriteLetter -> WriteLetterScreen(
                 onHistory = { screen = Screen.LetterHistory },

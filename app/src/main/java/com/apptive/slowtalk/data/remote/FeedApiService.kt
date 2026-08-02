@@ -11,71 +11,72 @@ import retrofit2.http.Path
 import retrofit2.http.Query
 
 interface FeedApiService {
+    @GET("feed-categories")
+    suspend fun getCategories(): ApiEnvelope<List<FeedCategoryDto>>
+
     @GET("feeds")
-    suspend fun getMyFeeds(@Query("scope") scope: String = "mine"): ApiEnvelope<List<MyFeedDto>>
+    suspend fun getFeeds(@Query("scope") scope: String): ApiEnvelope<List<FeedDto>>
+
+    @POST("feeds")
+    suspend fun createFeed(@Body request: FeedCreateRequest): ApiEnvelope<FeedDto>
 
     @PATCH("feeds/{feedId}")
     suspend fun updateFeed(
-        @Path("feedId") feedId: Int,
+        @Path("feedId") feedId: String,
         @Body request: FeedUpdateRequest
-    ): Response<Unit>
+    ): ApiEnvelope<FeedDto>
 
     @DELETE("feeds/{feedId}")
-    suspend fun deleteFeed(@Path("feedId") feedId: Int): Response<Unit>
-
-    @POST("feeds/{feedId}/report")
-    suspend fun reportFeed(@Path("feedId") feedId: Int): Response<Unit>
+    suspend fun deleteFeed(@Path("feedId") feedId: String): Response<Unit>
 
     @POST("feeds/{feedId}/comments")
     suspend fun createComment(
-        @Path("feedId") feedId: Int,
+        @Path("feedId") feedId: String,
         @Body request: CommentContentRequest
-    ): CommentCreateResponse
+    ): ApiEnvelope<CommentDto>
 
-    @PATCH("feeds/{feedId}/comments/{commentId}")
+    @GET("feeds/{feedId}/comments")
+    suspend fun getComments(@Path("feedId") feedId: String): ApiEnvelope<List<CommentDto>>
+
+    @PATCH("comments/{commentId}")
     suspend fun updateComment(
-        @Path("feedId") feedId: Int,
-        @Path("commentId") commentId: Int,
+        @Path("commentId") commentId: String,
         @Body request: CommentContentRequest
-    ): Response<Unit>
+    ): ApiEnvelope<CommentDto>
 
-    @DELETE("feeds/{feedId}/comments/{commentId}")
-    suspend fun deleteComment(
-        @Path("feedId") feedId: Int,
-        @Path("commentId") commentId: Int
-    ): Response<Unit>
-
-    @POST("feeds/{feedId}/comments/{commentId}/report")
-    suspend fun reportComment(
-        @Path("feedId") feedId: Int,
-        @Path("commentId") commentId: Int
-    ): Response<Unit>
+    @DELETE("comments/{commentId}")
+    suspend fun deleteComment(@Path("commentId") commentId: String): Response<Unit>
 }
 
 @Serializable
-data class MyFeedDto(
+data class FeedDto(
     val id: String,
     val categoryId: String,
     val title: String,
     val content: String,
-    val liked: Boolean = false
+    val isMine: Boolean = false,
+    val liked: Boolean = false,
+    val commentCount: Int = 0
 )
 
 @Serializable
-data class FeedCategoryDto(
-    val id: Int,
-    val name: String
+data class FeedCategoryDto(val id: String, val name: String)
+
+@Serializable
+data class FeedCreateRequest(val categoryId: String, val title: String, val content: String)
+
+@Serializable
+data class FeedUpdateRequest(val categoryId: String, val title: String, val content: String)
+
+@Serializable
+data class CommentContentRequest(val content: String, val parentCommentId: String? = null)
+
+@Serializable
+data class CommentDto(
+    val id: String,
+    val feedId: String,
+    val parentCommentId: String? = null,
+    val content: String,
+    val isMine: Boolean = false,
+    val createdAt: String
 )
-
-@Serializable
-data class FeedUpdateRequest(
-    val categoryId: Int,
-    val title: String,
-    val content: String
-)
-
-@Serializable
-data class CommentContentRequest(val content: String)
-
-@Serializable
-data class CommentCreateResponse(val commentId: Int)

@@ -9,7 +9,7 @@ sealed interface Screen {
     data class EditFeed(val feedId: Int) : Screen
     data class FeedDetail(val feedId: Int) : Screen
     data object Conversations : Screen
-    data class Chat(val title: String, val isGroup: Boolean = false) : Screen
+    data class Chat(val title: String, val isGroup: Boolean = false, val roomId: String? = null) : Screen
     data object CreateGroup : Screen
     data object LetterHome : Screen
     data object WriteLetter : Screen
@@ -29,7 +29,9 @@ data class FeedPost(
     val body: String,
     val comments: MutableList<Comment> = mutableListOf(),
     val accent: Color,
-    val isMine: Boolean = false
+    val isMine: Boolean = false,
+    val remoteId: String? = null,
+    val categoryId: String? = null
 )
 
 data class Comment(
@@ -38,7 +40,7 @@ data class Comment(
     val time: String,
     val isMine: Boolean = false,
     val replies: List<Comment> = emptyList(),
-    val id: Int? = null
+    val id: String? = null
 )
 
 data class Conversation(
@@ -47,7 +49,9 @@ data class Conversation(
     val time: String,
     val unread: Boolean = false,
     val isGroup: Boolean = false,
-    val members: Int = 1
+    val members: Int = 1,
+    val roomId: String? = null,
+    val inviteCandidateId: String? = null
 )
 
 data class ChatMessage(

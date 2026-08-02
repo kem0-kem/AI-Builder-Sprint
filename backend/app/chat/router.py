@@ -80,6 +80,14 @@ async def get_room(room_id: UUID, user_id: CurrentUserId, session: Session) -> d
     return success({"id": str(room.id), "type": room.type, "name": room.name})
 
 
+@router.delete("/chat-rooms/{room_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def leave_room(room_id: UUID, user_id: CurrentUserId, session: Session) -> None:
+    """Remove the current user's membership without deleting other participants' history."""
+    participant = await require_participant(session, room_id, user_id)
+    await session.delete(participant)
+    await session.commit()
+
+
 @router.get("/chat-rooms/{room_id}/messages")
 async def list_messages(
     room_id: UUID,

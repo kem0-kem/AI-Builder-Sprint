@@ -86,3 +86,20 @@ async def test_chat_message_is_idempotent_and_updates_read_position(client: Asyn
     )
     assert read.status_code == 200
     assert read.json()["data"] == {"messageId": second.json()["data"]["id"]}
+
+
+async def test_user_can_remove_a_room_from_their_list(client: AsyncClient) -> None:
+    alice = await register(client, "alice-leave@example.com", "Alice")
+    await register(client, "bob-leave@example.com", "Bob")
+    delivery = await client.post(
+        "/api/v1/letters",
+        headers={**alice, "Idempotency-Key": str(uuid4())},
+        json={"content": "hello", "match": True},
+    )
+    room_id = delivery.json()["data"]["chatRoom"]["id"]
+
+    removed = await client.delete(f"/api/v1/chat-rooms/{room_id}", headers=alice)
+    assert removed.status_code == 204
+
+    rooms = await client.get("/api/v1/chat-rooms", headers=alice)
+    assert room_id not in {room["id"] for room in rooms.json()["data"]}

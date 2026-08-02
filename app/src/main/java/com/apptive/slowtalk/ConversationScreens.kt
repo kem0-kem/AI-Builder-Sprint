@@ -1,5 +1,6 @@
 package com.apptive.slowtalk
 
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,17 +46,21 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 
 @Composable
 fun ConversationListScreen(
@@ -180,7 +185,7 @@ private fun ConversationRow(item: Conversation, onClick: () -> Unit) {
 }
 
 @Composable
-fun ChatScreen(title: String, isGroup: Boolean, onBack: () -> Unit) {
+fun ChatScreen(title: String, isGroup: Boolean, roomId: String?, onBack: () -> Unit) {
     val messages = remember {
         mutableStateListOf(
             ChatMessage(if (isGroup) "이웃 01" else title, "안녕하세요 :)\n오늘 날씨가 정말 좋네요.", "15:40", false),
@@ -190,6 +195,16 @@ fun ChatScreen(title: String, isGroup: Boolean, onBack: () -> Unit) {
         )
     }
     var textState by remember { mutableStateOf(TextFieldValue("")) }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    LaunchedEffect(roomId) {
+        messages.clear()
+        if (roomId != null) {
+            ChatApi.getMessages(roomId).onSuccess { messages.addAll(it) }.onFailure {
+                Toast.makeText(context, "대화를 불러오지 못했습니다.", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
     PaperBackground {
         Scaffold(
             containerColor = Color.Transparent,
@@ -248,8 +263,23 @@ fun ChatScreen(title: String, isGroup: Boolean, onBack: () -> Unit) {
                         )
                         IconButton(onClick = {
                             if (textState.text.isNotBlank()) {
-                                messages.add(ChatMessage("나", textState.text.trim(), "지금", true))
+                                val content = textState.text.trim()
+                                messages.add(ChatMessage("나", content, "지금", true))
                                 textState = TextFieldValue("")
+                                if (roomId == null) {
+                                    Toast.makeText(context, "서버 대화방이 아닙니다.", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    scope.launch {
+                                        ChatApi.sendMessage(roomId, content).onSuccess { message ->
+                                            val last = messages.lastOrNull()
+                                            if (last?.body == content && last.mine) messages.remove(last)
+                                            messages.add(message)
+                                        }.onFailure {
+                                            messages.removeAll { it.body == content && it.mine }
+                                            Toast.makeText(context, "메시지를 전송하지 못했습니다.", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
                             }
                         }) { Icon(Icons.Outlined.Send, "전송", tint = Purple) }
                     }
@@ -315,7 +345,7 @@ private fun MessageBubble(message: ChatMessage) {
 fun CreateGroupScreen(
     availablePeople: List<Conversation>,
     onBack: () -> Unit,
-    onCreate: (String) -> Unit
+    onCreate: (String, String, List<String>) -> Unit
 ) {
     var titleState by remember { mutableStateOf(TextFieldValue("")) }
     var introState by remember { mutableStateOf(TextFieldValue("")) }
@@ -380,7 +410,12 @@ fun CreateGroupScreen(
                 }
                 item {
                     Button(
-                        onClick = { onCreate(titleState.text.ifBlank { "새로운 모임" }) },
+                        onClick = {
+                            val candidateIds = availablePeople
+                                .filter { it.title in selectedPeople }
+                                .mapNotNull { it.inviteCandidateId }
+                            onCreate(titleState.text, introState.text, candidateIds)
+                        },
                         enabled = titleState.text.isNotBlank() &&
                             introState.text.isNotBlank() &&
                             selectedPeople.isNotEmpty(),

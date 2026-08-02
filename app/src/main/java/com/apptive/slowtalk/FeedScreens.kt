@@ -90,8 +90,8 @@ fun FeedScreen(
     onOpenFeed: (Int) -> Unit,
     isLiked: (Int) -> Boolean,
     onToggleLike: (Int) -> Unit,
-    loadMyFeeds: suspend () -> Result<List<MyFeedResult>>,
-    onMyFeedsLoaded: (List<MyFeedResult>) -> Unit,
+    loadFeeds: suspend (String) -> Result<List<FeedResult>>,
+    onFeedsLoaded: (List<FeedResult>) -> Unit,
     onWrite: () -> Unit,
     onProfile: () -> Unit,
     onTab: (MainTab) -> Unit,
@@ -99,32 +99,28 @@ fun FeedScreen(
 ) {
     var isRefreshing by remember { mutableStateOf(false) }
     var selectedIndex by remember { mutableStateOf(FeedIndex.ALL) }
-    var isMyFeedsLoading by remember { mutableStateOf(false) }
-    var myFeedsLoadFailed by remember { mutableStateOf(false) }
+    var isFeedsLoading by remember { mutableStateOf(false) }
+    var feedsLoadFailed by remember { mutableStateOf(false) }
     val refreshScope = rememberCoroutineScope()
-    val visibleFeeds = when (selectedIndex) {
-        FeedIndex.ALL -> feeds.filterNot { it.isMine }
-        FeedIndex.MINE -> feeds.filter { it.isMine }
-    }
+    val visibleFeeds = feeds
 
-    suspend fun refreshMyFeeds() {
-        isMyFeedsLoading = true
-        loadMyFeeds().fold(
+    suspend fun refreshFeeds() {
+        isFeedsLoading = true
+        val scope = if (selectedIndex == FeedIndex.MINE) "mine" else "all"
+        loadFeeds(scope).fold(
             onSuccess = {
-                onMyFeedsLoaded(it)
-                myFeedsLoadFailed = false
+                onFeedsLoaded(it)
+                feedsLoadFailed = false
             },
             onFailure = {
-                myFeedsLoadFailed = true
+                feedsLoadFailed = true
             }
         )
-        isMyFeedsLoading = false
+        isFeedsLoading = false
     }
 
     LaunchedEffect(selectedIndex) {
-        if (selectedIndex == FeedIndex.MINE) {
-            refreshMyFeeds()
-        }
+        refreshFeeds()
     }
 
     PaperBackground {
@@ -146,11 +142,7 @@ fun FeedScreen(
                     if (!isRefreshing) {
                         refreshScope.launch {
                             isRefreshing = true
-                            if (selectedIndex == FeedIndex.MINE) {
-                                refreshMyFeeds()
-                            } else {
-                                delay(700)
-                            }
+                            refreshFeeds()
                             isRefreshing = false
                         }
                     }
@@ -175,10 +167,10 @@ fun FeedScreen(
                     if (visibleFeeds.isEmpty()) {
                         item {
                             EmptyMyFeedMessage(
-                                loading = selectedIndex == FeedIndex.MINE && isMyFeedsLoading,
-                                loadFailed = selectedIndex == FeedIndex.MINE && myFeedsLoadFailed,
+                                loading = isFeedsLoading,
+                                loadFailed = feedsLoadFailed,
                                 onRetry = {
-                                    refreshScope.launch { refreshMyFeeds() }
+                                    refreshScope.launch { refreshFeeds() }
                                 }
                             )
                         }
@@ -803,7 +795,7 @@ fun FeedDetailScreen(
     onBack: () -> Unit
 ) {
     var comment by remember { mutableStateOf("") }
-    var comments by remember { mutableStateOf(post.comments.toList()) }
+    var comments by remember(post.remoteId) { mutableStateOf(post.comments.toList()) }
     var replyTarget by remember { mutableStateOf<Pair<Int, String>?>(null) }
     var isRefreshing by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
@@ -824,6 +816,15 @@ fun FeedDetailScreen(
         post.comments.clear()
         post.comments.addAll(updated)
     }
+
+    suspend fun refreshComments() {
+        val feedId = post.remoteId ?: return
+        FeedApi.getComments(feedId).onSuccess(::commitComments).onFailure {
+            Toast.makeText(context, "댓글을 불러오지 못했습니다.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    LaunchedEffect(post.remoteId) { refreshComments() }
 
     fun editCommentAt(parentIndex: Int, replyIndex: Int?, content: String) {
         val target = if (replyIndex == null) {
@@ -847,7 +848,7 @@ fun FeedDetailScreen(
         commitComments(updated)
         target.id?.let { commentId ->
             refreshScope.launch {
-                FeedApi.updateComment(post.id, commentId, content).onFailure {
+                FeedApi.updateComment(commentId, content).onFailure {
                     Toast.makeText(context, "댓글 수정을 서버에 반영하지 못했습니다.", Toast.LENGTH_SHORT).show()
                 }
             }
@@ -876,7 +877,7 @@ fun FeedDetailScreen(
         commitComments(updated)
         target.id?.let { commentId ->
             refreshScope.launch {
-                FeedApi.deleteComment(post.id, commentId).onFailure {
+                FeedApi.deleteComment(commentId).onFailure {
                     Toast.makeText(context, "댓글을 서버에서 삭제하지 못했습니다.", Toast.LENGTH_SHORT).show()
                 }
             }
@@ -904,11 +905,11 @@ fun FeedDetailScreen(
             if (index != parentIndex) {
                 parent
             } else if (replyIndex == null) {
-                parent.copy(id = commentId)
+                parent.copy(id = FeedApi.commentRemoteId(commentId))
             } else {
                 parent.copy(
                     replies = parent.replies.mapIndexed { childIndex, reply ->
-                        if (childIndex == replyIndex) reply.copy(id = commentId) else reply
+                        if (childIndex == replyIndex) reply.copy(id = FeedApi.commentRemoteId(commentId)) else reply
                     }
                 )
             }
@@ -1072,7 +1073,7 @@ fun FeedDetailScreen(
                                             updatedComments[it].replies.lastIndex
                                         }
                                         refreshScope.launch {
-                                            FeedApi.createComment(post.id, message)
+                                            FeedApi.createCommentByLocalId(post.id, message)
                                                 .onSuccess { commentId ->
                                                     assignCommentId(
                                                         createdParentIndex,
@@ -1110,8 +1111,7 @@ fun FeedDetailScreen(
                     if (!isRefreshing) {
                         refreshScope.launch {
                             isRefreshing = true
-                            delay(700)
-                            comments = post.comments.toList()
+                            refreshComments()
                             isRefreshing = false
                         }
                     }
