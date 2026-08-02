@@ -85,6 +85,9 @@ def test_content_hash_normalizes_nfc_newlines_and_outer_whitespace() -> None:
 def test_cipher_rejects_invalid_key_material() -> None:
     with pytest.raises(ValueError, match="base64"):
         CommandCipher("not base64!")
+    canonical = base64.b64encode(b"k" * 32).decode("ascii")
+    with pytest.raises(ValueError, match="canonical base64"):
+        CommandCipher(canonical[:-2] + "t=")
     with pytest.raises(ValueError, match="32 bytes"):
         CommandCipher(base64.b64encode(b"short").decode("ascii"))
 

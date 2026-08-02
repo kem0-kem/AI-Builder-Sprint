@@ -4,6 +4,8 @@ from typing import Literal
 from pydantic import AnyHttpUrl, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.moderation.crypto import decode_moderation_encryption_key
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -13,6 +15,8 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "SlowTalk API"
+    app_environment: Literal["development", "test", "production"] = "development"
+    allow_development_moderation_fallback: bool = False
     api_prefix: str = "/api/v1"
     database_url: str = "postgresql+asyncpg://slowtalk:slowtalk@localhost:5432/slowtalk"
     jwt_secret: str = Field("development-only-secret-change-me", min_length=32)
@@ -54,6 +58,15 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "enforce moderation requires provider, encryption, and confidence configuration"
                 )
+            assert self.moderation_encryption_key is not None
+            try:
+                decode_moderation_encryption_key(
+                    self.moderation_encryption_key.get_secret_value()
+                )
+            except ValueError:
+                raise ValueError(
+                    "enforce moderation encryption key is invalid"
+                ) from None
         if (
             self.moderation_allow_confidence is not None
             and self.moderation_block_confidence is not None
@@ -65,6 +78,51 @@ class Settings(BaseSettings):
             if not token.strip() or len(token.encode("utf-8")) < 32:
                 raise ValueError("internal moderation token must be at least 32 UTF-8 bytes")
         return self
+
+
+def moderation_configuration_complete(settings: Settings) -> bool:
+    provider_values = (
+        settings.upstage_api_key.get_secret_value()
+        if settings.upstage_api_key is not None
+        else None,
+        settings.upstage_chat_model,
+        settings.moderation_allow_confidence,
+        settings.moderation_block_confidence,
+    )
+    if any(
+        value is None or (isinstance(value, str) and not value.strip())
+        for value in provider_values
+    ):
+        return False
+
+    if settings.moderation_mode == "shadow":
+        return True
+
+    enforce_values = (
+        settings.moderation_encryption_key.get_secret_value()
+        if settings.moderation_encryption_key is not None
+        else None,
+        settings.content_hash_pepper.get_secret_value()
+        if settings.content_hash_pepper is not None
+        else None,
+        settings.internal_moderation_token.get_secret_value()
+        if settings.internal_moderation_token is not None
+        else None,
+    )
+    if any(
+        value is None or (isinstance(value, str) and not value.strip())
+        for value in enforce_values
+    ):
+        return False
+
+    assert settings.moderation_encryption_key is not None
+    try:
+        decode_moderation_encryption_key(
+            settings.moderation_encryption_key.get_secret_value()
+        )
+    except ValueError:
+        return False
+    return True
 
 
 @lru_cache

@@ -26,11 +26,20 @@ python scripts/export_openapi.py openapi/slowtalk-v1.json
 
 ## Moderation rollout
 
-- `MODERATION_MODE=shadow`: when provider and storage settings are configured, records
-  moderation decisions and metrics while preserving the existing successful API behavior.
+- `MODERATION_MODE=shadow`: when `UPSTAGE_API_KEY`, `UPSTAGE_CHAT_MODEL`,
+  `MODERATION_ALLOW_CONFIDENCE`, and `MODERATION_BLOCK_CONFIDENCE` are configured,
+  classifies content and records only bounded metrics without persisting moderation
+  submissions, decisions, retries, encrypted commands, or replay state; all outcomes
+  preserve the existing successful API behavior. Blank optional template values make
+  moderation configuration incomplete; malformed values fail settings validation.
 - `MODERATION_MODE=enforce`: requires all provider, encryption, confidence, and internal
   token settings; pending content returns `202` and blocked content returns `422`.
-- `/api/v1/health` is liveness-only. `/api/v1/ready` reports the validated moderation mode.
+- `/api/v1/health` is liveness-only. `/api/v1/ready` returns `503` when the selected
+  moderation mode is incompletely configured. Set
+  `ALLOW_DEVELOPMENT_MODERATION_FALLBACK=true` to opt into a `200` fallback only when
+  `APP_ENVIRONMENT=development` or `APP_ENVIRONMENT=test`; the flag never bypasses
+  incomplete production configuration. Readiness reports only the mode, configuration
+  completeness, and fallback status, and does not probe the moderation provider.
 - Metrics use only content type, decision, policy category, and bounded latency buckets.
 
 피드 작성은 OCR을 제공하지 않습니다. `/feeds/feedback`은 제목과 본문 텍스트만 받습니다.

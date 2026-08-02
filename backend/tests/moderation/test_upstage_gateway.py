@@ -1,4 +1,6 @@
+import base64
 import json
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -16,6 +18,9 @@ from app.moderation.schemas import (
 )
 from app.moderation.upstage_gateway import UpstageModerationGateway
 
+VALID_ENFORCE_KEY = base64.b64encode(b"k" * 32).decode("ascii")
+NONCANONICAL_ENFORCE_KEY = VALID_ENFORCE_KEY[:-2] + "t="
+
 
 def build_gateway(client: httpx.AsyncClient) -> UpstageModerationGateway:
     return UpstageModerationGateway(
@@ -31,6 +36,39 @@ def upstage_response(content: object, *, request_id: str = "request-123") -> htt
         json={"choices": [{"message": {"content": content}}]},
         headers={"x-request-id": request_id},
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "client_error",
+    [
+        TypeError("client implementation type bug"),
+        ValueError("client implementation value bug"),
+        AttributeError("client implementation attribute bug"),
+        KeyError("client implementation key bug"),
+        AssertionError("client implementation assertion bug"),
+    ],
+)
+async def test_gateway_propagates_unexpected_client_post_errors(
+    client_error: Exception,
+) -> None:
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.post.side_effect = client_error
+
+    with pytest.raises(type(client_error)) as caught:
+        await build_gateway(client).classify(ContentType.FEED, "private-input-marker")
+
+    assert caught.value is client_error
+
+
+@pytest.mark.asyncio
+async def test_gateway_maps_request_encoding_failure_to_provider_unavailable() -> None:
+    async with httpx.AsyncClient(base_url="https://api.upstage.ai/v1") as client:
+        with pytest.raises(ModerationProviderUnavailable) as caught:
+            await build_gateway(client).classify(ContentType.FEED, "\ud800")
+
+    assert str(caught.value) == "moderation provider unavailable"
+    assert caught.value.__cause__ is None
 
 
 @pytest.mark.asyncio
@@ -87,6 +125,22 @@ async def test_gateway_parses_all_supported_categories() -> None:
         ModerationCategory.PERSONAL_DATA,
     }
     assert assessment.severity is Severity.HIGH
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_gateway_maps_malformed_response_json_to_provider_unavailable() -> None:
+    respx.post("https://api.upstage.ai/v1/chat/completions").mock(
+        return_value=httpx.Response(200, content=b"not-json")
+    )
+    async with httpx.AsyncClient(base_url="https://api.upstage.ai/v1") as client:
+        with pytest.raises(ModerationProviderUnavailable) as caught:
+            await build_gateway(client).classify(
+                ContentType.FEED, "private-input-marker"
+            )
+
+    assert str(caught.value) == "moderation provider unavailable"
+    assert caught.value.__cause__ is None
 
 
 @pytest.mark.asyncio
@@ -342,13 +396,24 @@ def test_enforce_mode_requires_provider_and_encryption_secrets() -> None:
         Settings(_env_file=None, moderation_mode="enforce")
 
 
+@pytest.mark.parametrize("environment_name", ("MODERATION_MODE", "JWT_SECRET"))
+def test_blank_core_environment_settings_fail_validation(
+    monkeypatch: pytest.MonkeyPatch,
+    environment_name: str,
+) -> None:
+    monkeypatch.setenv(environment_name, "")
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
 def test_enforce_mode_accepts_complete_moderation_configuration() -> None:
     settings = Settings(
         _env_file=None,
         moderation_mode="enforce",
         upstage_api_key="test-api-key",
         upstage_chat_model="configured-solar-model",
-        moderation_encryption_key="test-encryption-key",
+        moderation_encryption_key=VALID_ENFORCE_KEY,
         content_hash_pepper="test-content-pepper",
         internal_moderation_token="i" * 32,
         moderation_allow_confidence=0.80,
@@ -358,6 +423,37 @@ def test_enforce_mode_accepts_complete_moderation_configuration() -> None:
     assert settings.moderation_mode == "enforce"
     assert settings.upstage_api_key is not None
     assert settings.upstage_api_key.get_secret_value() == "test-api-key"
+
+
+@pytest.mark.parametrize(
+    "invalid_key",
+    (
+        "not-base64!",
+        NONCANONICAL_ENFORCE_KEY,
+        base64.b64encode(b"short").decode("ascii"),
+    ),
+    ids=("non-base64", "noncanonical", "wrong-length"),
+)
+def test_enforce_mode_rejects_invalid_encryption_keys_safely(
+    invalid_key: str,
+) -> None:
+    with pytest.raises(
+        ValidationError, match="enforce moderation encryption key is invalid"
+    ) as caught:
+        Settings(
+            _env_file=None,
+            moderation_mode="enforce",
+            upstage_api_key="test-api-key",
+            upstage_chat_model="configured-solar-model",
+            moderation_encryption_key=invalid_key,
+            content_hash_pepper="test-content-pepper",
+            internal_moderation_token="i" * 32,
+            moderation_allow_confidence=0.80,
+            moderation_block_confidence=0.90,
+        )
+
+    rendered_error = str(caught.value) + repr(caught.value)
+    assert invalid_key not in rendered_error
 
 
 def test_moderation_confidence_thresholds_must_be_ordered() -> None:
@@ -402,7 +498,7 @@ def test_enforce_mode_rejects_whitespace_only_required_values(field: str) -> Non
         "moderation_mode": "enforce",
         "upstage_api_key": "test-api-key",
         "upstage_chat_model": "configured-solar-model",
-        "moderation_encryption_key": "test-encryption-key",
+        "moderation_encryption_key": VALID_ENFORCE_KEY,
         "content_hash_pepper": "test-content-pepper",
         "internal_moderation_token": "i" * 32,
         "moderation_allow_confidence": 0.80,

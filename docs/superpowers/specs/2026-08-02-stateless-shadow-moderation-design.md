@@ -98,3 +98,13 @@ Provider key, model 및 confidence threshold는 판정 일관성을 위해 필�
 - Prometheus/OpenTelemetry exporter 도입
 - Replay `EXECUTING` claim 및 optimistic versioning
 - Encryption key rotation 또는 per-submission AAD 변경
+
+## Final Review Amendment (2026-08-02)
+
+The completed branch review and GPT-5.6 Sol Pro review exposed three plan defects. The following decisions supersede conflicting text above:
+
+1. **One effective-decision policy.** Provider/local classification produces a raw assessment. A storage-free policy step applies the configured allow/block confidence thresholds. Shadow metrics and enforce side effects must use the same effective decision; only persistence and API behavior differ by mode.
+2. **Narrow exception boundary.** `ModerationProviderUnavailable` from the gateway and explicit response-validation/protocol failures may become `ModerationClassificationUnavailable`. `AttributeError`, `TypeError`, `KeyError`, and other programmer errors raised inside `gateway.classify(...)` must not be converted to provider failure. They surface in enforce and in development/test shadow execution.
+3. **Visible configuration fallback.** A shared completeness check defines whether moderation is configured. Readiness must not silently report a normal configured state when shadow is disabled by missing/blank provider settings. Development/test fallback is allowed only through an explicit setting and is reported as `fallbackActive=true`; otherwise incomplete configuration returns not-ready. Runtime provider failure remains fail-open in shadow and is distinct from configuration fallback.
+
+These changes do not add persistent shadow state, new unbounded metrics, or a production monitoring backend. A future environment-specific startup fail-fast/expected-mode policy remains separate from this minimal correction; readiness is the enforcement point in this change.

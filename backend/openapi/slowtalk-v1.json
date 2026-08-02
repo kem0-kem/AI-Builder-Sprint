@@ -47,6 +47,9 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Moderation configuration is incomplete"
           }
         }
       }

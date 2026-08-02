@@ -298,3 +298,37 @@ git commit -m "docs(moderation): document stateless shadow rollout"
 ```
 
 Skip this commit only when both files are byte-for-byte unchanged.
+
+---
+
+### Final Review Fixes
+
+The whole-branch review found plan defects that must be corrected before integration. The design amendment is authoritative.
+
+#### Task 5: Share Effective Confidence Policy
+
+- Add a storage-free policy resolver for confidence thresholds.
+- Use it in both shadow metrics and enforce disposition without changing enforce API/storage behavior.
+- Pass thresholds into the shadow orchestrator from dependency construction.
+- Cover high/low/boundary ALLOW and BLOCK parity, plus shadow zero-persistence behavior.
+
+#### Task 6: Narrow Gateway Exception Conversion
+
+- Catch `ModerationProviderUnavailable` only around the gateway await.
+- Convert malformed returned assessments only at the explicit validation boundary.
+- Prove gateway-internal `AttributeError`, `TypeError`, `KeyError`, and `AssertionError` are not reported as provider failures.
+- Preserve typed provider/protocol failure behavior without echoing submitted content.
+
+#### Task 7: Make Shadow Configuration Fallback Visible
+
+- Centralize moderation configuration completeness.
+- Add an explicit development/test fallback opt-in.
+- Return not-ready for incomplete shadow configuration unless that opt-in is enabled.
+- When explicitly enabled, return ready with `fallbackActive=true`; configured moderation returns `fallbackActive=false`.
+- Keep runtime provider failure separate from configuration fallback and preserve public moderated-write behavior.
+- Regenerate and verify OpenAPI.
+
+#### Task 8: Repeat Full Quality Gate and Whole-Branch Review
+
+- Run Ruff, strict mypy, complete pytest, OpenAPI regeneration/equality, diff checks, and the six privacy constraints fresh.
+- Repeat the whole-branch senior review. Do not integrate with Critical or Important findings outstanding.
