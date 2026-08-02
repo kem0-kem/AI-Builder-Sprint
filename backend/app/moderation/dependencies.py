@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 
 from app.auth.dependencies import Session
 from app.common.responses import success
-from app.core.config import get_settings
+from app.core.config import get_settings, moderation_configuration_complete
 from app.core.errors import ApiError
 from app.moderation.crypto import CommandCipher
 from app.moderation.metrics import moderation_metrics
@@ -36,25 +36,9 @@ async def get_moderation_orchestrator(
     | None
 ]:
     settings = get_settings()
-    required = (
-        settings.upstage_api_key,
-        settings.upstage_chat_model,
-        settings.moderation_allow_confidence,
-        settings.moderation_block_confidence,
-    )
-    if any(value is None for value in required):
+    if not moderation_configuration_complete(settings):
         yield None
         return
-
-    if settings.moderation_mode == "shadow":
-        assert settings.upstage_api_key is not None
-        assert settings.upstage_chat_model is not None
-        if (
-            not settings.upstage_api_key.get_secret_value().strip()
-            or not settings.upstage_chat_model.strip()
-        ):
-            yield None
-            return
 
     assert settings.upstage_api_key is not None
     assert settings.upstage_chat_model is not None
@@ -77,12 +61,8 @@ async def get_moderation_orchestrator(
             )
             return
 
-        if (
-            settings.moderation_encryption_key is None
-            or settings.content_hash_pepper is None
-        ):
-            yield None
-            return
+        assert settings.moderation_encryption_key is not None
+        assert settings.content_hash_pepper is not None
         repository = ModerationRepository(
             session,
             CommandCipher(settings.moderation_encryption_key.get_secret_value()),

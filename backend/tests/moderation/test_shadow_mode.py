@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.ai.gateway import get_writing_assistant
-from app.core.config import Settings
+from app.core.config import Settings, moderation_configuration_complete
 from app.events.outbox import OutboxEvent
 from app.feeds.models import Feed
 from app.moderation import dependencies
@@ -186,6 +186,69 @@ async def test_blank_shadow_provider_config_uses_incomplete_fallback(
     assert orchestrator is None
     assert shadow_harness.gateway_builds == []
     assert shadow_harness.gateway.calls == []
+
+
+@pytest.mark.parametrize(
+    ("overrides", "expected"),
+    (
+        ({"upstage_api_key": SecretStr(" \t ")}, False),
+        ({"upstage_chat_model": " \t "}, False),
+        ({"moderation_allow_confidence": None}, False),
+        ({"moderation_block_confidence": None}, False),
+        ({}, True),
+    ),
+)
+def test_shadow_configuration_completeness(
+    overrides: dict[str, object],
+    expected: bool,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        upstage_api_key=SecretStr("shadow-provider-key"),
+        upstage_chat_model="shadow-model",
+        moderation_mode="shadow",
+        moderation_allow_confidence=0.7,
+        moderation_block_confidence=0.9,
+    )
+    for field, value in overrides.items():
+        setattr(settings, field, value)
+
+    assert moderation_configuration_complete(settings) is expected
+
+
+def test_complete_enforce_configuration_is_complete() -> None:
+    settings = Settings(
+        _env_file=None,
+        upstage_api_key=SecretStr("provider-key"),
+        upstage_chat_model="moderation-model",
+        moderation_mode="enforce",
+        moderation_allow_confidence=0.7,
+        moderation_block_confidence=0.9,
+        moderation_encryption_key=SecretStr("encryption-key"),
+        content_hash_pepper=SecretStr("content-hash-pepper"),
+        internal_moderation_token=SecretStr("t" * 32),
+    )
+
+    assert moderation_configuration_complete(settings) is True
+
+
+async def test_dependency_and_completeness_share_incomplete_result(
+    session_factory: async_sessionmaker[AsyncSession],
+    shadow_harness: ShadowHarness,
+) -> None:
+    shadow_harness.settings.moderation_allow_confidence = None
+
+    async with session_factory() as session:
+        dependency = cast(
+            AsyncGenerator[object, None],
+            dependencies.get_moderation_orchestrator(session),
+        )
+        orchestrator = await anext(dependency)
+        await dependency.aclose()
+
+    assert moderation_configuration_complete(shadow_harness.settings) is False
+    assert orchestrator is None
+    assert shadow_harness.gateway_builds == []
 
 
 async def test_shadow_block_persists_feed_only(

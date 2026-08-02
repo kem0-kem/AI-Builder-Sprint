@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "SlowTalk API"
+    app_environment: Literal["development", "test", "production"] = "development"
+    allow_development_moderation_fallback: bool = False
     api_prefix: str = "/api/v1"
     database_url: str = "postgresql+asyncpg://slowtalk:slowtalk@localhost:5432/slowtalk"
     jwt_secret: str = Field("development-only-secret-change-me", min_length=32)
@@ -65,6 +67,41 @@ class Settings(BaseSettings):
             if not token.strip() or len(token.encode("utf-8")) < 32:
                 raise ValueError("internal moderation token must be at least 32 UTF-8 bytes")
         return self
+
+
+def moderation_configuration_complete(settings: Settings) -> bool:
+    provider_values = (
+        settings.upstage_api_key.get_secret_value()
+        if settings.upstage_api_key is not None
+        else None,
+        settings.upstage_chat_model,
+        settings.moderation_allow_confidence,
+        settings.moderation_block_confidence,
+    )
+    if any(
+        value is None or (isinstance(value, str) and not value.strip())
+        for value in provider_values
+    ):
+        return False
+
+    if settings.moderation_mode == "shadow":
+        return True
+
+    enforce_values = (
+        settings.moderation_encryption_key.get_secret_value()
+        if settings.moderation_encryption_key is not None
+        else None,
+        settings.content_hash_pepper.get_secret_value()
+        if settings.content_hash_pepper is not None
+        else None,
+        settings.internal_moderation_token.get_secret_value()
+        if settings.internal_moderation_token is not None
+        else None,
+    )
+    return not any(
+        value is None or (isinstance(value, str) and not value.strip())
+        for value in enforce_values
+    )
 
 
 @lru_cache
