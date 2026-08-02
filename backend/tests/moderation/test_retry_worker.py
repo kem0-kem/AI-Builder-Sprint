@@ -3,6 +3,7 @@ import traceback
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
+import pytest
 from sqlalchemy import select
 
 from app.events.outbox import OutboxEvent
@@ -12,6 +13,7 @@ from app.moderation.command_handlers import (
 )
 from app.moderation.crypto import CommandCipher
 from app.moderation.gateway import ModerationProviderUnavailable
+from app.moderation.metrics import moderation_metrics
 from app.moderation.models import SubmissionStatus
 from app.moderation.repository import ModerationCommand, ModerationRepository
 from app.moderation.schemas import (
@@ -169,6 +171,42 @@ async def test_three_worker_failures_use_five_thirty_then_manual(session_factory
         assert len(events) == 3
 
 
+@pytest.mark.parametrize(
+    "gateway_error",
+    [
+        AttributeError("gateway attribute bug"),
+        TypeError("gateway type bug"),
+        KeyError("gateway key bug"),
+        AssertionError("gateway assertion bug"),
+        RuntimeError("gateway runtime bug"),
+    ],
+)
+async def test_gateway_programmer_errors_propagate_without_state_mutation(
+    session_factory, gateway_error: Exception
+) -> None:
+    async with session_factory() as session:
+        repo = repository(session)
+        submission = await pending(repo)
+        initial_next_attempt = submission.next_attempt_at
+        retries_before = moderation_metrics.retries.copy()
+        manual_reviews_before = moderation_metrics.manual_reviews.copy()
+
+        with pytest.raises(type(gateway_error)) as caught:
+            await worker(
+                StubGateway(gateway_error), repo, ModeratedCommandRegistry()
+            ).process(submission.id, now=submission.next_attempt_at)
+
+        current = await repo.get(submission.id)
+        assert caught.value is gateway_error
+        assert current is not None
+        assert current.status is SubmissionStatus.PENDING_REVIEW
+        assert current.attempt_count == 0
+        assert current.next_attempt_at.replace(tzinfo=UTC) == initial_next_attempt
+        assert await repo.latest_decision(submission.id) is None
+        assert moderation_metrics.retries == retries_before
+        assert moderation_metrics.manual_reviews == manual_reviews_before
+
+
 async def test_automatic_worker_never_resolves_manual_review(session_factory) -> None:
     class CountingGateway(StubGateway):
         calls = 0
@@ -316,7 +354,7 @@ async def test_malformed_custom_assessment_is_provider_failure_without_echo(
 
     class Malformed:
         def model_dump(self):
-            raise RuntimeError(marker)
+            raise TypeError(marker)
 
     async with session_factory() as session:
         repo = repository(session)

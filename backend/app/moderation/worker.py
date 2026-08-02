@@ -1,9 +1,11 @@
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+from pydantic import ValidationError
+
 from app.core.errors import ApiError
 from app.moderation.command_handlers import ModeratedCommandRegistry
-from app.moderation.gateway import ModerationGateway
+from app.moderation.gateway import ModerationGateway, ModerationProviderUnavailable
 from app.moderation.local_rules import LocalRuleEngine
 from app.moderation.metrics import moderation_metrics
 from app.moderation.models import ContentSubmission, SubmissionStatus
@@ -80,8 +82,13 @@ class ModerationRetryWorker:
 
         try:
             untrusted = await self._gateway.classify(submission.content_type, text)
+        except ModerationProviderUnavailable:
+            await self._provider_failure(submission, now=current_time, assessment=None)
+            return
+
+        try:
             provider = ModerationAssessment.model_validate(untrusted.model_dump())
-        except Exception:
+        except (AttributeError, TypeError, ValidationError):
             await self._provider_failure(submission, now=current_time, assessment=None)
             return
 
