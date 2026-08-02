@@ -7,7 +7,7 @@ from sqlalchemy import and_, select
 from app.auth.dependencies import Session
 from app.auth.models import User
 from app.chat.models import ChatMessage, ChatParticipant, ChatRoom
-from app.events.outbox import OutboxEvent
+from app.events.outbox import OutboxEvent, OutboxRepository
 from app.letters.models import IdempotencyRecord, Letter, MailboxEntry, UserBlock
 from app.letters.schemas import LetterCreate
 
@@ -108,6 +108,14 @@ class LetterCommandHandler:
                     aggregate_id=room.id,
                     payload=json.dumps({"messageId": str(message.id), "roomId": str(room.id)}),
                 )
+            )
+            await OutboxRepository(self._session).add(
+                "letter.embedding.requested",
+                letter.id,
+                {
+                    "letterId": str(letter.id),
+                    "senderId": str(owner_id),
+                },
             )
         result: dict[str, object] = {
             "letter": letter_view(letter, owner_id),
