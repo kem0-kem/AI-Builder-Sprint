@@ -46,6 +46,16 @@ async def get_moderation_orchestrator(
         yield None
         return
 
+    if settings.moderation_mode == "shadow":
+        assert settings.upstage_api_key is not None
+        assert settings.upstage_chat_model is not None
+        if (
+            not settings.upstage_api_key.get_secret_value().strip()
+            or not settings.upstage_chat_model.strip()
+        ):
+            yield None
+            return
+
     assert settings.upstage_api_key is not None
     assert settings.upstage_chat_model is not None
     assert settings.moderation_allow_confidence is not None

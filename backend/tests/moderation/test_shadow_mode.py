@@ -51,6 +51,7 @@ class ShadowHarness:
     settings: Settings
     gateway: StubGateway
     metrics: ModerationMetrics
+    gateway_builds: list[dict[str, object]]
 
 
 def assessment(decision: ModerationDecision) -> ModerationAssessment:
@@ -83,8 +84,10 @@ def shadow_harness(monkeypatch: pytest.MonkeyPatch) -> ShadowHarness:
     )
     gateway = StubGateway(assessment(ModerationDecision.ALLOW))
     metrics = ModerationMetrics()
+    gateway_builds: list[dict[str, object]] = []
 
     def gateway_factory(**_kwargs: object) -> StubGateway:
+        gateway_builds.append(_kwargs)
         return gateway
 
     def forbidden_storage_dependency(*_args: object, **_kwargs: object) -> None:
@@ -97,7 +100,12 @@ def shadow_harness(monkeypatch: pytest.MonkeyPatch) -> ShadowHarness:
         dependencies, "ModerationRepository", forbidden_storage_dependency
     )
     monkeypatch.setattr(dependencies, "CommandCipher", forbidden_storage_dependency)
-    return ShadowHarness(settings=settings, gateway=gateway, metrics=metrics)
+    return ShadowHarness(
+        settings=settings,
+        gateway=gateway,
+        metrics=metrics,
+        gateway_builds=gateway_builds,
+    )
 
 
 async def count_rows(
@@ -150,6 +158,34 @@ async def test_shadow_dependency_needs_no_crypto_or_storage(
         await dependency.aclose()
 
     assert isinstance(orchestrator, ShadowModerationOrchestrator)
+
+
+@pytest.mark.parametrize(
+    ("field", "blank_value"),
+    (
+        ("upstage_api_key", SecretStr(" \t ")),
+        ("upstage_chat_model", " \t "),
+    ),
+)
+async def test_blank_shadow_provider_config_uses_incomplete_fallback(
+    session_factory: async_sessionmaker[AsyncSession],
+    shadow_harness: ShadowHarness,
+    field: str,
+    blank_value: object,
+) -> None:
+    setattr(shadow_harness.settings, field, blank_value)
+
+    async with session_factory() as session:
+        dependency = cast(
+            AsyncGenerator[object, None],
+            dependencies.get_moderation_orchestrator(session),
+        )
+        orchestrator = await anext(dependency)
+        await dependency.aclose()
+
+    assert orchestrator is None
+    assert shadow_harness.gateway_builds == []
+    assert shadow_harness.gateway.calls == []
 
 
 async def test_shadow_block_persists_feed_only(
