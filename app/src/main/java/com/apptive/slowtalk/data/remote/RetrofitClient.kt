@@ -10,7 +10,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 
 object RetrofitClient {
-    // API가 완성되지 않았으므로 베이스 URL은 플레이스홀더로 설정합니다.
+    // API URL은 Gradle 속성 또는 로컬 Android Studio 설정에서 주입합니다.
     private const val FALLBACK_BASE_URL = "https://api.example.com/"
     private val baseUrl = BuildConfig.API_BASE_URL
         .ifBlank { FALLBACK_BASE_URL }
