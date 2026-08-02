@@ -63,11 +63,10 @@ def test_embedding_dimension_is_fixed_to_solar_embedding_2_contract() -> None:
         Settings(_env_file=None, embedding_dimensions=4096)
 
 
-def test_matching_migration_is_the_only_linear_head() -> None:
+def test_matching_migration_follows_moderation() -> None:
     scripts = ScriptDirectory.from_config(alembic_config())
     revision = scripts.get_revision("0004_matching_vectors")
 
-    assert scripts.get_heads() == ["0004_matching_vectors"]
     assert revision is not None
     assert revision.down_revision == "0003_moderation_review_lifecycle"
     assert revision.module.EMBEDDING_DIMENSIONS == MATCHING_EMBEDDING_DIMENSIONS

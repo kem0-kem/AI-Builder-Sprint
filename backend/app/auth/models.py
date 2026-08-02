@@ -16,6 +16,12 @@ class User(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    username: Mapped[str | None] = mapped_column(
+        String(30),
+        unique=True,
+        index=True,
+        default=None,
+    )
     password_hash: Mapped[str] = mapped_column(String(255))
     nickname: Mapped[str] = mapped_column(String(30))
     bio: Mapped[str | None] = mapped_column(String(500), default=None)
