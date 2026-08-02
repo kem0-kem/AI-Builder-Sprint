@@ -31,11 +31,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.apptive.slowtalk.ui.profile.ProfileViewModel
 import com.apptive.slowtalk.ui.theme.SlowTalkTheme
+import com.apptive.slowtalk.data.auth.AuthSession
+import com.apptive.slowtalk.data.repository.AuthRepository
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AuthSession.initialize(applicationContext)
         setContent {
             SlowTalkTheme {
                 ApptiveApp()
@@ -50,7 +53,9 @@ private fun ApptiveApp() {
     val activity = context as? Activity
     val appScope = rememberCoroutineScope()
     val profileViewModel: ProfileViewModel = viewModel()
-    var screen by remember { mutableStateOf<Screen>(Screen.Feed) }
+    val authRepository = remember { AuthRepository() }
+    var isRestoringSession by remember { mutableStateOf(AuthSession.refreshToken != null) }
+    var screen by remember { mutableStateOf<Screen>(if (AuthSession.isSignedIn) Screen.Feed else Screen.Auth) }
     var profileReturnScreen by remember { mutableStateOf<Screen>(Screen.Feed) }
     var lastBackPressTime by remember { mutableLongStateOf(0L) }
     val likedFeeds = remember { mutableStateMapOf<Int, Boolean>() }
@@ -121,6 +126,14 @@ private fun ApptiveApp() {
     }
     val mainPagerState = rememberPagerState(initialPage = 1, pageCount = { 3 })
 
+    LaunchedEffect(Unit) {
+        if (AuthSession.refreshToken != null) {
+            val restored = authRepository.restoreSession()
+            screen = if (restored) Screen.Feed else Screen.Auth
+        }
+        isRestoringSession = false
+    }
+
     LaunchedEffect(mainPagerState.settledPage) {
         if (screen.isMainTab()) {
             screen = mainPagerState.settledPage.toMainScreen()
@@ -165,6 +178,14 @@ private fun ApptiveApp() {
             .safeDrawingPadding()
     ) {
         when (val current = screen) {
+            Screen.Auth -> {
+                if (!isRestoringSession) {
+                    AuthScreen(
+                        repository = authRepository,
+                        onAuthenticated = { screen = Screen.Feed }
+                    )
+                }
+            }
             Screen.Feed, Screen.Conversations, Screen.LetterHome -> Scaffold(
                 containerColor = Color.Transparent,
                 bottomBar = {

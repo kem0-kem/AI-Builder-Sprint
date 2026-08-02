@@ -1,17 +1,45 @@
 import logging
+from typing import Annotated
 
 import httpx
+from fastapi import Depends, Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.core.config import Settings, matching_configuration_complete
+from app.auth.dependencies import Session
+from app.core.config import Settings, get_settings, matching_configuration_complete
+from app.core.errors import ApiError
 from app.matching.gateway import (
     EmbeddingDimensionMismatch,
     EmbeddingGateway,
     EmbeddingProviderUnavailable,
 )
+from app.matching.metrics import FallbackReason, MatchingMetrics, SemanticThresholdOutcome
+from app.matching.profile_policy import ProfileMatchingPolicy
+from app.matching.repository import MatchingRepository
+from app.matching.semantic_policy import SemanticMatchingPolicy
+from app.matching.service import MatchingService
 from app.matching.upstage_gateway import UpstageEmbeddingGateway
 
 EMBEDDING_READINESS_PROBE = "SlowTalk 임베딩 준비 상태 확인"
+
+
+class MetricsSemanticObserver:
+    """Adapts policy events to counters with a fixed label set."""
+
+    def __init__(self, metrics: MatchingMetrics) -> None:
+        self._metrics = metrics
+
+    def provider_failure(self) -> None:
+        return None
+
+    def profile_fallback(self, reason: str) -> None:
+        self._metrics.record_fallback(FallbackReason(reason))
+
+    def threshold_pass(self) -> None:
+        self._metrics.record_semantic_threshold(SemanticThresholdOutcome.PASS)
+
+    def threshold_below_or_missing(self) -> None:
+        self._metrics.record_semantic_threshold(SemanticThresholdOutcome.NO_VECTOR)
 
 
 class EmbeddingReadiness(BaseModel):
@@ -78,3 +106,42 @@ def _readiness(settings: Settings, *, ready: bool) -> EmbeddingReadiness:
         expected_dimensions=settings.embedding_dimensions,
         ready=ready,
     )
+
+
+async def get_matching_service(
+    request: Request,
+    session: Session,
+) -> MatchingService:
+    """Assemble one request-scoped matching service for every delivery path."""
+    settings = get_settings()
+    repository = MatchingRepository(session)
+    profile = ProfileMatchingPolicy()
+    metrics = getattr(request.app.state, "matching_metrics", None)
+    semantic = None
+    if settings.matching_mode != "disabled":
+        gateway = getattr(request.app.state, "embedding_gateway", None)
+        if gateway is None or not matching_configuration_complete(settings):
+            raise ApiError(
+                "EMBEDDING_SERVICE_UNAVAILABLE", "Semantic matching is unavailable.", 503
+            )
+        assert settings.upstage_embedding_model is not None
+        assert settings.match_min_similarity is not None
+        semantic = SemanticMatchingPolicy(
+            gateway,
+            repository,
+            profile,
+            active_model_name=settings.upstage_embedding_model,
+            active_model_version=settings.upstage_embedding_model,
+            minimum_similarity=settings.match_min_similarity,
+            observer=MetricsSemanticObserver(metrics) if metrics is not None else None,
+        )
+    return MatchingService(
+        repository,
+        profile,
+        mode=settings.matching_mode,
+        semantic=semantic,  # type: ignore[arg-type]
+        metrics=metrics,
+    )
+
+
+Matching = Annotated[MatchingService, Depends(get_matching_service)]

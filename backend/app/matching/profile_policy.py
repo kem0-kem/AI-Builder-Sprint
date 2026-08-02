@@ -1,3 +1,4 @@
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
@@ -18,6 +19,8 @@ class MatchCandidate:
     strategy: MatchStrategy
     score: float
     fallback_reason: str | None = None
+    model_name: str | None = None
+    model_version: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,7 +46,15 @@ class ProfileMatchingPolicy:
     def __init__(self, eligibility: MatchingEligibilityPolicy | None = None) -> None:
         self._eligibility = eligibility or MatchingEligibilityPolicy()
 
-    async def select(self, session: AsyncSession, sender_id: UUID) -> MatchCandidate | None:
+    async def select(
+        self,
+        session: AsyncSession,
+        sender_id: UUID,
+        *,
+        strategy: MatchStrategy = MatchStrategy.PROFILE,
+        fallback_reason: str | None = None,
+        excluded_ids: Collection[UUID] = (),
+    ) -> MatchCandidate | None:
         sender = await session.get(User, sender_id)
         if sender is None or not sender.is_active:
             return None
@@ -51,11 +62,19 @@ class ProfileMatchingPolicy:
         for stage in self._region_stages(sender):
             candidates = list(
                 await session.scalars(
-                    self._eligibility.base_candidate_query(sender_id).where(stage.predicate)
+                    self._eligibility.base_candidate_query(sender_id)
+                    .where(stage.predicate)
+                    .where(~User.id.in_(set(excluded_ids)))
                 )
             )
             if candidates:
-                return await self._select_within_stage(session, sender_id, candidates)
+                return await self._select_within_stage(
+                    session,
+                    sender_id,
+                    candidates,
+                    strategy=strategy,
+                    fallback_reason=fallback_reason,
+                )
         return None
 
     def _region_stages(self, sender: User) -> list[RegionStage]:
@@ -83,6 +102,9 @@ class ProfileMatchingPolicy:
         session: AsyncSession,
         sender_id: UUID,
         candidates: list[User],
+        *,
+        strategy: MatchStrategy,
+        fallback_reason: str | None,
     ) -> MatchCandidate:
         candidate_ids = [candidate.id for candidate in candidates]
         interest_ids = await self._interest_ids(session, [sender_id, *candidate_ids])
@@ -100,8 +122,9 @@ class ProfileMatchingPolicy:
         )
         return MatchCandidate(
             user_id=selected.user_id,
-            strategy=MatchStrategy.PROFILE,
+            strategy=strategy,
             score=jaccard(sender_interests, selected.interest_ids),
+            fallback_reason=fallback_reason,
         )
 
     async def _interest_ids(

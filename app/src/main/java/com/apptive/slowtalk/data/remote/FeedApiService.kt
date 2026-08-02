@@ -8,10 +8,11 @@ import retrofit2.http.GET
 import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 interface FeedApiService {
-    @GET("feeds/mine")
-    suspend fun getMyFeeds(): List<MyFeedDto>
+    @GET("feeds")
+    suspend fun getMyFeeds(@Query("scope") scope: String = "mine"): ApiEnvelope<List<MyFeedDto>>
 
     @PATCH("feeds/{feedId}")
     suspend fun updateFeed(
@@ -53,8 +54,8 @@ interface FeedApiService {
 
 @Serializable
 data class MyFeedDto(
-    val feedId: Int,
-    val category: FeedCategoryDto,
+    val id: String,
+    val categoryId: String,
     val title: String,
     val content: String,
     val liked: Boolean = false

@@ -8,13 +8,14 @@ from tests.letters.test_letter_delivery import register
 async def test_chat_message_is_idempotent_and_updates_read_position(client: AsyncClient) -> None:
     alice = await register(client, "alice-chat@example.com", "Alice")
     bob = await register(client, "bob-chat@example.com", "Bob")
-    charlie = await register(client, "charlie-chat@example.com", "Charlie")
     delivery = await client.post(
         "/api/v1/letters",
         headers={**alice, "Idempotency-Key": str(uuid4())},
         json={"content": "hello", "match": True},
     )
     room_id = delivery.json()["data"]["chatRoom"]["id"]
+    # Register the outsider after delivery so Bob is the only eligible first match.
+    charlie = await register(client, "charlie-chat@example.com", "Charlie")
     client_message_id = str(uuid4())
     payload = {"clientMessageId": client_message_id, "content": "first message"}
     first = await client.post(f"/api/v1/chat-rooms/{room_id}/messages", headers=bob, json=payload)

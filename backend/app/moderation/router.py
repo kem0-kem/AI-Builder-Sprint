@@ -14,6 +14,8 @@ from app.core.config import get_settings
 from app.core.errors import ApiError
 from app.feeds.service import FeedCommandHandler
 from app.letters.service import LetterCommandHandler
+from app.matching.dependencies import get_matching_service
+from app.matching.service import MatchingService
 from app.moderation.command_handlers import ModeratedCommandRegistry
 from app.moderation.crypto import CommandCipher
 from app.moderation.models import ContentSubmission, SubmissionStatus
@@ -47,13 +49,21 @@ class ManualDecisionRequest(BaseModel):
         return self
 
 
-def get_command_registry(session: Session) -> ModeratedCommandRegistry:
+def get_command_registry(
+    session: Session,
+    matching: Annotated[MatchingService | None, Depends(get_matching_service)] = None,
+) -> ModeratedCommandRegistry:
     registry = ModeratedCommandRegistry()
 
     async def create_letter(
         owner_id: UUID, command: dict[str, object], key: str
     ) -> UUID:
-        return (await LetterCommandHandler(session).execute(owner_id, command, key)).resource_id
+        handler = (
+            LetterCommandHandler(session, matching)
+            if isinstance(matching, MatchingService)
+            else LetterCommandHandler(session)
+        )
+        return (await handler.execute(owner_id, command, key)).resource_id
 
     async def create_chat_message(
         owner_id: UUID, command: dict[str, object], key: str

@@ -15,11 +15,14 @@ object FeedApi {
     val isConfigured: Boolean = true
 
     suspend fun getMyFeeds(): Result<List<MyFeedResult>> = runCatching {
-        RetrofitClient.feedApi.getMyFeeds().map { item ->
-            val category = appCategoryName(item.category.name)
+        val response = RetrofitClient.feedApi.getMyFeeds()
+        check(response.ok) { "내 피드를 불러오지 못했습니다." }
+        response.data.orEmpty().map { item ->
+            val category = "내 피드"
             MyFeedResult(
                 post = FeedPost(
-                    id = item.feedId,
+                    // Existing navigation state uses Int IDs while the backend uses UUIDs.
+                    id = item.id.hashCode(),
                     category = category,
                     title = item.title,
                     body = item.content,

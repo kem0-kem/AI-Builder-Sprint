@@ -54,6 +54,20 @@ python scripts/export_openapi.py openapi/slowtalk-v1.json
 - `/api/v1/ready` exposes only matching mode, configured model name, expected dimensions,
   and readiness success. This value is the startup contract-check result, not a live
   provider-health signal. Probe text and vector values are never included.
+- Roll out in this order: confirm readiness, backfill delivered letters, deploy `shadow`,
+  inspect only bounded metrics, then move to `enforce`. Rolling back to `disabled` keeps
+  profile matching available and retains projections for a later retry.
+
+### Embedding backfill
+
+```bash
+python scripts/backfill_match_embeddings.py --limit 100
+python scripts/backfill_match_embeddings.py --after 00000000-0000-0000-0000-000000000000 --limit 100
+```
+
+Pass the previous `nextCursor` as `--after`, stop when `exhausted` is true, and retry a
+failed page with the same input cursor. Pages are bounded to 500 letters and provider
+requests to 32 passages; existing active-model projections are skipped.
 
 ## Username compatibility rollout
 

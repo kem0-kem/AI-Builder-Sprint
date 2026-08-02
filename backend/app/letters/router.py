@@ -10,6 +10,7 @@ from app.core.errors import ApiError
 from app.letters.models import Letter, MailboxEntry
 from app.letters.schemas import LetterCreate
 from app.letters.service import LetterCommandHandler, letter_view
+from app.matching.dependencies import Matching
 from app.moderation.dependencies import MODERATION_RESPONSES, Moderation
 from app.moderation.models import SubmissionStatus
 from app.moderation.repository import ModerationCommand
@@ -28,6 +29,7 @@ async def create_letter(
     request: LetterCreate,
     user_id: CurrentUserId,
     session: Session,
+    matching: Matching,
     moderation: Moderation,
     idempotency_key: str = Header(alias="Idempotency-Key", min_length=8, max_length=80),
 ) -> dict[str, object] | JSONResponse:
@@ -62,7 +64,9 @@ async def create_letter(
                 422,
                 {"categories": sorted(category.value for category in outcome.categories)},
             )
-    result = await LetterCommandHandler(session).execute(user_id, payload, idempotency_key)
+    result = await LetterCommandHandler(session, matching).execute(
+        user_id, payload, idempotency_key
+    )
     return success(result.data)
 
 

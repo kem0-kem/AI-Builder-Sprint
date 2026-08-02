@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from time import perf_counter
 
+import httpx
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -13,7 +14,11 @@ from app.ai.router import router as ai_router
 from app.auth.router import router as auth_router
 from app.chat.router import router as chat_router
 from app.common.responses import success
-from app.core.config import get_settings, moderation_configuration_complete
+from app.core.config import (
+    get_settings,
+    matching_configuration_complete,
+    moderation_configuration_complete,
+)
 from app.core.errors import (
     ApiError,
     api_error_handler,
@@ -22,7 +27,12 @@ from app.core.errors import (
 )
 from app.feeds.router import router as feed_router
 from app.letters.router import router as letter_router
-from app.matching.dependencies import EmbeddingReadiness, check_embedding_readiness
+from app.matching.dependencies import (
+    EmbeddingReadiness,
+    check_embedding_readiness,
+)
+from app.matching.metrics import MatchingMetrics
+from app.matching.upstage_gateway import UpstageEmbeddingGateway
 from app.meetings.router import router as meeting_router
 from app.moderation.router import router as moderation_router
 from app.profiles.router import router as profile_router
@@ -35,8 +45,30 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+        application.state.matching_metrics = MatchingMetrics()
+        client = None
         application.state.embedding_readiness = await check_embedding_readiness(settings)
-        yield
+        if (
+            application.state.embedding_readiness.ready
+            and settings.matching_mode != "disabled"
+            and matching_configuration_complete(settings)
+        ):
+            assert settings.upstage_api_key is not None
+            assert settings.upstage_embedding_model is not None
+            client = httpx.AsyncClient(base_url=str(settings.upstage_base_url), timeout=10.0)
+            application.state.embedding_gateway = UpstageEmbeddingGateway(
+                client=client,
+                api_key=settings.upstage_api_key,
+                model=settings.upstage_embedding_model,
+                expected_dimensions=settings.embedding_dimensions,
+            )
+        else:
+            application.state.embedding_gateway = None
+        try:
+            yield
+        finally:
+            if client is not None:
+                await client.aclose()
 
     application = FastAPI(
         title=settings.app_name,

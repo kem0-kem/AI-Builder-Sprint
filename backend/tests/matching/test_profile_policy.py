@@ -245,3 +245,27 @@ async def test_returns_none_when_no_eligible_candidate(
         selected = await ProfileMatchingPolicy().select(session, sender.id)
 
     assert selected is None
+
+
+async def test_selection_allows_semantic_fallback_metadata(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        sender = user(100)
+        candidate = user(200)
+        session.add_all([sender, candidate])
+        await session.commit()
+
+        selected = await ProfileMatchingPolicy().select(
+            session,
+            sender.id,
+            strategy=MatchStrategy.PROFILE_FALLBACK,
+            fallback_reason="INSUFFICIENT_EMBEDDINGS",
+        )
+
+    assert selected is not None
+    assert selected.user_id == candidate.id
+    assert selected.strategy is MatchStrategy.PROFILE_FALLBACK
+    assert selected.fallback_reason == "INSUFFICIENT_EMBEDDINGS"
+    assert selected.model_name is None
+    assert selected.model_version is None
