@@ -3,6 +3,35 @@ from uuid import uuid4
 from httpx import AsyncClient
 
 from tests.letters.test_letter_delivery import register
+from tests.feeds.test_feed_api import create_feed
+
+
+async def test_comment_author_chat_is_idempotent(client: AsyncClient) -> None:
+    author = await register(client, "comment-chat-author@example.com", "작성자")
+    viewer = await register(client, "comment-chat-viewer@example.com", "대화 요청자")
+    feed_id = await create_feed(client, author)
+    comment = await client.post(
+        f"/api/v1/feeds/{feed_id}/comments",
+        headers=author,
+        json={"content": "대화를 시작할 수 있는 댓글"},
+    )
+    comment_id = comment.json()["data"]["id"]
+
+    first = await client.post(f"/api/v1/comments/{comment_id}/chat-room", headers=viewer)
+    repeated = await client.post(f"/api/v1/comments/{comment_id}/chat-room", headers=viewer)
+    assert first.status_code == 200
+    assert first.json()["data"]["id"] == repeated.json()["data"]["id"]
+
+    room_id = first.json()["data"]["id"]
+    author_rooms = await client.get("/api/v1/chat-rooms", headers=author)
+    viewer_rooms = await client.get("/api/v1/chat-rooms", headers=viewer)
+    assert room_id in {room["id"] for room in author_rooms.json()["data"]}
+    assert room_id in {room["id"] for room in viewer_rooms.json()["data"]}
+
+    own_comment = await client.post(
+        f"/api/v1/comments/{comment_id}/chat-room", headers=author
+    )
+    assert own_comment.status_code == 400
 
 
 async def test_chat_message_is_idempotent_and_updates_read_position(client: AsyncClient) -> None:

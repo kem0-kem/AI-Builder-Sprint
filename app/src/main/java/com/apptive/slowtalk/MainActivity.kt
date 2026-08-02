@@ -350,6 +350,10 @@ private fun ApptiveApp() {
                             }
                         }
                     },
+                    onOpenAnonymousChat = { roomId ->
+                        conversationIndex = 0
+                        screen = Screen.Chat("익명의 이웃", isGroup = false, chatRoomId = roomId)
+                    },
                     onBack = { screen = Screen.Feed }
                 )
             }
@@ -369,7 +373,7 @@ private fun ApptiveApp() {
                 },
                 onBack = { screen = Screen.Conversations },
                 onCreated = { title, chatRoomId ->
-                    screen = Screen.Chat(title, isGroup = true, chatRoomId = chatRoomId)
+                    screen = Screen.Chat(title, isGroup = true, chatRoomId = chatRoomId.toString())
                 }
             )
             Screen.WriteLetter -> WriteLetterScreen(

@@ -13,7 +13,7 @@ sealed interface Screen {
     data class Chat(
         val title: String,
         val isGroup: Boolean = false,
-        val chatRoomId: Int? = null
+        val chatRoomId: String? = null
     ) : Screen
     data object CreateGroup : Screen
     data object LetterHome : Screen
@@ -54,7 +54,7 @@ data class Conversation(
     val unread: Boolean = false,
     val isGroup: Boolean = false,
     val members: Int = 1,
-    val chatRoomId: Int? = null
+    val chatRoomId: String? = null
 )
 
 data class ChatMessage(
@@ -62,7 +62,7 @@ data class ChatMessage(
     val body: String,
     val time: String,
     val mine: Boolean,
-    val id: Int? = null,
+    val id: String? = null,
     val type: String = "CHAT"
 )
 

@@ -260,8 +260,8 @@ private fun ConversationRow(item: Conversation, onClick: () -> Unit) {
 fun ChatScreen(
     title: String,
     isGroup: Boolean,
-    chatRoomId: Int?,
-    markAsRead: suspend (chatRoomId: Int, lastReadMessageId: Int) -> Result<Int>,
+    chatRoomId: String?,
+    markAsRead: suspend (chatRoomId: String, lastReadMessageId: String) -> Result<Int>,
     onBack: () -> Unit
 ) {
     val messages = remember { mutableStateListOf<ChatMessage>() }
@@ -279,8 +279,7 @@ fun ChatScreen(
             ChatApi.getMessages(roomId)
                 .onSuccess { loaded ->
                     messages.addAll(loaded)
-                    loaded.maxOfOrNull { it.id ?: Int.MIN_VALUE }
-                        ?.takeIf { it != Int.MIN_VALUE }
+                    loaded.lastOrNull()?.id
                         ?.let { lastMessageId ->
                             markAsRead(roomId, lastMessageId)
                         }
@@ -383,17 +382,14 @@ fun ChatScreen(
                             val content = text.trim()
                             if (content.isNotBlank()) {
                                 text = ""
-                                val sentBySocket = socketConnection?.send(content) == true
-                                if (!sentBySocket) {
-                                    chatRoomId?.let { roomId ->
-                                        chatScope.launch {
-                                            ChatApi.sendMessage(roomId, content)
-                                                .onSuccess { sent ->
-                                                    if (messages.none { it.id == sent.id }) {
-                                                        messages.add(sent)
-                                                    }
+                                chatRoomId?.let { roomId ->
+                                    chatScope.launch {
+                                        ChatApi.sendMessage(roomId, content)
+                                            .onSuccess { sent ->
+                                                if (messages.none { it.id == sent.id }) {
+                                                    messages.add(sent)
                                                 }
-                                        }
+                                            }
                                     }
                                 }
                             }

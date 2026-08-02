@@ -9,70 +9,73 @@ import retrofit2.http.Path
 
 interface ChatApiService {
     @GET("chat-rooms")
-    suspend fun getChatRooms(): List<ChatRoomSummaryDto>
+    suspend fun getChatRooms(): ApiEnvelope<List<ChatRoomSummaryDto>>
 
-    @GET("chat-rooms/{chatRoomId}")
-    suspend fun getChatRoom(@Path("chatRoomId") chatRoomId: Int): ChatRoomInfoDto
+    @GET("chat-rooms/{roomId}")
+    suspend fun getChatRoom(@Path("roomId") roomId: String): ApiEnvelope<ChatRoomInfoDto>
 
-    @GET("chat-rooms/{chatRoomId}/messages")
-    suspend fun getMessages(@Path("chatRoomId") chatRoomId: Int): List<ChatMessageDto>
+    @GET("chat-rooms/{roomId}/messages")
+    suspend fun getMessages(@Path("roomId") roomId: String): ApiEnvelope<List<ChatMessageDto>>
 
-    @POST("chat-rooms/{chatRoomId}/messages")
+    @POST("chat-rooms/{roomId}/messages")
     suspend fun sendMessage(
-        @Path("chatRoomId") chatRoomId: Int,
+        @Path("roomId") roomId: String,
         @Body request: ChatMessageRequest
-    ): ChatMessageSendResponse
+    ): ApiEnvelope<ChatMessageDto>
 
-    @PATCH("chat-rooms/{chatRoomId}/read")
+    @PATCH("chat-rooms/{roomId}/read")
     suspend fun markAsRead(
-        @Path("chatRoomId") chatRoomId: Int,
+        @Path("roomId") roomId: String,
         @Body request: ChatReadRequest
-    ): ChatReadResponse
+    ): ApiEnvelope<ChatReadResponse>
+
+    @POST("comments/{commentId}/chat-room")
+    suspend fun openCommentAuthorChat(
+        @Path("commentId") commentId: String
+    ): ApiEnvelope<ChatRoomInfoDto>
 }
 
 @Serializable
 data class ChatRoomSummaryDto(
-    val chatRoomId: Int,
+    val id: String,
     val type: String,
-    val roomName: String? = null,
-    val lastMessage: String? = null,
-    val lastMessageAt: String? = null,
-    val unreadCount: Int = 0
+    val name: String? = null,
+    val createdAt: String = ""
 )
 
 @Serializable
 data class ChatRoomInfoDto(
-    val chatRoomId: Int,
+    val id: String,
     val type: String,
-    val roomName: String? = null,
-    val participantCount: Int? = null,
-    val createdAt: String
+    val name: String? = null
+)
+
+@Serializable
+data class ChatSenderDto(
+    val displayName: String,
+    val isMe: Boolean
 )
 
 @Serializable
 data class ChatMessageDto(
-    val messageId: Int,
-    val type: String,
-    val sender: String,
+    val id: String,
+    val type: String = "CHAT",
+    val sender: ChatSenderDto,
     val content: String,
     val createdAt: String
 )
 
 @Serializable
-data class ChatMessageRequest(val content: String)
-
-@Serializable
-data class ChatMessageSendResponse(
-    val messageId: Int,
-    val createdAt: String
+data class ChatMessageRequest(
+    val clientMessageId: String,
+    val content: String
 )
 
 @Serializable
-data class ChatReadRequest(val lastReadMessageId: Int)
+data class ChatReadRequest(val lastReadMessageId: String)
 
 @Serializable
 data class ChatReadResponse(
-    val success: Boolean,
-    val lastReadMessageId: Int,
+    val lastReadMessageId: String,
     val unreadCount: Int
 )

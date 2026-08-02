@@ -942,6 +942,7 @@ fun FeedDetailScreen(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onReport: () -> Unit,
+    onOpenAnonymousChat: (String) -> Unit,
     onBack: () -> Unit
 ) {
     var comment by remember { mutableStateOf("") }
@@ -1056,6 +1057,26 @@ fun FeedDetailScreen(
                     Toast.makeText(context, "댓글 신고를 서버에 전송하지 못했습니다.", Toast.LENGTH_SHORT).show()
                 }
             }
+        }
+    }
+
+    fun openAnonymousChatAt(parentIndex: Int, replyIndex: Int?) {
+        val target = if (replyIndex == null) {
+            comments[parentIndex]
+        } else {
+            comments[parentIndex].replies[replyIndex]
+        }
+        val commentId = target.id
+        if (commentId == null) {
+            Toast.makeText(context, "댓글 정보를 불러온 뒤 다시 시도해주세요.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        refreshScope.launch {
+            ChatApi.openCommentAuthorChat(commentId)
+                .onSuccess { room -> onOpenAnonymousChat(room.id) }
+                .onFailure {
+                    Toast.makeText(context, "익명 대화를 시작하지 못했습니다.", Toast.LENGTH_SHORT).show()
+                }
         }
     }
 
@@ -1364,11 +1385,13 @@ fun FeedDetailScreen(
                             onEditRoot = { content -> editCommentAt(index, null, content) },
                             onDeleteRoot = { deleteCommentAt(index, null) },
                             onReportRoot = { reportCommentAt(index, null) },
+                            onAnonymousChatRoot = { openAnonymousChatAt(index, null) },
                             onEditReply = { replyIndex, content ->
                                 editCommentAt(index, replyIndex, content)
                             },
                             onDeleteReply = { replyIndex -> deleteCommentAt(index, replyIndex) },
-                            onReportReply = { replyIndex -> reportCommentAt(index, replyIndex) }
+                            onReportReply = { replyIndex -> reportCommentAt(index, replyIndex) },
+                            onAnonymousChatReply = { replyIndex -> openAnonymousChatAt(index, replyIndex) }
                         )
                     }
                 }
@@ -1384,9 +1407,11 @@ private fun CommentThread(
     onEditRoot: (String) -> Unit,
     onDeleteRoot: () -> Unit,
     onReportRoot: () -> Unit,
+    onAnonymousChatRoot: () -> Unit,
     onEditReply: (Int, String) -> Unit,
     onDeleteReply: (Int) -> Unit,
-    onReportReply: (Int) -> Unit
+    onReportReply: (Int) -> Unit,
+    onAnonymousChatReply: (Int) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         CommentCard(
@@ -1395,7 +1420,8 @@ private fun CommentThread(
             onReply = { onReply(comment.author) },
             onEdit = onEditRoot,
             onDelete = onDeleteRoot,
-            onReport = onReportRoot
+            onReport = onReportRoot,
+            onAnonymousChat = onAnonymousChatRoot
         )
         comment.replies.forEachIndexed { replyIndex, reply ->
             Row(
@@ -1419,6 +1445,7 @@ private fun CommentThread(
                     onEdit = { content -> onEditReply(replyIndex, content) },
                     onDelete = { onDeleteReply(replyIndex) },
                     onReport = { onReportReply(replyIndex) },
+                    onAnonymousChat = { onAnonymousChatReply(replyIndex) },
                     isReply = true
                 )
             }
@@ -1434,6 +1461,7 @@ private fun CommentCard(
     onEdit: (String) -> Unit,
     onDelete: () -> Unit,
     onReport: () -> Unit,
+    onAnonymousChat: () -> Unit,
     isReply: Boolean = false
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -1612,6 +1640,16 @@ private fun CommentCard(
                                 }
                             )
                         } else {
+                            DropdownMenuItem(
+                                text = { Text("익명 대화하기") },
+                                leadingIcon = {
+                                    Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null)
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onAnonymousChat()
+                                }
+                            )
                             DropdownMenuItem(
                                 text = { Text("신고") },
                                 leadingIcon = {

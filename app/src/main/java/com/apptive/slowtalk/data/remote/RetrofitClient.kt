@@ -78,16 +78,14 @@ object RetrofitClient {
     val meetingApi: MeetingApiService = retrofit.create(MeetingApiService::class.java)
     val reportApi: ReportApi = retrofit.create(ReportApi::class.java)
 
-    fun openChatWebSocket(chatRoomId: Int, listener: WebSocketListener): WebSocket {
+    fun openChatWebSocket(chatRoomId: String, listener: WebSocketListener): WebSocket {
         val socketBaseUrl = baseUrl
             .replaceFirst("https://", "wss://")
             .replaceFirst("http://", "ws://")
             .trimEnd('/')
+        val token = AuthSession.accessToken.orEmpty()
         val request = Request.Builder()
-            .url("$socketBaseUrl/ws/chat/$chatRoomId")
-            .apply {
-                AuthSession.accessToken?.let { header("Authorization", "Bearer $it") }
-            }
+            .url("$socketBaseUrl/ws/chat-rooms/$chatRoomId?token=$token")
             .build()
         return okHttpClient.newWebSocket(request, listener)
     }
