@@ -69,7 +69,7 @@ async def test_default_incomplete_development_is_not_ready(
         "status": "not_ready",
         "moderationMode": "shadow",
         "moderationConfigured": False,
-        "fallbackActive": True,
+        "fallbackActive": False,
     }
 
 
@@ -109,7 +109,7 @@ async def test_incomplete_production_cannot_opt_in_to_fallback(
         "status": "not_ready",
         "moderationMode": "shadow",
         "moderationConfigured": False,
-        "fallbackActive": True,
+        "fallbackActive": False,
     }
 
 

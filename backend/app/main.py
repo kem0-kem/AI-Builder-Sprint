@@ -71,6 +71,7 @@ def create_app() -> FastAPI:
             and settings.allow_development_moderation_fallback
         )
         is_ready = moderation_configured or fallback_allowed
+        fallback_active = not moderation_configured and fallback_allowed
         return JSONResponse(
             status_code=200 if is_ready else 503,
             content=success(
@@ -78,7 +79,7 @@ def create_app() -> FastAPI:
                     "status": "ready" if is_ready else "not_ready",
                     "moderationMode": settings.moderation_mode,
                     "moderationConfigured": moderation_configured,
-                    "fallbackActive": not moderation_configured,
+                    "fallbackActive": fallback_active,
                 }
             ),
         )
