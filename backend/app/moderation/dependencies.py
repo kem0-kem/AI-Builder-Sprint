@@ -17,6 +17,7 @@ from app.moderation.service import (
     ModerationOrchestrator,
     ModerationOutcome,
     RecordingModerationOrchestrator,
+    ShadowModerationOrchestrator,
 )
 from app.moderation.upstage_gateway import UpstageModerationGateway
 
@@ -28,13 +29,16 @@ MODERATION_RESPONSES: dict[int | str, dict[str, Any]] = {
 
 async def get_moderation_orchestrator(
     session: Session,
-) -> AsyncIterator[ModerationOrchestrator | RecordingModerationOrchestrator | None]:
+) -> AsyncIterator[
+    ModerationOrchestrator
+    | RecordingModerationOrchestrator
+    | ShadowModerationOrchestrator
+    | None
+]:
     settings = get_settings()
     required = (
         settings.upstage_api_key,
         settings.upstage_chat_model,
-        settings.moderation_encryption_key,
-        settings.content_hash_pepper,
         settings.moderation_allow_confidence,
         settings.moderation_block_confidence,
     )
@@ -44,36 +48,46 @@ async def get_moderation_orchestrator(
 
     assert settings.upstage_api_key is not None
     assert settings.upstage_chat_model is not None
-    assert settings.moderation_encryption_key is not None
-    assert settings.content_hash_pepper is not None
     assert settings.moderation_allow_confidence is not None
     assert settings.moderation_block_confidence is not None
-    repository = ModerationRepository(
-        session,
-        CommandCipher(settings.moderation_encryption_key.get_secret_value()),
-        settings.content_hash_pepper.get_secret_value(),
-        model=settings.upstage_chat_model,
-    )
     async with httpx.AsyncClient(
         base_url=str(settings.upstage_base_url), timeout=10.0
     ) as client:
+        gateway = UpstageModerationGateway(
+            client=client,
+            api_key=settings.upstage_api_key,
+            model=settings.upstage_chat_model,
+        )
+        if settings.moderation_mode == "shadow":
+            yield ShadowModerationOrchestrator(gateway, moderation_metrics)
+            return
+
+        if (
+            settings.moderation_encryption_key is None
+            or settings.content_hash_pepper is None
+        ):
+            yield None
+            return
+        repository = ModerationRepository(
+            session,
+            CommandCipher(settings.moderation_encryption_key.get_secret_value()),
+            settings.content_hash_pepper.get_secret_value(),
+            model=settings.upstage_chat_model,
+        )
         inner = ModerationOrchestrator(
-            UpstageModerationGateway(
-                client=client,
-                api_key=settings.upstage_api_key,
-                model=settings.upstage_chat_model,
-            ),
+            gateway,
             repository,
             settings.moderation_allow_confidence,
             settings.moderation_block_confidence,
         )
-        yield RecordingModerationOrchestrator(
-            inner, moderation_metrics, shadow=settings.moderation_mode == "shadow"
-        )
+        yield RecordingModerationOrchestrator(inner, moderation_metrics, shadow=False)
 
 
 Moderation = Annotated[
-    ModerationOrchestrator | RecordingModerationOrchestrator | None,
+    ModerationOrchestrator
+    | RecordingModerationOrchestrator
+    | ShadowModerationOrchestrator
+    | None,
     Depends(get_moderation_orchestrator),
 ]
 
