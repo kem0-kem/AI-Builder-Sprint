@@ -32,5 +32,12 @@ class ModerationMetrics:
         for category in categories:
             self.categories[(content, category.value)] += 1
 
+    def record_provider_failure(
+        self, content_type: ContentType, duration_ms: float
+    ) -> None:
+        content = content_type.value
+        self.decisions[(content, "PROVIDER_FAILURE")] += 1
+        self.latencies[(content, latency_bucket(duration_ms))] += 1
+
 
 moderation_metrics = ModerationMetrics()

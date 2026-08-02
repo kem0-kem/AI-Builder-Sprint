@@ -188,6 +188,56 @@ class ModerationOrchestrator:
         )
 
 
+class ShadowModerationOrchestrator:
+    """Classify content without retaining a moderation submission or command."""
+
+    __slots__ = ("_gateway", "_local_rules", "_metrics")
+
+    def __init__(
+        self,
+        gateway: ModerationGateway,
+        metrics: ModerationMetrics,
+        *,
+        local_rules: LocalRuleEngine | None = None,
+    ) -> None:
+        self._gateway = gateway
+        self._metrics = metrics
+        self._local_rules = local_rules or LocalRuleEngine()
+
+    async def evaluate(self, command: ModerationCommand) -> ModerationOutcome:
+        normalized_command = _normalize_command(command)
+        started = perf_counter()
+        try:
+            assessment = await classify_normalized(
+                self._gateway, self._local_rules, normalized_command
+            )
+        except ModerationClassificationUnavailable:
+            self._metrics.record_provider_failure(
+                normalized_command.content_type, (perf_counter() - started) * 1000
+            )
+            return ModerationOutcome(http_status=200)
+
+        self._metrics.record_decision(
+            normalized_command.content_type,
+            assessment.decision,
+            assessment.categories,
+            (perf_counter() - started) * 1000,
+        )
+        return ModerationOutcome.immediate(assessment)
+
+    async def evaluate_ocr(self, owner_id: UUID, text: str) -> ModerationOutcome:
+        return await self.evaluate(
+            ModerationCommand(
+                owner_id=owner_id,
+                content_type=ContentType.OCR_TEXT,
+                operation="OCR_TEXT",
+                text=text,
+                payload={"text": text},
+                idempotency_key=str(uuid4()),
+            )
+        )
+
+
 class RecordingModerationOrchestrator:
     def __init__(
         self,
