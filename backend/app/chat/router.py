@@ -1,19 +1,23 @@
-import json
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, status
-from sqlalchemy import and_, select
+from fastapi.responses import JSONResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import CurrentUserId, Session
 from app.auth.security import decode_access_token
 from app.chat.models import ChatMessage, ChatParticipant, ChatRoom
 from app.chat.schemas import MessageCreate, ReadPositionUpdate
+from app.chat.service import ChatCommandHandler
 from app.common.responses import page, success
 from app.core.errors import ApiError
 from app.db.session import get_session
-from app.events.outbox import OutboxEvent
+from app.moderation.dependencies import Moderation
+from app.moderation.models import SubmissionStatus
+from app.moderation.repository import ModerationCommand
+from app.moderation.schemas import ContentType
 
 router = APIRouter(tags=["chat"])
 
@@ -105,41 +109,55 @@ async def list_messages(
     )
 
 
-@router.post("/chat-rooms/{room_id}/messages", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/chat-rooms/{room_id}/messages",
+    status_code=status.HTTP_201_CREATED,
+    response_model=None,
+)
 async def create_message(
     room_id: UUID,
     request: MessageCreate,
     user_id: CurrentUserId,
     session: Session,
-) -> dict[str, object]:
+    moderation: Moderation,
+) -> dict[str, object] | JSONResponse:
     await require_participant(session, room_id, user_id)
-    existing = await session.scalar(
-        select(ChatMessage).where(
-            and_(
-                ChatMessage.room_id == room_id,
-                ChatMessage.client_message_id == request.client_message_id,
+    payload = {**request.model_dump(by_alias=True, mode="json"), "roomId": str(room_id)}
+    if moderation is not None:
+        outcome = await moderation.evaluate(
+            ModerationCommand(
+                owner_id=user_id,
+                content_type=ContentType.CHAT_MESSAGE,
+                operation="CREATE_CHAT_MESSAGE",
+                target_id=room_id,
+                text=request.content,
+                payload=payload,
+                idempotency_key=str(request.client_message_id),
             )
         )
+        if outcome.status is SubmissionStatus.PENDING_REVIEW:
+            await session.commit()
+            return JSONResponse(
+                status_code=202,
+                content=success(
+                    {
+                        "moderationStatus": outcome.status.value,
+                        "submissionId": str(outcome.submission_id),
+                    }
+                ),
+            )
+        if outcome.status is SubmissionStatus.BLOCKED:
+            await session.commit()
+            raise ApiError(
+                "CONTENT_POLICY_VIOLATION",
+                "콘텐츠 정책을 확인해 주세요.",
+                422,
+                {"categories": sorted(category.value for category in outcome.categories)},
+            )
+    result = await ChatCommandHandler(session).execute(
+        user_id, payload, str(request.client_message_id)
     )
-    if existing is not None:
-        return success(await message_view(session, existing, user_id))
-    message = ChatMessage(
-        room_id=room_id,
-        sender_id=user_id,
-        client_message_id=request.client_message_id,
-        content=request.content,
-    )
-    session.add(message)
-    await session.flush()
-    session.add(
-        OutboxEvent(
-            topic="message.created",
-            aggregate_id=room_id,
-            payload=json.dumps({"messageId": str(message.id), "roomId": str(room_id)}),
-        )
-    )
-    await session.commit()
-    return success(await message_view(session, message, user_id))
+    return success(await message_view(session, result.message, user_id))
 
 
 @router.put("/chat-rooms/{room_id}/read-position")

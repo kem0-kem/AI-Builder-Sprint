@@ -1,7 +1,7 @@
 import base64
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -198,7 +198,7 @@ async def test_manual_review_can_be_allowed_idempotently_with_original_key(
     calls: list[str] = []
     resource_id = uuid4()
 
-    async def handler(_command: dict[str, object], key: str):
+    async def handler(_owner_id: UUID, _command: dict[str, object], key: str):
         calls.append(key)
         return resource_id
 

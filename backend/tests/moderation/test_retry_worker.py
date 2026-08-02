@@ -202,7 +202,9 @@ async def test_allow_replays_original_idempotency_and_duplicate_is_noop(session_
         calls: list[tuple[dict[str, object], str]] = []
         resource_id = uuid4()
 
-        async def handler(command: dict[str, object], key: str) -> UUID:
+        async def handler(
+            _owner_id: UUID, command: dict[str, object], key: str
+        ) -> UUID:
             calls.append((command, key))
             return resource_id
 
@@ -332,13 +334,17 @@ async def test_registry_failures_are_fixed_and_drop_raw_exception_context() -> N
     marker = "RAW-HANDLER-FAILURE-MARKER"
     registry = ModeratedCommandRegistry()
 
-    async def broken(_command: dict[str, object], _key: str) -> UUID:
+    async def broken(
+        _owner_id: UUID, _command: dict[str, object], _key: str
+    ) -> UUID:
         raise RuntimeError(marker)
 
     registry.register("BROKEN", broken)
     for operation in ("MISSING", "BROKEN"):
         try:
-            await registry.execute(operation, {"content": marker}, marker)
+            await registry.execute(
+                operation, {"content": marker}, marker, owner_id=uuid4()
+            )
         except ModeratedCommandExecutionFailed as exc:
             rendered = str(exc) + repr(exc) + "".join(traceback.format_exception(exc))
             assert marker not in rendered

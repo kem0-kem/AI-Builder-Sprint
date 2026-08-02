@@ -130,7 +130,10 @@ class ModerationRetryWorker:
             )
             return
         resource_id = await self._registry.execute(
-            submission.operation, payload, submission.idempotency_key
+            submission.operation,
+            payload,
+            submission.idempotency_key,
+            owner_id=submission.owner_id,
         )
         won = await self._repository.resolve_allowed(
             submission, resource_id, assessment

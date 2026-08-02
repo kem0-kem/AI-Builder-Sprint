@@ -8,9 +8,11 @@ from fastapi import APIRouter, Depends, Header
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.auth.dependencies import CurrentUserId, Session
+from app.chat.service import ChatCommandHandler
 from app.common.responses import success
 from app.core.config import get_settings
 from app.core.errors import ApiError
+from app.letters.service import LetterCommandHandler
 from app.moderation.command_handlers import ModeratedCommandRegistry
 from app.moderation.crypto import CommandCipher
 from app.moderation.models import ContentSubmission, SubmissionStatus
@@ -24,7 +26,6 @@ from app.moderation.schemas import (
 )
 
 router = APIRouter(tags=["moderation"])
-_registry = ModeratedCommandRegistry()
 
 
 class ManualDecisionRequest(BaseModel):
@@ -44,8 +45,22 @@ class ManualDecisionRequest(BaseModel):
         return self
 
 
-def get_command_registry() -> ModeratedCommandRegistry:
-    return _registry
+def get_command_registry(session: Session) -> ModeratedCommandRegistry:
+    registry = ModeratedCommandRegistry()
+
+    async def create_letter(
+        owner_id: UUID, command: dict[str, object], key: str
+    ) -> UUID:
+        return (await LetterCommandHandler(session).execute(owner_id, command, key)).resource_id
+
+    async def create_chat_message(
+        owner_id: UUID, command: dict[str, object], key: str
+    ) -> UUID:
+        return (await ChatCommandHandler(session).execute(owner_id, command, key)).resource_id
+
+    registry.register("CREATE_LETTER", create_letter)
+    registry.register("CREATE_CHAT_MESSAGE", create_chat_message)
+    return registry
 
 
 def get_moderation_repository(session: Session) -> ModerationRepository:
@@ -207,7 +222,10 @@ async def _allow_submission(
         except ApiError as exc:
             return await _allow_race_result(repository, submission, None, exc)
     resource_id = await registry.execute(
-        submission.operation, command, submission.idempotency_key
+        submission.operation,
+        command,
+        submission.idempotency_key,
+        owner_id=submission.owner_id,
     )
     try:
         method = (

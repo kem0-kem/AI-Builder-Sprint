@@ -5,7 +5,7 @@ from uuid import UUID
 from app.core.errors import ApiError
 
 ModeratedCommandHandler = Callable[
-    [dict[str, object], str], UUID | Awaitable[UUID]
+    [UUID, dict[str, object], str], UUID | Awaitable[UUID]
 ]
 
 
@@ -34,13 +34,15 @@ class ModeratedCommandRegistry:
         operation: str,
         command: dict[str, object],
         idempotency_key: str | None = None,
+        *,
+        owner_id: UUID,
     ) -> UUID:
         try:
             handler = self._handlers.get(operation)
             if handler is None:
                 raise LookupError
             key = idempotency_key or _command_idempotency_key(command)
-            result = handler(command, key)
+            result = handler(owner_id, command, key)
             resource_id = await result if inspect.isawaitable(result) else result
             if not isinstance(resource_id, UUID):
                 raise TypeError
