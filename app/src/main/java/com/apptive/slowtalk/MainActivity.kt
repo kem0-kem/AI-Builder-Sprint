@@ -373,7 +373,7 @@ private fun ApptiveApp() {
                 },
                 onBack = { screen = Screen.Conversations },
                 onCreated = { title, chatRoomId ->
-                    screen = Screen.Chat(title, isGroup = true, chatRoomId = chatRoomId.toString())
+                    screen = Screen.Chat(title, isGroup = true, chatRoomId = chatRoomId)
                 }
             )
             Screen.WriteLetter -> WriteLetterScreen(

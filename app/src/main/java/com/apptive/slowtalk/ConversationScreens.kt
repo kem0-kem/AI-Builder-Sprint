@@ -463,13 +463,13 @@ private fun MessageBubble(message: ChatMessage) {
 @Composable
 fun CreateGroupScreen(
     loadInviteUsers: suspend (String?) -> Result<List<MeetingInviteUser>>,
-    createMeeting: suspend (String, String, List<Int>) -> Result<MeetingCreation>,
+    createMeeting: suspend (String, String, List<String>) -> Result<MeetingCreation>,
     onBack: () -> Unit,
-    onCreated: (String, Int) -> Unit
+    onCreated: (String, String) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var intro by remember { mutableStateOf("") }
-    val selectedPeople = remember { mutableStateListOf<Int>() }
+    val selectedPeople = remember { mutableStateListOf<String>() }
     var showPeoplePicker by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var remotePeople by remember { mutableStateOf(emptyList<MeetingInviteUser>()) }
@@ -644,17 +644,17 @@ fun CreateGroupScreen(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        items(shownPeople, key = { it.userId }) { person ->
-                            val isSelected = person.userId in selectedPeople
+                        items(shownPeople, key = { it.candidateId }) { person ->
+                            val isSelected = person.candidateId in selectedPeople
                             val canSelect = isSelected || selectedPeople.size < 9
                             Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable(enabled = canSelect) {
                                         if (isSelected) {
-                                            selectedPeople.remove(person.userId)
+                                            selectedPeople.remove(person.candidateId)
                                         } else {
-                                            selectedPeople.add(person.userId)
+                                            selectedPeople.add(person.candidateId)
                                         }
                                     },
                                 shape = RoundedCornerShape(15.dp),
@@ -696,11 +696,11 @@ fun CreateGroupScreen(
                                         enabled = canSelect,
                                         onCheckedChange = { checked ->
                                             if (checked) {
-                                                if (person.userId !in selectedPeople && selectedPeople.size < 9) {
-                                                    selectedPeople.add(person.userId)
+                                                if (person.candidateId !in selectedPeople && selectedPeople.size < 9) {
+                                                    selectedPeople.add(person.candidateId)
                                                 }
                                             } else {
-                                                selectedPeople.remove(person.userId)
+                                                selectedPeople.remove(person.candidateId)
                                             }
                                         }
                                     )

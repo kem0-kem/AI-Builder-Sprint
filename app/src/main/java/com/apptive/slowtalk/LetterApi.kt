@@ -6,20 +6,21 @@ import com.apptive.slowtalk.data.remote.RetrofitClient
 
 object LetterApi {
     suspend fun getLetters(type: String? = null): Result<List<Letter>> = runCatching {
-        RetrofitClient.letterApi.getLetters(type).map(LetterSummaryDto::toLetter)
+        val direction = if (type.equals("received", ignoreCase = true)) "received" else "sent"
+        RetrofitClient.letterApi.getLetters(direction).requireLetterData().map(LetterSummaryDto::toLetter)
     }
 
-    suspend fun getLetter(letterId: Int): Result<Letter> = runCatching {
-        RetrofitClient.letterApi.getLetter(letterId).toLetter()
+    suspend fun getLetter(letterId: String): Result<Letter> = runCatching {
+        RetrofitClient.letterApi.getLetter(letterId).requireLetterData().toLetter()
     }
 }
 
 private fun LetterSummaryDto.toLetter(): Letter {
-    val received = type.equals("RECEIVED", ignoreCase = true)
+    val received = direction.equals("RECEIVED", ignoreCase = true)
     return Letter(
-        id = letterId,
-        title = if (received) "받은 편지 #$letterId" else "보낸 편지 #$letterId",
-        preview = "편지를 눌러 내용을 확인해보세요.",
+        id = id,
+        title = if (received) "받은 편지" else "보낸 편지",
+        preview = content.replace('\n', ' ').take(60),
         date = createdAt.toLetterDate(),
         received = received,
         content = ""
@@ -27,14 +28,14 @@ private fun LetterSummaryDto.toLetter(): Letter {
 }
 
 private fun LetterDetailDto.toLetter(): Letter {
-    val received = type.equals("RECEIVED", ignoreCase = true)
+    val received = direction.equals("RECEIVED", ignoreCase = true)
     val normalized = content.trim()
     val firstLine = normalized.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty()
     val title = firstLine.take(24).ifBlank {
-        if (received) "받은 편지 #$letterId" else "보낸 편지 #$letterId"
+        if (received) "받은 편지" else "보낸 편지"
     }
     return Letter(
-        id = letterId,
+        id = id,
         title = title,
         preview = normalized.replace('\n', ' ').take(60),
         date = createdAt.toLetterDate(),
@@ -42,6 +43,9 @@ private fun LetterDetailDto.toLetter(): Letter {
         content = normalized
     )
 }
+
+private fun <T> com.apptive.slowtalk.data.remote.ApiEnvelope<T>.requireLetterData(): T =
+    checkNotNull(data) { error?.message ?: "편지 응답 데이터가 없습니다." }
 
 private fun String.toLetterDate(): String {
     val date = substringBefore('T').replace('-', '.')

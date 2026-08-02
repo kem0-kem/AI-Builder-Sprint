@@ -601,7 +601,7 @@ fun LetterHistoryScreen(
 @Composable
 fun LetterDetailScreen(
     letter: Letter,
-    loadLetter: suspend (Int) -> Result<Letter>,
+    loadLetter: suspend (String) -> Result<Letter>,
     onBack: () -> Unit
 ) {
     var displayedLetter by remember(letter.id, letter.title) { mutableStateOf(letter) }

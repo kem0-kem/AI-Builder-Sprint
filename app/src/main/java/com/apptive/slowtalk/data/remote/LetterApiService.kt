@@ -13,10 +13,10 @@ import retrofit2.http.Query
 
 interface LetterApiService {
     @GET("letters")
-    suspend fun getLetters(@Query("type") type: String? = null): List<LetterSummaryDto>
+    suspend fun getLetters(@Query("direction") direction: String? = null): ApiEnvelope<List<LetterSummaryDto>>
 
     @GET("letters/{letterId}")
-    suspend fun getLetter(@Path("letterId") letterId: Int): LetterDetailDto
+    suspend fun getLetter(@Path("letterId") letterId: String): ApiEnvelope<LetterDetailDto>
 
     @POST("letters/feedback")
     suspend fun getLetterFeedback(@Body request: LetterFeedbackRequest): ApiEnvelope<WritingFeedbackDto>
@@ -64,15 +64,16 @@ data class WritingFeedbackDto(
 
 @Serializable
 data class LetterSummaryDto(
-    val letterId: Int,
-    val type: String,
+    val id: String,
+    val direction: String,
+    val content: String,
     val createdAt: String
 )
 
 @Serializable
 data class LetterDetailDto(
-    val letterId: Int,
-    val type: String,
+    val id: String,
+    val direction: String,
     val content: String,
     val createdAt: String
 )

@@ -19,7 +19,7 @@ sealed interface Screen {
     data object LetterHome : Screen
     data object WriteLetter : Screen
     data object LetterHistory : Screen
-    data class LetterDetail(val letterId: Int?, val title: String) : Screen
+    data class LetterDetail(val letterId: String?, val title: String) : Screen
     data object Profile : Screen
     data object EditProfile : Screen
     data object Interests : Screen
@@ -67,13 +67,13 @@ data class ChatMessage(
 )
 
 data class MeetingInviteUser(
-    val userId: Int,
+    val candidateId: String,
     val nickname: String
 )
 
 data class MeetingCreation(
-    val meetingId: Int,
-    val chatRoomId: Int
+    val meetingId: String,
+    val chatRoomId: String
 )
 
 data class Letter(
@@ -81,7 +81,7 @@ data class Letter(
     val preview: String,
     val date: String,
     val received: Boolean,
-    val id: Int? = null,
+    val id: String? = null,
     val content: String = preview
 )
 
