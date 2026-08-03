@@ -1,6 +1,8 @@
 package com.apptive.slowtalk.data.remote
 
 import okhttp3.logging.HttpLoggingInterceptor
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.Request
@@ -64,7 +66,7 @@ class RetrofitConfigurationTest {
     }
 
     @Test
-    fun `debug HTTP logger redacts authorization header`() {
+    fun `debug HTTP logger does not print authorization header`() {
         val logs = mutableListOf<String>()
         val server = MockWebServer()
         server.enqueue(MockResponse().setBody("{}"))
@@ -81,8 +83,66 @@ class RetrofitConfigurationTest {
                     .build(),
             ).execute().close()
 
-            assertTrue(logs.any { it.contains("Authorization: ██") })
+            assertFalse(logs.any { it.contains("Authorization:") })
             assertFalse(logs.any { it.contains("secret-token") })
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `debug logger never prints request body credentials or tokens`() {
+        val logs = mutableListOf<String>()
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setBody("{}"))
+        server.start()
+        try {
+            val body = """{"password":"password-value","accessToken":"access-value","refreshToken":"refresh-value"}"""
+                .toRequestBody("application/json".toMediaType())
+            createOkHttpClient(
+                isDebug = true,
+                logger = HttpLoggingInterceptor.Logger(logs::add),
+            ).newCall(
+                Request.Builder().url(server.url("/api/v1/auth/login")).post(body).build(),
+            ).execute().close()
+
+            val output = logs.joinToString("\n")
+            assertFalse(output.contains("password-value"))
+            assertFalse(output.contains("access-value"))
+            assertFalse(output.contains("refresh-value"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `public auth paths match only normalized API endpoints`() {
+        assertTrue(isPublicAuthPath("/api/v1/auth/login"))
+        assertTrue(isPublicAuthPath("/api/v1/auth/login/"))
+        assertFalse(isPublicAuthPath("/api/v1/auth/login/extra"))
+        assertFalse(isPublicAuthPath("/other/auth/login"))
+    }
+
+    @Test
+    fun `backend token refresher posts refresh body and decodes rotated pair`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody(
+                    """{"ok":true,"data":{"accessToken":"rotated-access","refreshToken":"rotated-refresh","tokenType":"Bearer","expiresIn":3600},"error":null,"meta":null}""",
+                ),
+        )
+        server.start()
+        try {
+            val tokens = createBackendTokenRefresher(server.url("/api/v1/").toString())
+                .refresh("source-refresh")
+
+            assertEquals("rotated-access", tokens?.accessToken)
+            assertEquals("rotated-refresh", tokens?.refreshToken)
+            val request = server.takeRequest()
+            assertEquals("/api/v1/auth/token/refresh", request.path)
+            assertEquals("{\"refreshToken\":\"source-refresh\"}", request.body.readUtf8())
         } finally {
             server.shutdown()
         }

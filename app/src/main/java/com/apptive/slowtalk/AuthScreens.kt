@@ -61,6 +61,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.collectAsState
 import com.apptive.slowtalk.ui.auth.AuthUiState
 import com.apptive.slowtalk.ui.auth.AuthViewModel
+import com.apptive.slowtalk.ui.auth.isValidUsername
+import com.apptive.slowtalk.ui.auth.normalizeUsernameInput
 
 @Composable
 fun LoginScreen(
@@ -222,6 +224,7 @@ fun SignUpScreen(
     var showEmailAvailableDialog by remember { mutableStateOf(false) }
     var showUsernameExistsDialog by remember { mutableStateOf(false) }
     var showUsernameAvailableDialog by remember { mutableStateOf(false) }
+    var showUsernameFormatError by remember { mutableStateOf(false) }
     
     var emailCheckResult by remember { mutableStateOf<Boolean?>(null) }
     var usernameCheckResult by remember { mutableStateOf<Boolean?>(null) }
@@ -273,9 +276,10 @@ fun SignUpScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     AuthInputField(
                         value = nameState,
-                        onValueChange = { 
-                            nameState = it 
+                        onValueChange = {
+                            nameState = TextFieldValue(normalizeUsernameInput(it.text))
                             usernameCheckResult = null
+                            showUsernameFormatError = false
                         },
                         placeholder = "아이디를 입력해주세요",
                         leadingIcon = Icons.Outlined.PersonOutline,
@@ -284,7 +288,7 @@ fun SignUpScreen(
                     Spacer(Modifier.width(8.dp))
                     Button(
                         onClick = {
-                            if (nameState.text.isNotBlank()) {
+                            if (isValidUsername(nameState.text)) {
                                 viewModel.checkUsername(nameState.text.trim()) { available ->
                                     usernameCheckResult = available
                                     if (available) {
@@ -293,6 +297,8 @@ fun SignUpScreen(
                                         showUsernameExistsDialog = true
                                     }
                                 }
+                            } else {
+                                showUsernameFormatError = true
                             }
                         },
                         modifier = Modifier.height(56.dp),
@@ -301,6 +307,15 @@ fun SignUpScreen(
                     ) {
                         Text("중복 확인", fontSize = 12.sp)
                     }
+                }
+
+                if (showUsernameFormatError) {
+                    Text(
+                        "아이디는 영문 소문자, 숫자, 밑줄(_)만 사용해 3~30자로 입력해 주세요.",
+                        color = Color.Red,
+                        fontSize = 11.sp,
+                        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, top = 4.dp),
+                    )
                 }
                 
                 Spacer(Modifier.height(12.dp))
@@ -371,7 +386,7 @@ fun SignUpScreen(
                 
                 Spacer(Modifier.height(40.dp))
                 
-                val isFieldsFilled = nameState.text.trim().isNotEmpty() && 
+                val isFieldsFilled = isValidUsername(nameState.text) &&
                                     emailState.text.trim().isNotEmpty() && 
                                     passwordState.text.length >= 8 &&
                                     confirmPasswordState.text.isNotEmpty() &&
@@ -381,7 +396,14 @@ fun SignUpScreen(
                 Button(
                     onClick = { 
                         if (passwordState.text == confirmPasswordState.text) {
-                            viewModel.signup(nameState.text.trim(), emailState.text.trim(), passwordState.text, onComplete)
+                            // Until a separate nickname field exists, the valid username is also the nickname.
+                            viewModel.signup(
+                                username = nameState.text,
+                                nickname = nameState.text,
+                                email = emailState.text.trim(),
+                                password = passwordState.text,
+                                onSuccess = onComplete,
+                            )
                         } else {
                             showPasswordErrorDialog = true
                         }

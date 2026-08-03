@@ -77,9 +77,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Signup Api V1 Auth Signup Post"
+                  "$ref": "#/components/schemas/AuthSuccessResponse_SignupResponse_"
                 }
               }
             }
@@ -120,9 +118,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Login Api V1 Auth Login Post"
+                  "$ref": "#/components/schemas/AuthSuccessResponse_TokenPair_"
                 }
               }
             }
@@ -163,9 +159,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Refresh Api V1 Auth Token Refresh Post"
+                  "$ref": "#/components/schemas/AuthSuccessResponse_TokenPair_"
                 }
               }
             }
@@ -2441,6 +2435,74 @@
   },
   "components": {
     "schemas": {
+      "AuthSuccessResponse_SignupResponse_": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true,
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/SignupResponse"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "AuthSuccessResponse[SignupResponse]"
+      },
+      "AuthSuccessResponse_TokenPair_": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true,
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/TokenPair"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "AuthSuccessResponse[TokenPair]"
+      },
       "Body_letter_ocr_api_v1_letters_ocr_post": {
         "properties": {
           "image": {
@@ -2945,6 +3007,40 @@
         ],
         "title": "SignupRequest"
       },
+      "SignupResponse": {
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "title": "Accesstoken"
+          },
+          "refreshToken": {
+            "type": "string",
+            "title": "Refreshtoken"
+          },
+          "tokenType": {
+            "type": "string",
+            "title": "Tokentype",
+            "default": "Bearer"
+          },
+          "expiresIn": {
+            "type": "integer",
+            "title": "Expiresin"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Userid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "accessToken",
+          "refreshToken",
+          "expiresIn",
+          "userId"
+        ],
+        "title": "SignupResponse"
+      },
       "TextFeedbackRequest": {
         "properties": {
           "content": {
@@ -2959,6 +3055,34 @@
           "content"
         ],
         "title": "TextFeedbackRequest"
+      },
+      "TokenPair": {
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "title": "Accesstoken"
+          },
+          "refreshToken": {
+            "type": "string",
+            "title": "Refreshtoken"
+          },
+          "tokenType": {
+            "type": "string",
+            "title": "Tokentype",
+            "default": "Bearer"
+          },
+          "expiresIn": {
+            "type": "integer",
+            "title": "Expiresin"
+          }
+        },
+        "type": "object",
+        "required": [
+          "accessToken",
+          "refreshToken",
+          "expiresIn"
+        ],
+        "title": "TokenPair"
       },
       "ValidationError": {
         "properties": {

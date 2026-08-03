@@ -117,4 +117,15 @@ class AuthRepositoryTest {
         assertNull(AuthSession.accessToken)
         assertNull(AuthSession.refreshToken)
     }
+
+    @Test
+    fun `logout network failure is best effort success and clears local session`() = runBlocking {
+        AuthSession.save("access-value", "refresh-value")
+        server.shutdown()
+
+        val result = repository.logout()
+
+        assertTrue(result.isSuccess)
+        assertNull(AuthSession.tokens.value)
+    }
 }

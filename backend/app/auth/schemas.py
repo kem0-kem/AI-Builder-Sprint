@@ -1,4 +1,5 @@
-from typing import Annotated
+from typing import Annotated, Any, Generic, Literal, TypeVar
+from uuid import UUID
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, EmailStr, Field
 
@@ -43,3 +44,17 @@ class TokenPair(BaseModel):
     refresh_token: str = Field(alias="refreshToken")
     token_type: str = Field("Bearer", alias="tokenType")
     expires_in: int = Field(alias="expiresIn")
+
+
+class SignupResponse(TokenPair):
+    user_id: UUID = Field(alias="userId")
+
+
+ResponseData = TypeVar("ResponseData")
+
+
+class AuthSuccessResponse(BaseModel, Generic[ResponseData]):
+    ok: Literal[True] = True
+    data: ResponseData
+    error: None = None
+    meta: dict[str, Any] | None = None

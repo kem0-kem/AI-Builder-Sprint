@@ -35,7 +35,7 @@ class AuthRepository(private val api: AuthApi = RetrofitClient.authApi) {
     }
 
     suspend fun checkUsername(username: String): Result<Boolean> = try {
-        Result.success(apiData { api.checkUsername(username) }.available)
+        Result.success(apiData { api.checkUsername(username.lowercase()) }.available)
     } catch (exception: Exception) {
         Result.failure(exception)
     }
@@ -49,8 +49,8 @@ class AuthRepository(private val api: AuthApi = RetrofitClient.authApi) {
         return try {
             apiUnit { api.logout(RefreshRequest(refreshToken)) }
             Result.success("로그아웃되었습니다.")
-        } catch (exception: Exception) {
-            Result.failure(exception)
+        } catch (_: Exception) {
+            Result.success("로그아웃되었습니다.")
         } finally {
             AuthSession.clear()
         }

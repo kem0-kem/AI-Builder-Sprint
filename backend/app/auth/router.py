@@ -11,7 +11,15 @@ from sqlalchemy.exc import IntegrityError
 
 from app.auth.dependencies import CurrentUserId, Session
 from app.auth.models import RefreshToken, User
-from app.auth.schemas import LoginRequest, RefreshRequest, SignupRequest, TokenPair, Username
+from app.auth.schemas import (
+    AuthSuccessResponse,
+    LoginRequest,
+    RefreshRequest,
+    SignupRequest,
+    SignupResponse,
+    TokenPair,
+    Username,
+)
 from app.auth.security import (
     create_access_token,
     hash_password,
@@ -81,7 +89,11 @@ async def raise_signup_conflict(
         raise ApiError("EMAIL_ALREADY_EXISTS", "이미 사용 중인 이메일입니다.", 409)
 
 
-@router.post("/signup", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/signup",
+    status_code=status.HTTP_201_CREATED,
+    response_model=AuthSuccessResponse[SignupResponse],
+)
 async def signup(request: SignupRequest, session: Session) -> dict[str, object]:
     email = request.email.lower()
     await raise_signup_conflict(session, email=email, username=request.username)
@@ -107,7 +119,11 @@ async def signup(request: SignupRequest, session: Session) -> dict[str, object]:
     return success({"userId": str(user.id), **pair.model_dump(by_alias=True)})
 
 
-@router.post("/login", dependencies=[Depends(login_limiter)])
+@router.post(
+    "/login",
+    dependencies=[Depends(login_limiter)],
+    response_model=AuthSuccessResponse[TokenPair],
+)
 async def login(request: LoginRequest, session: Session) -> dict[str, object]:
     user = await session.scalar(select(User).where(User.email == request.email.lower()))
     if user is None or not verify_password(request.password, user.password_hash):
@@ -117,7 +133,7 @@ async def login(request: LoginRequest, session: Session) -> dict[str, object]:
     return success(pair.model_dump(by_alias=True))
 
 
-@router.post("/token/refresh")
+@router.post("/token/refresh", response_model=AuthSuccessResponse[TokenPair])
 async def refresh(request: RefreshRequest, session: Session) -> dict[str, object]:
     now = datetime.now(UTC)
     token = await session.scalar(

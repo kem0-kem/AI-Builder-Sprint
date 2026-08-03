@@ -2,9 +2,12 @@ package com.apptive.slowtalk.data.remote
 
 import com.apptive.slowtalk.BuildConfig
 import com.apptive.slowtalk.data.auth.AuthSession
+import com.apptive.slowtalk.data.auth.AuthTokens
+import kotlinx.serialization.encodeToString
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.WebSocket
@@ -41,8 +44,10 @@ internal fun webSocketBaseUrl(apiBaseUrl: String): String =
 internal fun createOkHttpClient(
     isDebug: Boolean,
     logger: HttpLoggingInterceptor.Logger = HttpLoggingInterceptor.Logger.DEFAULT,
+    tokenRefresher: AuthTokenRefresher = AuthTokenRefresher { null },
 ): OkHttpClient =
     OkHttpClient.Builder()
+        .authenticator(SessionAuthenticator(tokenRefresher))
         .apply {
             addInterceptor { chain ->
                 val original = chain.request()
@@ -50,31 +55,30 @@ internal fun createOkHttpClient(
                 val request = if (
                     accessToken.isNullOrBlank() ||
                     original.header("Authorization") != null ||
-                    isPublicAuthRequest(original.url.encodedPath)
+                    isPublicAuthPath(original.url.encodedPath)
                 ) {
                     original
                 } else {
                     original.newBuilder()
                         .header("Authorization", "Bearer $accessToken")
+                        .tag(LocalAuthToken::class.java, LocalAuthToken(accessToken))
                         .build()
                 }
-                val response = chain.proceed(request)
-                if (response.code == 401) AuthSession.clear()
-                response
+                chain.proceed(request)
             }
             if (isDebug) {
                 addInterceptor(
                     HttpLoggingInterceptor(logger).apply {
                         redactHeader("Authorization")
-                        level = HttpLoggingInterceptor.Level.BODY
+                        level = HttpLoggingInterceptor.Level.BASIC
                     },
                 )
             }
         }
         .build()
 
-private fun isPublicAuthRequest(encodedPath: String): Boolean =
-    PUBLIC_AUTH_PATHS.any(encodedPath::endsWith)
+internal fun isPublicAuthPath(encodedPath: String): Boolean =
+    encodedPath.trimEnd('/').ifBlank { "/" } in PUBLIC_AUTH_PATHS
 
 private val PUBLIC_AUTH_PATHS = setOf(
     "/auth/signup",
@@ -82,12 +86,94 @@ private val PUBLIC_AUTH_PATHS = setOf(
     "/auth/email-availability",
     "/auth/check-username",
     "/auth/token/refresh",
+    "/api/v1/auth/signup",
+    "/api/v1/auth/login",
+    "/api/v1/auth/email-availability",
+    "/api/v1/auth/check-username",
+    "/api/v1/auth/token/refresh",
 )
+
+fun interface AuthTokenRefresher {
+    fun refresh(refreshToken: String): AuthTokens?
+}
+
+private data class LocalAuthToken(val accessToken: String)
+
+private class SessionAuthenticator(
+    private val tokenRefresher: AuthTokenRefresher,
+) : okhttp3.Authenticator {
+    private val refreshLock = Any()
+
+    override fun authenticate(route: okhttp3.Route?, response: okhttp3.Response): Request? {
+        val attached = response.request.tag(LocalAuthToken::class.java) ?: return null
+        if (responseCount(response) >= 2) {
+            AuthSession.compareAndClear(attached.accessToken)
+            return null
+        }
+        synchronized(refreshLock) {
+            val current = AuthSession.tokens.value ?: return null
+            if (current.accessToken != attached.accessToken) {
+                return response.request.withLocalToken(current.accessToken)
+            }
+            val rotated = runCatching {
+                tokenRefresher.refresh(current.refreshToken)
+            }.getOrNull()
+            if (rotated == null) {
+                AuthSession.compareAndClear(attached.accessToken)
+                return null
+            }
+            return runCatching {
+                AuthSession.save(rotated.accessToken, rotated.refreshToken)
+                response.request.withLocalToken(rotated.accessToken)
+            }.getOrElse {
+                AuthSession.compareAndClear(attached.accessToken)
+                null
+            }
+        }
+    }
+
+    private fun responseCount(response: okhttp3.Response): Int {
+        var count = 1
+        var prior = response.priorResponse
+        while (prior != null) {
+            count += 1
+            prior = prior.priorResponse
+        }
+        return count
+    }
+}
+
+private fun Request.withLocalToken(accessToken: String): Request = newBuilder()
+    .header("Authorization", "Bearer $accessToken")
+    .tag(LocalAuthToken::class.java, LocalAuthToken(accessToken))
+    .build()
+
+internal fun createBackendTokenRefresher(apiBaseUrl: String): AuthTokenRefresher {
+    val refreshClient = OkHttpClient.Builder().build()
+    val refreshUrl = normalizeBaseUrl(apiBaseUrl) + "auth/token/refresh"
+    return AuthTokenRefresher { refreshToken ->
+        val payload = apiJson.encodeToString(RefreshRequest(refreshToken))
+        val request = Request.Builder()
+            .url(refreshUrl)
+            .post(payload.toRequestBody("application/json".toMediaType()))
+            .build()
+        refreshClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return@AuthTokenRefresher null
+            val body = response.body?.string() ?: return@AuthTokenRefresher null
+            val envelope = apiJson.decodeFromString<ApiEnvelope<LoginResponse>>(body)
+            val pair = envelope.requireData()
+            AuthTokens(pair.accessToken, pair.refreshToken)
+        }
+    }
+}
 
 object RetrofitClient {
     internal val baseUrl = configuredBaseUrl(BuildConfig.API_BASE_URL, BuildConfig.DEBUG)
 
-    private val okHttpClient = createOkHttpClient(BuildConfig.DEBUG)
+    private val okHttpClient = createOkHttpClient(
+        BuildConfig.DEBUG,
+        tokenRefresher = createBackendTokenRefresher(baseUrl),
+    )
 
     private val retrofit = Retrofit.Builder()
         .baseUrl(baseUrl)

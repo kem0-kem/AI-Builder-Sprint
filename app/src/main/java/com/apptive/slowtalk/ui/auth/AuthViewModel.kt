@@ -11,16 +11,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 sealed class AuthUiState {
-    object Idle : AuthUiState()
-    object Loading : AuthUiState()
+    data object Idle : AuthUiState()
+    data object Loading : AuthUiState()
     data class Success(val message: String) : AuthUiState()
     data class Error(val message: String) : AuthUiState()
 }
 
 class AuthViewModel(
-    private val repository: AuthRepository = AuthRepository()
+    private val repository: AuthRepository = AuthRepository(),
 ) : ViewModel() {
-
     private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.Idle)
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
@@ -38,56 +37,65 @@ class AuthViewModel(
         }
     }
 
-    fun signup(nickname: String, email: String, password: String, onSuccess: () -> Unit) {
+    fun signup(
+        username: String,
+        nickname: String,
+        email: String,
+        password: String,
+        onSuccess: () -> Unit,
+    ) {
         viewModelScope.launch {
-            _uiState.value = AuthUiState.Loading
-            repository.signup(SignupRequest(email, password, nickname, username = nickname))
-                .onSuccess {
-                    _uiState.value = AuthUiState.Idle
-                    onSuccess()
-                }
-                .onFailure {
-                    _uiState.value = AuthUiState.Error(it.message ?: "회원가입 실패")
-                }
+            signupNow(username, nickname, email, password, onSuccess)
         }
+    }
+
+    internal suspend fun signupNow(
+        username: String,
+        nickname: String,
+        email: String,
+        password: String,
+        onSuccess: () -> Unit,
+    ) {
+        _uiState.value = AuthUiState.Loading
+        repository.signup(SignupRequest(email, password, nickname, username = username.lowercase()))
+            .onSuccess {
+                _uiState.value = AuthUiState.Idle
+                onSuccess()
+            }
+            .onFailure {
+                _uiState.value = AuthUiState.Error(it.message ?: "회원가입 실패")
+            }
     }
 
     fun checkEmail(email: String, onResult: (Boolean) -> Unit) {
         viewModelScope.launch {
             repository.checkEmail(email)
-                .onSuccess { available ->
-                    onResult(available)
-                }
-                .onFailure {
-                    // 에러 시 기본적으로 중복된 것으로 처리하거나 에러 메시지 표시
-                    onResult(false)
-                }
+                .onSuccess(onResult)
+                .onFailure { onResult(false) }
         }
     }
 
     fun checkUsername(username: String, onResult: (Boolean) -> Unit) {
         viewModelScope.launch {
             repository.checkUsername(username)
-                .onSuccess { available ->
-                    onResult(available)
-                }
-                .onFailure {
-                    onResult(false)
-                }
+                .onSuccess(onResult)
+                .onFailure { onResult(false) }
         }
     }
 
     fun logout(onSuccess: () -> Unit) {
-        viewModelScope.launch {
-            _uiState.value = AuthUiState.Loading
-            repository.logout()
-                .onSuccess {
-                    _uiState.value = AuthUiState.Idle
-                    onSuccess()
-                }
-                .onFailure {
-                    _uiState.value = AuthUiState.Error(it.message ?: "로그아웃 실패")
-                }
-        }
+        viewModelScope.launch { logoutNow(onSuccess) }
+    }
+
+    internal suspend fun logoutNow(onSuccess: () -> Unit) {
+        _uiState.value = AuthUiState.Loading
+        repository.logout()
+            .onSuccess {
+                _uiState.value = AuthUiState.Idle
+                onSuccess()
+            }
+            .onFailure {
+                _uiState.value = AuthUiState.Error(it.message ?: "로그아웃 실패")
+            }
     }
 }

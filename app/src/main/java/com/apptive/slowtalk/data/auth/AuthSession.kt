@@ -1,9 +1,16 @@
 package com.apptive.slowtalk.data.auth
 
 import android.content.Context
-import android.content.SharedPreferences
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
-data class AuthTokens(val accessToken: String, val refreshToken: String)
+data class AuthTokens(
+    val accessToken: String,
+    val refreshToken: String,
+)
 
 internal interface AuthTokenStore {
     fun load(): AuthTokens?
@@ -11,9 +18,27 @@ internal interface AuthTokenStore {
     fun clear()
 }
 
-private class SharedPreferencesAuthTokenStore(
-    private val preferences: SharedPreferences,
+private class EncryptedPreferencesAuthTokenStore(
+    private val context: Context,
 ) : AuthTokenStore {
+    private val preferences = EncryptedSharedPreferences.create(
+        context,
+        ENCRYPTED_PREFERENCES_NAME,
+        MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build(),
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+    )
+
+    init {
+        // Remove credentials written by the pre-encryption implementation.
+        context.getSharedPreferences(LEGACY_PREFERENCES_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .clear()
+            .apply()
+    }
+
     override fun load(): AuthTokens? {
         val accessToken = preferences.getString(KEY_ACCESS_TOKEN, null)
         val refreshToken = preferences.getString(KEY_REFRESH_TOKEN, null)
@@ -33,40 +58,38 @@ private class SharedPreferencesAuthTokenStore(
     }
 
     private companion object {
+        const val ENCRYPTED_PREFERENCES_NAME = "slowtalk_auth_session_encrypted"
+        const val LEGACY_PREFERENCES_NAME = "slowtalk_auth_session"
         const val KEY_ACCESS_TOKEN = "access_token"
         const val KEY_REFRESH_TOKEN = "refresh_token"
     }
 }
 
 object AuthSession {
-    @Volatile
-    var accessToken: String? = null
-        private set
+    private val _tokens = MutableStateFlow<AuthTokens?>(null)
+    val tokens: StateFlow<AuthTokens?> = _tokens.asStateFlow()
 
-    @Volatile
-    var refreshToken: String? = null
-        private set
+    val accessToken: String?
+        get() = _tokens.value?.accessToken
+
+    val refreshToken: String?
+        get() = _tokens.value?.refreshToken
 
     val isAuthenticated: Boolean
-        get() = !accessToken.isNullOrBlank() && !refreshToken.isNullOrBlank()
+        get() = _tokens.value != null
 
     private var tokenStore: AuthTokenStore? = null
 
     @Synchronized
     fun initialize(context: Context) {
-        initialize(
-            SharedPreferencesAuthTokenStore(
-                context.applicationContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE),
-            ),
-        )
+        initialize(EncryptedPreferencesAuthTokenStore(context.applicationContext))
     }
 
     @Synchronized
     internal fun initialize(store: AuthTokenStore) {
-        tokenStore = store
         val restored = store.load()
-        accessToken = restored?.accessToken
-        refreshToken = restored?.refreshToken
+        tokenStore = store
+        _tokens.value = restored
     }
 
     @Synchronized
@@ -76,25 +99,28 @@ object AuthSession {
         val store = requireNotNull(tokenStore) {
             "AuthSession must be initialized before saving a session."
         }
-        val tokens = AuthTokens(accessToken, refreshToken)
-        this.accessToken = accessToken
-        this.refreshToken = refreshToken
-        store.save(tokens)
+        val updated = AuthTokens(accessToken, refreshToken)
+        store.save(updated)
+        _tokens.value = updated
     }
 
     @Synchronized
     fun clear() {
-        accessToken = null
-        refreshToken = null
         tokenStore?.clear()
+        _tokens.value = null
+    }
+
+    @Synchronized
+    fun compareAndClear(expectedAccessToken: String): Boolean {
+        if (_tokens.value?.accessToken != expectedAccessToken) return false
+        tokenStore?.clear()
+        _tokens.value = null
+        return true
     }
 
     @Synchronized
     internal fun resetForTest() {
-        accessToken = null
-        refreshToken = null
         tokenStore = null
+        _tokens.value = null
     }
-
-    private const val PREFERENCES_NAME = "slowtalk_auth_session"
 }

@@ -37,6 +37,26 @@ def test_username_availability_contract() -> None:
     assert username["schema"]["pattern"] == "^[a-z0-9_]+$"
 
 
+def test_auth_success_responses_use_typed_envelopes_without_secret_examples() -> None:
+    document = create_app().openapi()
+    cases = (
+        ("/api/v1/auth/signup", "201"),
+        ("/api/v1/auth/login", "200"),
+        ("/api/v1/auth/token/refresh", "200"),
+    )
+    for path, status in cases:
+        schema = document["paths"][path]["post"]["responses"][status]["content"][
+            "application/json"
+        ]["schema"]
+        assert "$ref" in schema
+        component = document["components"]["schemas"][schema["$ref"].rsplit("/", 1)[-1]]
+        assert {"ok", "data", "error", "meta"} <= set(component["properties"])
+
+    serialized = json.dumps(document)
+    assert "example-access-token" not in serialized
+    assert "example-refresh-token" not in serialized
+
+
 def test_readiness_documents_incomplete_configuration_response() -> None:
     responses = create_app().openapi()["paths"]["/api/v1/ready"]["get"]["responses"]
 

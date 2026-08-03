@@ -17,6 +17,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -57,6 +58,7 @@ private fun ApptiveApp() {
     val authViewModel: AuthViewModel = viewModel()
     val reflectionViewModel: ReflectionViewModel = viewModel()
     val letterViewModel: LetterViewModel = viewModel()
+    val sessionTokens by AuthSession.tokens.collectAsState()
     var isLoggedIn by remember { mutableStateOf(AuthSession.isAuthenticated) }
     var screen by remember { mutableStateOf<Screen>(if (isLoggedIn) Screen.Feed else Screen.Login) }
     var profileReturnScreen by remember { mutableStateOf<Screen>(Screen.Feed) }
@@ -65,6 +67,14 @@ private fun ApptiveApp() {
     val likedFeeds = remember { mutableStateMapOf<String, Boolean>() }
     val likingFeeds = remember { mutableStateMapOf<String, Boolean>() }
     val feeds = remember { mutableStateListOf<FeedPost>() }
+
+    LaunchedEffect(sessionTokens) {
+        val nextScreen = screenAfterSessionChange(screen, sessionTokens != null)
+        if (nextScreen != screen) {
+            isLoggedIn = false
+            screen = nextScreen
+        }
+    }
     val letters = remember {
         listOf(
             Letter("천천히 걸었던 하루", "오늘은 평소보다 조금 느리게 걸어봤어요.", "2026.07.22 · 15:40", true),
@@ -153,9 +163,8 @@ private fun ApptiveApp() {
                 viewModel = authViewModel,
                 onBack = { screen = Screen.Login },
                 onComplete = {
-                    // 가입 완료 후 로그인 화면으로 이동
-                    screen = Screen.Login
-                    Toast.makeText(context, "회원가입이 완료되었습니다. 로그인해주세요.", Toast.LENGTH_SHORT).show()
+                    isLoggedIn = true
+                    screen = Screen.Feed
                 }
             )
             Screen.Feed, Screen.Conversations, Screen.LetterHome -> Scaffold(
@@ -460,3 +469,7 @@ private fun Int.toMainScreen(): Screen = when (this) {
     1 -> Screen.Feed
     else -> Screen.LetterHome
 }
+
+internal fun screenAfterSessionChange(current: Screen, isAuthenticated: Boolean): Screen =
+    if (!isAuthenticated && current != Screen.Login && current != Screen.SignUp) Screen.Login
+    else current

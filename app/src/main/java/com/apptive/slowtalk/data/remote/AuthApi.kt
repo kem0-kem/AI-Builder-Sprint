@@ -13,6 +13,9 @@ interface AuthApi {
     @POST("auth/login")
     suspend fun login(@Body request: LoginRequest): ApiEnvelope<LoginResponse>
 
+    @POST("auth/token/refresh")
+    suspend fun refresh(@Body request: RefreshRequest): ApiEnvelope<LoginResponse>
+
     @GET("auth/email-availability")
     suspend fun checkEmail(@Query("email") email: String): ApiEnvelope<EmailCheckResponse>
 
