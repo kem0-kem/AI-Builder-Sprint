@@ -1,6 +1,7 @@
 package com.apptive.slowtalk
 
 import com.apptive.slowtalk.data.remote.FeedTimelineDto
+import com.apptive.slowtalk.data.remote.FeedDetailCommentDto
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
@@ -11,6 +12,20 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 
 class FeedApiAdapterTest {
+    @Test
+    fun `comment adapter nests replies under their parent`() {
+        val rootId = "00000000-0000-4000-8000-000000000010"
+        val replyId = "00000000-0000-4000-8000-000000000011"
+        val comments = listOf(
+            comment(rootId, null, "root"),
+            comment(replyId, rootId, "reply"),
+        ).toUiComments()
+
+        assertEquals(1, comments.size)
+        assertEquals(rootId, comments.single().id)
+        assertEquals(replyId, comments.single().replies.single().id)
+    }
+
     @Test
     fun `feed keeps category UUID separate from display label`() {
         val categoryId = "d5d13bf5-2e15-4923-8762-f2b29937ac37"
@@ -113,5 +128,14 @@ class FeedApiAdapterTest {
         content = "I took a walk.",
         createdAt = "2026-08-03T10:00:00+00:00",
         updatedAt = "2026-08-03T10:00:00+00:00",
+    )
+
+    private fun comment(id: String, parentId: String?, content: String) = FeedDetailCommentDto(
+        id = id,
+        feedId = "00000000-0000-4000-8000-000000000001",
+        parentCommentId = parentId,
+        content = content,
+        isMine = true,
+        createdAt = "2026-08-03T10:00:00+00:00",
     )
 }

@@ -88,7 +88,6 @@ private fun ApptiveApp() {
         if (likingFeeds[feedId] != true) {
             val wasLiked = likedFeeds[feedId] == true
             val requestedLike = !wasLiked
-            likedFeeds[feedId] = requestedLike
             likingFeeds[feedId] = true
             appScope.launch {
                 FeedApi.setFeedLiked(feedId, requestedLike)
@@ -209,17 +208,21 @@ private fun ApptiveApp() {
                             onOpenFeed = { screen = Screen.FeedDetail(it) },
                             isLiked = { likedFeeds[it] == true },
                             onToggleLike = toggleFeedLike,
-                            loadFeeds = { FeedApi.getFeeds() },
-                            onFeedsLoaded = { remoteFeeds ->
-                                feeds.removeAll { !it.isMine }
+                            loadFeeds = { cursor -> FeedApi.getFeeds(cursor = cursor) },
+                            onFeedsLoaded = { remoteFeeds, append ->
+                                if (!append) feeds.removeAll { !it.isMine }
+                                val incomingIds = remoteFeeds.mapTo(mutableSetOf()) { it.post.id }
+                                feeds.removeAll { !it.isMine && it.id in incomingIds }
                                 feeds.addAll(remoteFeeds.map { it.post })
                                 remoteFeeds.forEach { item ->
                                     likedFeeds[item.post.id] = item.liked
                                 }
                             },
-                            loadMyFeeds = { FeedApi.getMyFeeds() },
-                            onMyFeedsLoaded = { remoteFeeds ->
-                                feeds.removeAll { it.isMine }
+                            loadMyFeeds = { cursor -> FeedApi.getMyFeeds(cursor = cursor) },
+                            onMyFeedsLoaded = { remoteFeeds, append ->
+                                if (!append) feeds.removeAll { it.isMine }
+                                val incomingIds = remoteFeeds.mapTo(mutableSetOf()) { it.post.id }
+                                feeds.removeAll { it.isMine && it.id in incomingIds }
                                 feeds.addAll(remoteFeeds.map { it.post })
                                 remoteFeeds.forEach { item ->
                                     likedFeeds[item.post.id] = item.liked
@@ -325,13 +328,14 @@ private fun ApptiveApp() {
                     onToggleLike = { toggleFeedLike(post.id) },
                     onEdit = { screen = Screen.EditFeed(post.id) },
                     onDelete = {
-                        feeds.removeAll { it.id == post.id }
-                        likedFeeds.remove(post.id)
-                        screen = Screen.Feed
-                        Toast.makeText(context, "피드가 삭제되었습니다.", Toast.LENGTH_SHORT).show()
                         if (FeedApi.isConfigured) {
                             appScope.launch {
-                                FeedApi.deleteFeed(post.id).onFailure {
+                                FeedApi.deleteFeed(post.id).onSuccess {
+                                    feeds.removeAll { it.id == post.id }
+                                    likedFeeds.remove(post.id)
+                                    screen = Screen.Feed
+                                    Toast.makeText(context, "피드가 삭제되었습니다.", Toast.LENGTH_SHORT).show()
+                                }.onFailure {
                                     Toast.makeText(
                                         context,
                                         "서버에서 피드를 삭제하지 못했습니다.",
@@ -342,10 +346,11 @@ private fun ApptiveApp() {
                         }
                     },
                     onReport = {
-                        Toast.makeText(context, "신고가 접수되었습니다.", Toast.LENGTH_SHORT).show()
                         if (FeedApi.isConfigured) {
                             appScope.launch {
-                                FeedApi.reportFeed(post.id).onFailure {
+                                FeedApi.reportFeed(post.id).onSuccess {
+                                    Toast.makeText(context, "신고가 접수되었습니다.", Toast.LENGTH_SHORT).show()
+                                }.onFailure {
                                     Toast.makeText(
                                         context,
                                         "신고를 서버에 전송하지 못했습니다.",

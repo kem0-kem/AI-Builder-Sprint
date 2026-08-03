@@ -91,10 +91,10 @@ fun FeedScreen(
     onOpenFeed: (String) -> Unit,
     isLiked: (String) -> Boolean,
     onToggleLike: (String) -> Unit,
-    loadFeeds: suspend () -> Result<List<MyFeedResult>>,
-    onFeedsLoaded: (List<MyFeedResult>) -> Unit,
-    loadMyFeeds: suspend () -> Result<List<MyFeedResult>>,
-    onMyFeedsLoaded: (List<MyFeedResult>) -> Unit,
+    loadFeeds: suspend (String?) -> Result<FeedPageResult>,
+    onFeedsLoaded: (List<MyFeedResult>, Boolean) -> Unit,
+    loadMyFeeds: suspend (String?) -> Result<FeedPageResult>,
+    onMyFeedsLoaded: (List<MyFeedResult>, Boolean) -> Unit,
     onWrite: () -> Unit,
     onProfile: () -> Unit,
     onTab: (MainTab) -> Unit,
@@ -106,6 +106,8 @@ fun FeedScreen(
     var allFeedsLoadFailed by remember { mutableStateOf(false) }
     var isMyFeedsLoading by remember { mutableStateOf(false) }
     var myFeedsLoadFailed by remember { mutableStateOf(false) }
+    var allNextCursor by remember { mutableStateOf<String?>(null) }
+    var myNextCursor by remember { mutableStateOf<String?>(null) }
     val refreshScope = rememberCoroutineScope()
     val visibleFeeds = when (selectedIndex) {
         FeedIndex.ALL -> feeds.filterNot { it.isMine }
@@ -114,9 +116,10 @@ fun FeedScreen(
 
     suspend fun refreshAllFeeds() {
         isAllFeedsLoading = true
-        loadFeeds().fold(
-            onSuccess = {
-                onFeedsLoaded(it)
+        loadFeeds(null).fold(
+            onSuccess = { page ->
+                onFeedsLoaded(page.items, false)
+                allNextCursor = page.nextCursor
                 allFeedsLoadFailed = false
             },
             onFailure = {
@@ -128,9 +131,10 @@ fun FeedScreen(
 
     suspend fun refreshMyFeeds() {
         isMyFeedsLoading = true
-        loadMyFeeds().fold(
-            onSuccess = {
-                onMyFeedsLoaded(it)
+        loadMyFeeds(null).fold(
+            onSuccess = { page ->
+                onMyFeedsLoaded(page.items, false)
+                myNextCursor = page.nextCursor
                 myFeedsLoadFailed = false
             },
             onFailure = {
@@ -215,6 +219,39 @@ fun FeedScreen(
                             isLiked = isLiked(post.id),
                             onToggleLike = { onToggleLike(post.id) }
                         )
+                    }
+                    val nextCursor = if (selectedIndex == FeedIndex.MINE) myNextCursor else allNextCursor
+                    if (nextCursor != null) {
+                        item {
+                            Button(
+                                onClick = {
+                                    refreshScope.launch {
+                                        if (selectedIndex == FeedIndex.MINE) {
+                                            isMyFeedsLoading = true
+                                            loadMyFeeds(nextCursor).onSuccess { page ->
+                                                onMyFeedsLoaded(page.items, true)
+                                                myNextCursor = page.nextCursor
+                                            }.onFailure { myFeedsLoadFailed = true }
+                                            isMyFeedsLoading = false
+                                        } else {
+                                            isAllFeedsLoading = true
+                                            loadFeeds(nextCursor).onSuccess { page ->
+                                                onFeedsLoaded(page.items, true)
+                                                allNextCursor = page.nextCursor
+                                            }.onFailure { allFeedsLoadFailed = true }
+                                            isAllFeedsLoading = false
+                                        }
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 22.dp, vertical = 12.dp),
+                                enabled = if (selectedIndex == FeedIndex.MINE) !isMyFeedsLoading else !isAllFeedsLoading,
+                                colors = ButtonDefaults.buttonColors(containerColor = Purple),
+                            ) {
+                                Text("더 보기")
+                            }
+                        }
                     }
                 }
             }
@@ -957,11 +994,15 @@ fun FeedDetailScreen(
     val context = LocalContext.current
 
     suspend fun refreshFeed() {
-        loadFeed(post.id).onSuccess { result ->
-            displayedPost = result.post
-            comments = result.post.comments.toList()
-            onFeedLoaded(result)
-        }
+        loadFeed(post.id)
+            .onSuccess { result ->
+                displayedPost = result.post
+                comments = result.post.comments.toList()
+                onFeedLoaded(result)
+            }
+            .onFailure {
+                Toast.makeText(context, "피드를 불러오지 못했습니다. 아래로 당겨 다시 시도해 주세요.", Toast.LENGTH_SHORT).show()
+            }
     }
 
     LaunchedEffect(post.id) {
@@ -1001,12 +1042,13 @@ fun FeedDetailScreen(
                 )
             }
         }
-        commitComments(updated)
         target.id?.let { commentId ->
             refreshScope.launch {
-                FeedApi.updateComment(post.id, commentId, content).onFailure {
-                    Toast.makeText(context, "댓글 수정을 서버에 반영하지 못했습니다.", Toast.LENGTH_SHORT).show()
-                }
+                FeedApi.updateComment(commentId, content)
+                    .onSuccess { commitComments(updated) }
+                    .onFailure {
+                        Toast.makeText(context, "댓글 수정을 서버에 반영하지 못했습니다. 다시 시도해 주세요.", Toast.LENGTH_SHORT).show()
+                    }
             }
         }
     }
@@ -1030,12 +1072,13 @@ fun FeedDetailScreen(
                 }
             }
         }
-        commitComments(updated)
         target.id?.let { commentId ->
             refreshScope.launch {
-                FeedApi.deleteComment(post.id, commentId).onFailure {
-                    Toast.makeText(context, "댓글을 서버에서 삭제하지 못했습니다.", Toast.LENGTH_SHORT).show()
-                }
+                FeedApi.deleteComment(commentId)
+                    .onSuccess { commitComments(updated) }
+                    .onFailure {
+                        Toast.makeText(context, "댓글을 서버에서 삭제하지 못했습니다. 다시 시도해 주세요.", Toast.LENGTH_SHORT).show()
+                    }
             }
         }
     }
@@ -1046,12 +1089,15 @@ fun FeedDetailScreen(
         } else {
             comments[parentIndex].replies[replyIndex]
         }
-        Toast.makeText(context, "댓글 신고가 접수되었습니다.", Toast.LENGTH_SHORT).show()
         target.id?.let { commentId ->
             refreshScope.launch {
-                FeedApi.reportComment(post.id, commentId).onFailure {
-                    Toast.makeText(context, "댓글 신고를 서버에 전송하지 못했습니다.", Toast.LENGTH_SHORT).show()
-                }
+                FeedApi.reportComment(commentId)
+                    .onSuccess {
+                        Toast.makeText(context, "댓글 신고가 접수되었습니다.", Toast.LENGTH_SHORT).show()
+                    }
+                    .onFailure {
+                        Toast.makeText(context, "댓글 신고를 서버에 전송하지 못했습니다. 다시 시도해 주세요.", Toast.LENGTH_SHORT).show()
+                    }
             }
         }
     }
@@ -1205,37 +1251,29 @@ fun FeedDetailScreen(
                                     val message = comment.trim()
                                     if (message.isNotBlank()) {
                                         val targetIndex = replyTarget?.first
-                                        val updatedComments = if (targetIndex == null) {
-                                            comments + Comment("나", message, "지금", true)
-                                        } else {
-                                            comments.mapIndexed { index, item ->
-                                                if (index == targetIndex) {
-                                                    item.copy(
-                                                        replies = item.replies + Comment(
-                                                            author = "글쓴이",
-                                                            message = message,
-                                                            time = "지금",
-                                                            isMine = true
-                                                        )
-                                                    )
-                                                } else {
-                                                    item
-                                                }
-                                            }
-                                        }
-                                        commitComments(updatedComments)
-                                        val createdParentIndex = targetIndex ?: updatedComments.lastIndex
-                                        val createdReplyIndex = targetIndex?.let {
-                                            updatedComments[it].replies.lastIndex
-                                        }
+                                        val parentCommentId = targetIndex?.let { comments[it].id }
                                         refreshScope.launch {
-                                            FeedApi.createComment(post.id, message)
-                                                .onSuccess { commentId ->
-                                                    assignCommentId(
-                                                        createdParentIndex,
-                                                        createdReplyIndex,
-                                                        commentId
+                                            FeedApi.createComment(post.id, message, parentCommentId)
+                                                .onSuccess { created ->
+                                                    val newComment = Comment(
+                                                        author = "나",
+                                                        message = created.content,
+                                                        time = "지금",
+                                                        isMine = created.isMine,
+                                                        id = created.id,
                                                     )
+                                                    val updated = if (targetIndex == null) {
+                                                        comments + newComment
+                                                    } else {
+                                                        comments.mapIndexed { index, item ->
+                                                            if (index == targetIndex) {
+                                                                item.copy(replies = item.replies + newComment)
+                                                            } else item
+                                                        }
+                                                    }
+                                                    commitComments(updated)
+                                                    comment = ""
+                                                    replyTarget = null
                                                 }
                                                 .onFailure {
                                                     Toast.makeText(
@@ -1245,8 +1283,6 @@ fun FeedDetailScreen(
                                                     ).show()
                                                 }
                                         }
-                                        comment = ""
-                                        replyTarget = null
                                     }
                                 }
                             ) {
