@@ -6,7 +6,8 @@ from uuid import UUID
 from sqlalchemy import and_, func, select
 
 from app.auth.dependencies import Session
-from app.chat.models import ChatMessage, ChatParticipant, ChatRoom
+from app.chat.models import ChatMessage
+from app.chat.service import get_or_create_direct_room
 from app.core.config import get_settings
 from app.core.errors import ApiError
 from app.events.outbox import OutboxEvent, OutboxRepository
@@ -22,10 +23,6 @@ from app.matching.privacy import (
 from app.matching.profile_policy import ProfileMatchingPolicy
 from app.matching.repository import MatchingRepository
 from app.matching.service import MatchingService
-
-
-def direct_key(first: UUID, second: UUID) -> str:
-    return ":".join(sorted((str(first), str(second))))
 
 
 def letter_view(letter: Letter, viewer_id: UUID) -> dict[str, object]:
@@ -113,23 +110,7 @@ class LetterCommandHandler:
             self._session.add(
                 MailboxEntry(user_id=recipient.id, letter_id=letter.id, direction="RECEIVED")
             )
-            room = await self._session.scalar(
-                select(ChatRoom).where(ChatRoom.direct_key == direct_key(owner_id, recipient.id))
-            )
-            if room is None:
-                room = ChatRoom(type="DIRECT", direct_key=direct_key(owner_id, recipient.id))
-                self._session.add(room)
-                await self._session.flush()
-                self._session.add_all(
-                    [
-                        ChatParticipant(room_id=room.id, user_id=owner_id, alias="익명의 이웃 01"),
-                        ChatParticipant(
-                            room_id=room.id,
-                            user_id=recipient.id,
-                            alias="익명의 이웃 02",
-                        ),
-                    ]
-                )
+            room = await get_or_create_direct_room(self._session, owner_id, recipient.id)
             message = ChatMessage(
                 room_id=room.id,
                 sender_id=owner_id,
