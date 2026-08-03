@@ -103,9 +103,9 @@ private fun LetterHomeHeader(onProfile: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "자연스러운 연결",
+            text = "마음잇기",
             color = Ink,
-            fontSize = 20.sp,
+            fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.weight(1f)
         )
