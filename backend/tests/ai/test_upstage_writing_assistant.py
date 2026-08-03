@@ -216,7 +216,7 @@ async def test_feedback_retries_once_after_malformed_model_output() -> None:
 
 
 @pytest.mark.asyncio
-async def test_feedback_retries_once_when_model_responds_in_english() -> None:
+async def test_feedback_retries_once_when_model_response_is_not_fully_korean() -> None:
     calls = 0
 
     async def handler(_request: httpx.Request) -> httpx.Response:
@@ -224,8 +224,8 @@ async def test_feedback_retries_once_when_model_responds_in_english() -> None:
         calls += 1
         feedback = (
             {
-                "summary": "The draft describes a peaceful walk.",
-                "suggestions": ["Add one concrete sound from the walk."],
+                "summary": "nervous한 마음으로 조용히 산책한 장면이에요.",
+                "suggestions": ["산책 중 들었던 소리를 한 가지 덧붙여 보세요."],
             }
             if calls == 1
             else {

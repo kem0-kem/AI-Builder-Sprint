@@ -29,6 +29,7 @@ the whole draft, and do not repeat sensitive personal information.
 
 FeedbackSuggestion = Annotated[str, Field(min_length=1, max_length=180)]
 _HANGUL = re.compile(r"[가-힣]")
+_LATIN_WORD = re.compile(r"[A-Za-z]{2,}")
 
 
 class WritingFeedback(BaseModel):
@@ -39,8 +40,10 @@ class WritingFeedback(BaseModel):
 
     @model_validator(mode="after")
     def require_korean_output(self) -> Self:
-        if _HANGUL.search(self.summary) is None or any(
-            _HANGUL.search(suggestion) is None for suggestion in self.suggestions
+        values = [self.summary, *self.suggestions]
+        if any(
+            _HANGUL.search(value) is None or _LATIN_WORD.search(value) is not None
+            for value in values
         ):
             raise ValueError("writing feedback must be Korean")
         return self
