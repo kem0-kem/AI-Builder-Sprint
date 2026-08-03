@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     upstage_api_key: SecretStr | None = None
     upstage_base_url: AnyHttpUrl = AnyHttpUrl("https://api.upstage.ai/v1")
     upstage_chat_model: str | None = None
+    upstage_document_model: str = "document-parse"
     upstage_embedding_model: str | None = None
     embedding_dimensions: int = MATCHING_EMBEDDING_DIMENSIONS
     match_min_similarity: float | None = Field(default=None, ge=0, le=1)

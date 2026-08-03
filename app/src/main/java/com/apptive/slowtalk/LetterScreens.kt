@@ -1,6 +1,7 @@
 package com.apptive.slowtalk
 
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.launch
@@ -142,9 +143,16 @@ fun WriteLetterScreen(
     }
 
     LaunchedEffect(uiState) {
-        if (uiState is LetterUiState.Success) {
-            showCompletionDialog = true
-            viewModel.resetState()
+        when (val state = uiState) {
+            is LetterUiState.Success -> {
+                showCompletionDialog = true
+                viewModel.resetState()
+            }
+            is LetterUiState.Error -> {
+                Toast.makeText(context, state.message, Toast.LENGTH_LONG).show()
+                viewModel.resetState()
+            }
+            else -> Unit
         }
     }
 
