@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.apptive.slowtalk.data.remote.InterestDto
 import com.apptive.slowtalk.data.remote.ProfileUpdateRequest
-import com.apptive.slowtalk.data.remote.RegionDto
 import com.apptive.slowtalk.data.remote.UserProfileDto
 import com.apptive.slowtalk.data.repository.InterestRepository
 import com.apptive.slowtalk.data.repository.ProfileRepository
@@ -53,15 +52,19 @@ class ProfileViewModel(
 
     fun updateProfile(nickname: String, bio: String, interest: String, province: String, district: String, subDistrict: String?) {
         viewModelScope.launch {
-            val updateDto = ProfileUpdateRequest(
-                nickname = nickname,
-                bio = bio,
-                interest = interest,
-                region = RegionDto(province, district, subDistrict)
-            )
-            profileRepository.updateProfile(updateDto)
-                .onSuccess { fetchProfile() } // 갱신
-                .onFailure { /* 에러 처리 */ }
+            regionRepository.getRegionPatch(province, district, subDistrict)
+                .onSuccess { region ->
+                    val updateDto = ProfileUpdateRequest(
+                        nickname = nickname,
+                        bio = bio,
+                        interest = interest,
+                        region = region
+                    )
+                    profileRepository.updateProfile(updateDto)
+                        .onSuccess { fetchProfile() }
+                        .onFailure { error -> _uiState.value = ProfileUiState.Error(error.message ?: "프로필 저장에 실패했습니다.") }
+                }
+                .onFailure { error -> _uiState.value = ProfileUiState.Error(error.message ?: "지역 정보를 찾지 못했습니다.") }
         }
     }
 
@@ -93,7 +96,7 @@ class ProfileViewModel(
         }
     }
 
-    fun updateInterests(interestIds: List<Int>, onComplete: () -> Unit) {
+    fun updateInterests(interestIds: List<String>, onComplete: () -> Unit) {
         viewModelScope.launch {
             interestRepository.updateMyInterests(interestIds)
                 .onSuccess { 

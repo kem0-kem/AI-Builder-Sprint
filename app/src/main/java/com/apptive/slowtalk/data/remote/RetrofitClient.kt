@@ -2,16 +2,23 @@ package com.apptive.slowtalk.data.remote
 
 import com.apptive.slowtalk.BuildConfig
 import com.apptive.slowtalk.data.auth.AuthSession
-import retrofit2.converter.kotlinx.serialization.asConverterFactory
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import okhttp3.Authenticator
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
+import retrofit2.converter.kotlinx.serialization.asConverterFactory
 
 object RetrofitClient {
-    // API URL은 Gradle 속성 또는 로컬 Android Studio 설정에서 주입합니다.
-    private const val FALLBACK_BASE_URL = "https://api.example.com/"
+    private const val FALLBACK_BASE_URL = "https://backend-production-2f6a.up.railway.app/api/v1/"
     private val baseUrl = BuildConfig.API_BASE_URL
         .ifBlank { FALLBACK_BASE_URL }
         .let { if (it.endsWith("/")) it else "$it/" }
@@ -21,10 +28,14 @@ object RetrofitClient {
         coerceInputValues = true
     }
 
+    private val refreshLock = Any()
+    private val refreshClient = OkHttpClient.Builder().build()
+
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor { chain ->
             val request = chain.request()
-            val token = AuthSession.accessToken ?: BuildConfig.API_AUTH_TOKEN.takeIf { it.isNotBlank() }
+            val token = AuthSession.accessToken
+                ?: BuildConfig.API_AUTH_TOKEN.takeIf { it.isNotBlank() }
             val authenticatedRequest = if (token == null || request.header("Authorization") != null) {
                 request
             } else {
@@ -32,9 +43,19 @@ object RetrofitClient {
             }
             chain.proceed(authenticatedRequest)
         }
+        .authenticator(Authenticator { _, response ->
+            if (response.retryCount() >= 2) return@Authenticator null
+            val failedToken = response.request.header("Authorization")
+                ?.removePrefix("Bearer ")
+            val renewedToken = renewTokens(failedToken) ?: return@Authenticator null
+            response.request.newBuilder()
+                .header("Authorization", "Bearer $renewedToken")
+                .build()
+        })
         .apply {
             if (BuildConfig.DEBUG) {
                 addInterceptor(HttpLoggingInterceptor().apply {
+                    redactHeader("Authorization")
                     level = HttpLoggingInterceptor.Level.BODY
                 })
             }
@@ -54,4 +75,58 @@ object RetrofitClient {
     val chatApi: ChatApiService = retrofit.create(ChatApiService::class.java)
     val letterApi: LetterApiService = retrofit.create(LetterApiService::class.java)
     val authApi: AuthApi = retrofit.create(AuthApi::class.java)
+    val meetingApi: MeetingApiService = retrofit.create(MeetingApiService::class.java)
+    val reportApi: ReportApi = retrofit.create(ReportApi::class.java)
+
+    fun openChatWebSocket(chatRoomId: String, listener: WebSocketListener): WebSocket {
+        val socketBaseUrl = baseUrl
+            .replaceFirst("https://", "wss://")
+            .replaceFirst("http://", "ws://")
+            .trimEnd('/')
+        val token = AuthSession.accessToken.orEmpty()
+        val request = Request.Builder()
+            .url("$socketBaseUrl/ws/chat-rooms/$chatRoomId?token=$token")
+            .build()
+        return okHttpClient.newWebSocket(request, listener)
+    }
+
+    private fun renewTokens(failedToken: String?): String? = synchronized(refreshLock) {
+        val currentAccessToken = AuthSession.accessToken
+        if (!currentAccessToken.isNullOrBlank() && currentAccessToken != failedToken) {
+            return@synchronized currentAccessToken
+        }
+        val currentRefreshToken = AuthSession.refreshToken ?: return@synchronized null
+        val requestBody = json.encodeToString(RefreshRequest(currentRefreshToken))
+            .toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url("${baseUrl}auth/token/refresh")
+            .post(requestBody)
+            .build()
+
+        runCatching {
+            refreshClient.newCall(request).execute().use { refreshResponse ->
+                if (!refreshResponse.isSuccessful) {
+                    if (refreshResponse.code == 400 || refreshResponse.code == 401) {
+                        AuthSession.clear()
+                    }
+                    return@use null
+                }
+                val body = refreshResponse.body?.string() ?: return@use null
+                val envelope = json.decodeFromString<ApiEnvelope<LoginResponse>>(body)
+                val renewed = envelope.data?.takeIf { envelope.ok } ?: return@use null
+                AuthSession.save(renewed.accessToken, renewed.refreshToken)
+                renewed.accessToken
+            }
+        }.getOrNull()
+    }
+
+    private fun Response.retryCount(): Int {
+        var count = 1
+        var previous = priorResponse
+        while (previous != null) {
+            count++
+            previous = previous.priorResponse
+        }
+        return count
+    }
 }

@@ -3,18 +3,23 @@ package com.apptive.slowtalk
 import androidx.compose.ui.graphics.Color
 
 sealed interface Screen {
-    data object Auth : Screen
+    data object Login : Screen
+    data object SignUp : Screen
     data object Feed : Screen
     data object WriteFeed : Screen
-    data class EditFeed(val feedId: Int) : Screen
-    data class FeedDetail(val feedId: Int) : Screen
+    data class EditFeed(val feedId: String) : Screen
+    data class FeedDetail(val feedId: String) : Screen
     data object Conversations : Screen
-    data class Chat(val title: String, val isGroup: Boolean = false, val roomId: String? = null) : Screen
+    data class Chat(
+        val title: String,
+        val isGroup: Boolean = false,
+        val chatRoomId: String? = null
+    ) : Screen
     data object CreateGroup : Screen
     data object LetterHome : Screen
     data object WriteLetter : Screen
     data object LetterHistory : Screen
-    data class LetterDetail(val title: String) : Screen
+    data class LetterDetail(val letterId: String?, val title: String) : Screen
     data object Profile : Screen
     data object EditProfile : Screen
     data object Interests : Screen
@@ -23,15 +28,14 @@ sealed interface Screen {
 }
 
 data class FeedPost(
-    val id: Int,
+    val id: String,
     val category: String,
     val title: String,
     val body: String,
     val comments: MutableList<Comment> = mutableListOf(),
+    var commentCount: Int = comments.sumOf { 1 + it.replies.size },
     val accent: Color,
-    val isMine: Boolean = false,
-    val remoteId: String? = null,
-    val categoryId: String? = null
+    val isMine: Boolean = false
 )
 
 data class Comment(
@@ -50,22 +54,35 @@ data class Conversation(
     val unread: Boolean = false,
     val isGroup: Boolean = false,
     val members: Int = 1,
-    val roomId: String? = null,
-    val inviteCandidateId: String? = null
+    val chatRoomId: String? = null
 )
 
 data class ChatMessage(
     val sender: String,
     val body: String,
     val time: String,
-    val mine: Boolean
+    val mine: Boolean,
+    val id: String? = null,
+    val type: String = "CHAT"
+)
+
+data class MeetingInviteUser(
+    val candidateId: String,
+    val nickname: String
+)
+
+data class MeetingCreation(
+    val meetingId: String,
+    val chatRoomId: String
 )
 
 data class Letter(
     val title: String,
     val preview: String,
     val date: String,
-    val received: Boolean
+    val received: Boolean,
+    val id: String? = null,
+    val content: String = preview
 )
 
 enum class MainTab { CONVERSATIONS, FEED, LETTER }

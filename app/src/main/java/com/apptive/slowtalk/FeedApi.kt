@@ -1,136 +1,206 @@
 package com.apptive.slowtalk
 
 import androidx.compose.ui.graphics.Color
+import com.apptive.slowtalk.data.remote.ApiEnvelope
 import com.apptive.slowtalk.data.remote.CommentContentRequest
-import com.apptive.slowtalk.data.remote.CommentDto
+import com.apptive.slowtalk.data.remote.CommentPatchRequest
 import com.apptive.slowtalk.data.remote.FeedCreateRequest
-import com.apptive.slowtalk.data.remote.FeedDto
+import com.apptive.slowtalk.data.remote.FeedFeedbackRequest
+import com.apptive.slowtalk.data.remote.FeedReportRequest
 import com.apptive.slowtalk.data.remote.FeedUpdateRequest
 import com.apptive.slowtalk.data.remote.RetrofitClient
 import retrofit2.Response
 
-data class FeedResult(val post: FeedPost, val liked: Boolean)
-typealias MyFeedResult = FeedResult
+data class MyFeedResult(val post: FeedPost, val liked: Boolean)
+
+data class FeedDetailResult(val post: FeedPost, val liked: Boolean)
+
+data class FeedCategoryResult(val id: String, val name: String)
+
+data class FeedFeedbackResult(
+    val hasWarning: Boolean,
+    val warningMessage: String?,
+    val tips: List<String>
+)
 
 object FeedApi {
     val isConfigured: Boolean = true
-    private val feedIds = mutableMapOf<Int, String>()
-    private val commentIds = mutableMapOf<Int, String>()
 
-    suspend fun getMyFeeds(): Result<List<FeedResult>> = getFeeds("mine")
-    suspend fun getFeeds(scope: String): Result<List<FeedResult>> = runCatching {
-        val response = RetrofitClient.feedApi.getFeeds(scope)
-        check(response.ok) { "피드를 불러오지 못했습니다." }
-        response.data.orEmpty().map(::toFeedResult)
+    suspend fun getFeedCategories(): Result<List<FeedCategoryResult>> = runCatching {
+        RetrofitClient.feedApi.getFeedCategories().requireFeedData().map {
+            FeedCategoryResult(it.id, appCategoryName(it.name))
+        }
     }
 
-    suspend fun createFeed(category: String, title: String, content: String): Result<FeedResult> = runCatching {
-        val categoryId = RetrofitClient.feedApi.getCategories().data.orEmpty().firstOrNull()?.id
-            ?: error("피드 카테고리를 찾을 수 없습니다.")
-        val response = RetrofitClient.feedApi.createFeed(FeedCreateRequest(categoryId, title, content))
-        check(response.ok && response.data != null) { "피드를 작성하지 못했습니다." }
-        toFeedResult(response.data)
+    suspend fun createFeed(
+        categoryId: String,
+        title: String,
+        content: String
+    ): Result<String> = runCatching {
+        RetrofitClient.feedApi.createFeed(
+            FeedCreateRequest(categoryId, title, content)
+        ).requireFeedData().id
     }
 
-    suspend fun updateFeed(feedId: String, categoryId: String, title: String, content: String): Result<FeedResult> = runCatching {
-        val response = RetrofitClient.feedApi.updateFeed(feedId, FeedUpdateRequest(categoryId, title, content))
-        check(response.ok && response.data != null) { "피드를 수정하지 못했습니다." }
-        toFeedResult(response.data)
+    suspend fun getFeedFeedback(title: String, content: String): Result<FeedFeedbackResult> =
+        runCatching {
+            RetrofitClient.feedApi.getFeedFeedback(
+                FeedFeedbackRequest(title, content)
+            ).requireFeedData().let {
+                FeedFeedbackResult(
+                    hasWarning = false,
+                    warningMessage = it.summary.ifBlank { null },
+                    tips = it.suggestions
+                )
+            }
+        }
+
+    suspend fun getMyFeeds(): Result<List<MyFeedResult>> = loadFeeds("mine")
+
+    suspend fun getFeeds(): Result<List<MyFeedResult>> = loadFeeds("all")
+
+    private suspend fun loadFeeds(scope: String): Result<List<MyFeedResult>> = runCatching {
+        val categories = getCategoryNameMap()
+        RetrofitClient.feedApi.getFeeds(scope).requireFeedData().map { item ->
+            val category = appCategoryName(categories[item.categoryId].orEmpty())
+            MyFeedResult(
+                post = FeedPost(
+                    id = item.id,
+                    category = category,
+                    title = item.title,
+                    body = item.content,
+                    commentCount = item.commentCount,
+                    accent = categoryAccent(category),
+                    isMine = item.isMine
+                ),
+                liked = item.liked
+            )
+        }
+    }
+
+    suspend fun getFeedDetail(feedId: String): Result<FeedDetailResult> = runCatching {
+        val categories = getCategoryNameMap()
+        val item = RetrofitClient.feedApi.getFeed(feedId).requireFeedData()
+        val flatComments = RetrofitClient.feedApi.getComments(feedId).requireFeedData()
+        val commentById = flatComments.associateBy { it.id }
+        val repliesByParent = flatComments.filter { it.parentCommentId != null }
+            .groupBy { it.parentCommentId }
+        val comments = flatComments.filter { it.parentCommentId == null }.map { root ->
+            Comment(
+                author = if (root.isMine) "글쓴이" else "익명",
+                message = root.content,
+                time = "",
+                isMine = root.isMine,
+                id = root.id,
+                replies = repliesByParent[root.id].orEmpty().map { reply ->
+                    Comment(
+                        author = if (reply.isMine) "글쓴이" else "익명",
+                        message = reply.content,
+                        time = "",
+                        isMine = reply.isMine,
+                        id = reply.id
+                    )
+                }
+            )
+        }.toMutableList()
+        check(commentById.size == flatComments.size)
+        val category = appCategoryName(categories[item.categoryId].orEmpty())
+        FeedDetailResult(
+            post = FeedPost(
+                id = item.id,
+                category = category,
+                title = item.title,
+                body = item.content,
+                comments = comments,
+                commentCount = flatComments.size,
+                accent = categoryAccent(category),
+                isMine = item.isMine
+            ),
+            liked = item.liked
+        )
+    }
+
+    suspend fun updateFeed(
+        feedId: String,
+        categoryId: String,
+        title: String,
+        content: String
+    ): Result<Unit> = runCatching {
+        RetrofitClient.feedApi.updateFeed(
+            feedId = feedId,
+            request = FeedUpdateRequest(categoryId, title, content)
+        ).requireFeedData()
     }
 
     suspend fun deleteFeed(feedId: String): Result<Unit> = runCatching {
         RetrofitClient.feedApi.deleteFeed(feedId).requireSuccess()
     }
 
-    suspend fun getComments(feedId: String): Result<List<Comment>> = runCatching {
-        val response = RetrofitClient.feedApi.getComments(feedId)
-        check(response.ok) { "댓글을 불러오지 못했습니다." }
-        commentsFrom(response.data.orEmpty())
+    suspend fun reportFeed(feedId: String): Result<Unit> = runCatching {
+        RetrofitClient.feedApi.reportFeed(feedId, FeedReportRequest("사용자 신고"))
+            .requireFeedData()
     }
 
-    suspend fun createComment(feedId: String, content: String, parentCommentId: String? = null): Result<Comment> = runCatching {
-        val response = RetrofitClient.feedApi.createComment(feedId, CommentContentRequest(content, parentCommentId))
-        check(response.ok && response.data != null) { "댓글을 작성하지 못했습니다." }
-        commentFrom(response.data)
-    }
-
-    suspend fun createCommentByLocalId(feedId: Int, content: String): Result<Int> = runCatching {
-        val remoteFeedId = feedIds[feedId] ?: error("피드 UUID가 없습니다.")
-        val created = createComment(remoteFeedId, content).getOrThrow()
-        val remoteCommentId = created.id ?: error("댓글 UUID가 없습니다.")
-        commentIds[remoteCommentId.hashCode()] = remoteCommentId
-        remoteCommentId.hashCode()
-    }
-
-    fun commentRemoteId(localId: Int): String? = commentIds[localId]
-
-    suspend fun updateComment(commentId: String, content: String): Result<Comment> = runCatching {
-        val response = RetrofitClient.feedApi.updateComment(commentId, CommentContentRequest(content))
-        check(response.ok && response.data != null) { "댓글을 수정하지 못했습니다." }
-        commentFrom(response.data)
-    }
-
-    suspend fun deleteComment(commentId: String): Result<Unit> = runCatching {
-        RetrofitClient.feedApi.deleteComment(commentId).requireSuccess()
-    }
-
-    // Temporary source-compatible overloads for the legacy in-memory UI. Every
-    // persisted operation below is migrated to the UUID overloads with its feed.
-    suspend fun updateFeed(feedId: Int, categoryId: Int, title: String, content: String): Result<Unit> =
-        Result.failure(IllegalStateException("피드 UUID가 없습니다."))
-
-    suspend fun deleteFeed(feedId: Int): Result<Unit> =
-        Result.failure(IllegalStateException("피드 UUID가 없습니다."))
-
-    suspend fun reportFeed(feedId: Int): Result<Unit> =
-        Result.failure(IllegalStateException("피드 UUID가 없습니다."))
-
-    suspend fun createComment(feedId: Int, content: String): Result<Int> =
-        Result.failure(IllegalStateException("피드 UUID가 없습니다."))
-
-    suspend fun updateComment(feedId: Int, commentId: String, content: String): Result<Unit> =
-        updateComment(commentId, content).map { }
-
-    suspend fun deleteComment(feedId: Int, commentId: String): Result<Unit> = deleteComment(commentId)
-
-    suspend fun reportComment(feedId: Int, commentId: String): Result<Unit> =
-        Result.failure(UnsupportedOperationException("댓글 신고는 아직 연결되지 않았습니다."))
-
-    private fun toFeedResult(item: FeedDto): FeedResult {
-        feedIds[item.id.hashCode()] = item.id
-        val category = "피드"
-        return FeedResult(
-            FeedPost(
-                id = item.id.hashCode(), category = category, title = item.title, body = item.content,
-                accent = categoryAccent(category), isMine = item.isMine, remoteId = item.id,
-                categoryId = item.categoryId
-            ),
-            item.liked
-        )
-    }
-
-    private fun commentsFrom(items: List<CommentDto>): List<Comment> {
-        val roots = items.filter { it.parentCommentId == null }
-        return roots.map { root ->
-            commentFrom(root).copy(replies = items.filter { it.parentCommentId == root.id }.map(::commentFrom))
+    suspend fun setFeedLiked(feedId: String, liked: Boolean): Result<Boolean> = runCatching {
+        if (liked) {
+            RetrofitClient.feedApi.likeFeed(feedId).requireFeedData().liked
+        } else {
+            RetrofitClient.feedApi.unlikeFeed(feedId).requireFeedData().liked
         }
     }
 
-    private fun commentFrom(item: CommentDto) = Comment(
-        author = if (item.isMine) "나" else "익명의 이웃",
-        message = item.content,
-        time = item.createdAt,
-        isMine = item.isMine,
-        id = item.id
-    )
+    suspend fun createComment(
+        feedId: String,
+        content: String,
+        parentCommentId: String? = null
+    ): Result<String> = runCatching {
+        RetrofitClient.feedApi.createComment(
+            feedId,
+            CommentContentRequest(content, parentCommentId)
+        ).requireFeedData().id
+    }
+
+    suspend fun updateComment(feedId: String, commentId: String, content: String): Result<Unit> =
+        runCatching {
+            RetrofitClient.feedApi.updateComment(commentId, CommentPatchRequest(content))
+                .requireFeedData()
+        }
+
+    suspend fun deleteComment(feedId: String, commentId: String): Result<Unit> = runCatching {
+        RetrofitClient.feedApi.deleteComment(commentId).requireSuccess()
+    }
+
+    suspend fun reportComment(feedId: String, commentId: String): Result<Unit> = runCatching {
+        RetrofitClient.feedApi.reportComment(commentId, FeedReportRequest("사용자 신고"))
+            .requireFeedData()
+    }
+
+    private suspend fun getCategoryNameMap(): Map<String, String> =
+        RetrofitClient.feedApi.getFeedCategories().requireFeedData().associate { it.id to it.name }
+}
+
+private fun <T> ApiEnvelope<T>.requireFeedData(): T {
+    check(ok) { error?.message ?: "피드 요청에 실패했습니다." }
+    return checkNotNull(data) { "피드 응답 데이터가 없습니다." }
 }
 
 private fun Response<Unit>.requireSuccess() {
-    check(isSuccessful) { "서버 요청 실패 (${code()})" }
+    check(isSuccessful) { "피드 요청 실패 (${code()})" }
+}
+
+private fun appCategoryName(serverName: String): String = when (serverName.trim()) {
+    "일상", "일상 이야기" -> "일상 이야기"
+    "취미", "취미 생활" -> "취미 생활"
+    "고민", "위로", "마음과 고민" -> "마음과 고민"
+    "성장", "배움과 성장" -> "배움과 성장"
+    "여행", "여행과 경험" -> "여행과 경험"
+    else -> serverName.ifBlank { "기타" }
 }
 
 private fun categoryAccent(category: String): Color = when (category) {
+    "마음과 고민" -> Color(0xFFEC7168)
+    "취미 생활" -> Color(0xFF8A70D8)
+    "배움과 성장" -> Color(0xFF5C95E8)
+    "여행과 경험" -> Color(0xFF3DBCC1)
     else -> Purple
 }
-
-fun feedCategoryId(category: String): Int = 0

@@ -29,10 +29,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.apptive.slowtalk.ui.auth.AuthViewModel
+import com.apptive.slowtalk.ui.letter.LetterViewModel
 import com.apptive.slowtalk.ui.profile.ProfileViewModel
+import com.apptive.slowtalk.ui.reflection.ReflectionViewModel
 import com.apptive.slowtalk.ui.theme.SlowTalkTheme
 import com.apptive.slowtalk.data.auth.AuthSession
-import com.apptive.slowtalk.data.repository.AuthRepository
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -53,70 +55,18 @@ private fun ApptiveApp() {
     val activity = context as? Activity
     val appScope = rememberCoroutineScope()
     val profileViewModel: ProfileViewModel = viewModel()
-    val authRepository = remember { AuthRepository() }
-    var isRestoringSession by remember { mutableStateOf(AuthSession.refreshToken != null) }
-    var screen by remember { mutableStateOf<Screen>(if (AuthSession.isSignedIn) Screen.Feed else Screen.Auth) }
+    val authViewModel: AuthViewModel = viewModel()
+    val reflectionViewModel: ReflectionViewModel = viewModel()
+    val letterViewModel: LetterViewModel = viewModel()
+    var isLoggedIn by remember { mutableStateOf(AuthSession.isSignedIn) }
+    var screen by remember { mutableStateOf<Screen>(if (isLoggedIn) Screen.Feed else Screen.Login) }
     var profileReturnScreen by remember { mutableStateOf<Screen>(Screen.Feed) }
+    var conversationIndex by remember { mutableStateOf(0) }
+    var feedShowsMine by remember { mutableStateOf(false) }
     var lastBackPressTime by remember { mutableLongStateOf(0L) }
-    val likedFeeds = remember { mutableStateMapOf<Int, Boolean>() }
-    val feeds = remember {
-        mutableStateListOf(
-            FeedPost(
-                1,
-                "일상 이야기",
-                "오늘은 조금 천천히 걸어봤어요",
-                "매일 지나치던 길인데 천천히 걸으니 보이지 않던 풍경들이 눈에 들어왔어요.",
-                mutableListOf(
-                    Comment(
-                        "익명3",
-                        "저도 도저히 머리가 안 돌아갈 땐 산책을 즐겨해요",
-                        "12:42",
-                        replies = listOf(
-                            Comment("글쓴이", "그럴 때 산책이 정말 큰 도움이 되더라고요", "17:58", true)
-                        )
-                    )
-                ),
-                Purple
-            ),
-            FeedPost(
-                2,
-                "마음과 고민",
-                "새로운 시작이 조금 두렵습니다",
-                "기대되는 마음도 있지만 잘할 수 있을지 걱정돼요. 여러분은 시작 앞에서 어떤가요?",
-                mutableListOf(
-                    Comment("익명1", "새로운 시작은 누구에게나 떨리는 것 같아요.", "어제"),
-                    Comment("익명2", "천천히 해도 괜찮아요.", "어제"),
-                    Comment("익명4", "응원할게요!", "어제"),
-                    Comment("글쓴이", "따뜻한 말 고마워요.", "어제", true)
-                ),
-                Color(0xFFEC7168)
-            ),
-            FeedPost(
-                3,
-                "취미 생활",
-                "요즘 그림을 배우고 있어요",
-                "잘 그리는 것보다 내 마음을 천천히 표현하는 시간이 좋아서 계속해 보려고 합니다.",
-                mutableListOf(Comment("익명2", "멋진 취미네요. 오래 이어가길 바라요.", "2일 전")),
-                Color(0xFF8A70D8)
-            )
-        )
-    }
-    val anonymousConversations = remember {
-        mutableStateListOf(
-            Conversation("익명의 이웃 01", "오늘 하루는 어떻게 보내셨나요?", "방금 전", unread = true),
-            Conversation("익명의 이웃 02", "저도 그런 하루를 보낸 적이 있어요.", "어제"),
-            Conversation("익명의 이웃 03", "당신의 이야기를 들려줘서 고마워요.", "3일 전")
-        )
-    }
-    val groupConversations = remember {
-        mutableStateListOf(
-            Conversation("저녁 산책 모임", "이번 주 토요일 저녁 7시 어떠세요?", "방금 전", true, isGroup = true, members = 5),
-            Conversation("그림 초보 모임", "준비물은 연필과 작은 스케치북이에요.", "어제", isGroup = true, members = 8),
-            Conversation("함께 읽는 독서 모임", "다음 책은 투표로 정해봐요.", "2일 전", isGroup = true, members = 6),
-            Conversation("동네 카페 탐방", "이번에는 조용한 카페로 가요.", "3일 전", isGroup = true, members = 4)
-        )
-    }
-    val inviteCandidates = remember { mutableStateListOf<Conversation>() }
+    val likedFeeds = remember { mutableStateMapOf<String, Boolean>() }
+    val likingFeeds = remember { mutableStateMapOf<String, Boolean>() }
+    val feeds = remember { mutableStateListOf<FeedPost>() }
     val letters = remember {
         listOf(
             Letter("천천히 걸었던 하루", "오늘은 평소보다 조금 느리게 걸어봤어요.", "2026.07.22 · 15:40", true),
@@ -126,48 +76,31 @@ private fun ApptiveApp() {
         )
     }
     val mainPagerState = rememberPagerState(initialPage = 1, pageCount = { 3 })
-
-    LaunchedEffect(Unit) {
-        feeds.clear()
-        if (AuthSession.refreshToken != null) {
-            val restored = authRepository.restoreSession()
-            screen = if (restored) Screen.Feed else Screen.Auth
+    val toggleFeedLike: (String) -> Unit = { feedId ->
+        if (likingFeeds[feedId] != true) {
+            val wasLiked = likedFeeds[feedId] == true
+            val requestedLike = !wasLiked
+            likedFeeds[feedId] = requestedLike
+            likingFeeds[feedId] = true
+            appScope.launch {
+                FeedApi.setFeedLiked(feedId, requestedLike)
+                    .onSuccess { serverLiked -> likedFeeds[feedId] = serverLiked }
+                    .onFailure {
+                        likedFeeds[feedId] = wasLiked
+                        Toast.makeText(
+                            context,
+                            if (requestedLike) "공감하지 못했습니다." else "공감을 취소하지 못했습니다.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                likingFeeds.remove(feedId)
+            }
         }
-        isRestoringSession = false
     }
 
     LaunchedEffect(mainPagerState.settledPage) {
         if (screen.isMainTab()) {
             screen = mainPagerState.settledPage.toMainScreen()
-        }
-    }
-
-    LaunchedEffect(screen, AuthSession.accessToken) {
-        if (!AuthSession.isSignedIn) return@LaunchedEffect
-        when (screen) {
-            Screen.Feed -> FeedApi.getFeeds("all").onSuccess { items ->
-                feeds.clear()
-                feeds.addAll(items.map { it.post })
-                items.forEach { likedFeeds[it.post.id] = it.liked }
-            }
-            Screen.Conversations -> ChatApi.getRooms().onSuccess { rooms ->
-                anonymousConversations.removeAll { it.roomId != null }
-                groupConversations.removeAll { it.roomId != null }
-                anonymousConversations.addAll(rooms.filterNot { it.isGroup })
-                groupConversations.addAll(rooms.filter { it.isGroup })
-            }
-            Screen.CreateGroup -> ChatApi.getInviteCandidates().onSuccess { candidates ->
-                inviteCandidates.clear()
-                inviteCandidates.addAll(candidates.map {
-                    Conversation(
-                        title = it.name,
-                        preview = "모임에 초대할 수 있는 이웃",
-                        time = "",
-                        inviteCandidateId = it.id
-                    )
-                })
-            }
-            else -> Unit
         }
     }
 
@@ -197,6 +130,7 @@ private fun ApptiveApp() {
                 Screen.Profile -> profileReturnScreen
                 Screen.EditProfile -> Screen.Profile
                 Screen.Interests -> Screen.Profile
+                Screen.SignUp -> Screen.Login
                 else -> Screen.Feed
             }
         }
@@ -209,14 +143,23 @@ private fun ApptiveApp() {
             .safeDrawingPadding()
     ) {
         when (val current = screen) {
-            Screen.Auth -> {
-                if (!isRestoringSession) {
-                    AuthScreen(
-                        repository = authRepository,
-                        onAuthenticated = { screen = Screen.Feed }
-                    )
+            Screen.Login -> LoginScreen(
+                viewModel = authViewModel,
+                onLogin = {
+                    isLoggedIn = true
+                    screen = Screen.Feed
+                },
+                onSignUp = { screen = Screen.SignUp }
+            )
+            Screen.SignUp -> SignUpScreen(
+                viewModel = authViewModel,
+                onBack = { screen = Screen.Login },
+                onComplete = {
+                    // 가입 완료 후 로그인 화면으로 이동
+                    screen = Screen.Login
+                    Toast.makeText(context, "회원가입이 완료되었습니다. 로그인해주세요.", Toast.LENGTH_SHORT).show()
                 }
-            }
+            )
             Screen.Feed, Screen.Conversations, Screen.LetterHome -> Scaffold(
                 containerColor = Color.Transparent,
                 bottomBar = {
@@ -240,19 +183,11 @@ private fun ApptiveApp() {
                 ) { page ->
                     when (page) {
                         0 -> ConversationListScreen(
-                            anonymous = anonymousConversations,
-                            groups = groupConversations,
-                            onOpen = { conversation ->
-                                val conversations = if (conversation.isGroup) {
-                                    groupConversations
-                                } else {
-                                    anonymousConversations
-                                }
-                                val index = conversations.indexOf(conversation)
-                                if (index >= 0) {
-                                    conversations[index] = conversation.copy(unread = false)
-                                }
-                                screen = Screen.Chat(conversation.title, conversation.isGroup, conversation.roomId)
+                            loadRooms = { ChatApi.getRooms() },
+                            selectedIndex = conversationIndex,
+                            onSelectedIndexChange = { conversationIndex = it },
+                            onOpen = {
+                                screen = Screen.Chat(it.title, it.isGroup, it.chatRoomId)
                             },
                             onCreateGroup = { screen = Screen.CreateGroup },
                             onProfile = {
@@ -264,15 +199,25 @@ private fun ApptiveApp() {
                         )
                         1 -> FeedScreen(
                             feeds = feeds,
+                            selectedMine = feedShowsMine,
+                            onSelectedMineChange = { feedShowsMine = it },
                             onOpenFeed = { screen = Screen.FeedDetail(it) },
                             isLiked = { likedFeeds[it] == true },
-                            onToggleLike = { id ->
-                                likedFeeds[id] = likedFeeds[id] != true
-                            },
-                            loadFeeds = { scope -> FeedApi.getFeeds(scope) },
+                            onToggleLike = toggleFeedLike,
+                            loadFeeds = { FeedApi.getFeeds() },
                             onFeedsLoaded = { remoteFeeds ->
                                 feeds.clear()
-                                feeds.addAll(remoteFeeds.map { it.post })
+                                feeds.addAll(remoteFeeds.map { it.post }.distinctBy { it.id })
+                                remoteFeeds.forEach { item ->
+                                    likedFeeds[item.post.id] = item.liked
+                                }
+                            },
+                            loadMyFeeds = { FeedApi.getMyFeeds() },
+                            onMyFeedsLoaded = { remoteFeeds ->
+                                val mergedFeeds = feeds.filterNot { it.isMine } +
+                                    remoteFeeds.map { it.post }
+                                feeds.clear()
+                                feeds.addAll(mergedFeeds.distinctBy { it.id })
                                 remoteFeeds.forEach { item ->
                                     likedFeeds[item.post.id] = item.liked
                                 }
@@ -305,16 +250,24 @@ private fun ApptiveApp() {
                     profileReturnScreen = Screen.WriteFeed
                     screen = Screen.Profile
                 },
-                onPublish = { category, title, body ->
-                    appScope.launch {
-                        FeedApi.createFeed(category, title, body).onSuccess { result ->
-                            feeds.add(0, result.post)
-                            likedFeeds[result.post.id] = result.liked
-                            screen = Screen.Feed
-                        }.onFailure {
-                            Toast.makeText(context, "피드를 작성하지 못했습니다.", Toast.LENGTH_SHORT).show()
-                        }
-                    }
+                loadCategories = { FeedApi.getFeedCategories() },
+                requestFeedback = { title, body -> FeedApi.getFeedFeedback(title, body) },
+                onSubmit = { categoryId, _, title, body ->
+                    FeedApi.createFeed(categoryId, title, body)
+                },
+                onSuccess = { feedId, category, title, body ->
+                    feeds.add(
+                        0,
+                        FeedPost(
+                            id = feedId,
+                            category = category,
+                            title = title,
+                            body = body,
+                            accent = Purple,
+                            isMine = true
+                        )
+                    )
+                    screen = Screen.Feed
                 }
             )
             is Screen.EditFeed -> {
@@ -329,7 +282,17 @@ private fun ApptiveApp() {
                             profileReturnScreen = current
                             screen = Screen.Profile
                         },
-                        onPublish = { category, title, body ->
+                        loadCategories = { FeedApi.getFeedCategories() },
+                        requestFeedback = { title, body -> FeedApi.getFeedFeedback(title, body) },
+                        onSubmit = { categoryId, _, title, body ->
+                            FeedApi.updateFeed(
+                                feedId = post.id,
+                                categoryId = categoryId,
+                                title = title,
+                                content = body
+                            ).map { post.id }
+                        },
+                        onSuccess = { _, category, title, body ->
                             val index = feeds.indexOfFirst { it.id == post.id }
                             if (index >= 0) {
                                 feeds[index] = post.copy(
@@ -339,24 +302,6 @@ private fun ApptiveApp() {
                                 )
                             }
                             screen = Screen.FeedDetail(post.id)
-                            if (FeedApi.isConfigured) {
-                                appScope.launch {
-                                    val remoteId = post.remoteId ?: return@launch
-                                    val categoryId = post.categoryId ?: return@launch
-                                    FeedApi.updateFeed(
-                                        feedId = remoteId,
-                                        categoryId = categoryId,
-                                        title = title,
-                                        content = body
-                                    ).onFailure {
-                                        Toast.makeText(
-                                            context,
-                                            "서버에 수정 내용을 반영하지 못했습니다.",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                }
-                            }
                         }
                     )
                 }
@@ -366,9 +311,13 @@ private fun ApptiveApp() {
                 FeedDetailScreen(
                     post = post,
                     isLiked = likedFeeds[post.id] == true,
-                    onToggleLike = {
-                        likedFeeds[post.id] = likedFeeds[post.id] != true
+                    loadFeed = { feedId -> FeedApi.getFeedDetail(feedId) },
+                    onFeedLoaded = { result ->
+                        val index = feeds.indexOfFirst { it.id == result.post.id }
+                        if (index >= 0) feeds[index] = result.post
+                        likedFeeds[result.post.id] = result.liked
                     },
+                    onToggleLike = { toggleFeedLike(post.id) },
                     onEdit = { screen = Screen.EditFeed(post.id) },
                     onDelete = {
                         feeds.removeAll { it.id == post.id }
@@ -377,8 +326,7 @@ private fun ApptiveApp() {
                         Toast.makeText(context, "피드가 삭제되었습니다.", Toast.LENGTH_SHORT).show()
                         if (FeedApi.isConfigured) {
                             appScope.launch {
-                                val remoteId = post.remoteId ?: return@launch
-                                FeedApi.deleteFeed(remoteId).onFailure {
+                                FeedApi.deleteFeed(post.id).onFailure {
                                     Toast.makeText(
                                         context,
                                         "서버에서 피드를 삭제하지 못했습니다.",
@@ -402,66 +350,73 @@ private fun ApptiveApp() {
                             }
                         }
                     },
+                    onOpenAnonymousChat = { roomId ->
+                        conversationIndex = 0
+                        screen = Screen.Chat("익명의 이웃", isGroup = false, chatRoomId = roomId)
+                    },
                     onBack = { screen = Screen.Feed }
                 )
             }
             is Screen.Chat -> ChatScreen(
                 title = current.title,
                 isGroup = current.isGroup,
-                roomId = current.roomId,
+                chatRoomId = current.chatRoomId,
+                markAsRead = { chatRoomId, lastReadMessageId ->
+                    ChatApi.markAsRead(chatRoomId, lastReadMessageId)
+                },
                 onBack = { screen = Screen.Conversations }
             )
             Screen.CreateGroup -> CreateGroupScreen(
-                availablePeople = inviteCandidates,
+                loadInviteUsers = { keyword -> MeetingApi.getInviteUsers(keyword) },
+                createMeeting = { title, description, inviteUserIds ->
+                    MeetingApi.createMeeting(title, description, inviteUserIds)
+                },
                 onBack = { screen = Screen.Conversations },
-                onCreate = { title, description, candidateIds ->
-                    appScope.launch {
-                        ChatApi.createMeeting(title, description, candidateIds).onSuccess { room ->
-                            groupConversations.add(0, room)
-                            screen = Screen.Chat(room.title, isGroup = true, roomId = room.roomId)
-                        }.onFailure {
-                            Toast.makeText(context, "모임 대화를 만들지 못했습니다.", Toast.LENGTH_SHORT).show()
-                        }
-                    }
+                onCreated = { title, chatRoomId ->
+                    screen = Screen.Chat(title, isGroup = true, chatRoomId = chatRoomId)
                 }
             )
             Screen.WriteLetter -> WriteLetterScreen(
+                viewModel = letterViewModel,
+                profileViewModel = profileViewModel,
+                onBack = { screen = Screen.LetterHome },
                 onHistory = { screen = Screen.LetterHistory },
-                onMatched = { content ->
-                    appScope.launch {
-                        LetterApi.sendForMatch(content).onSuccess { roomId ->
-                            if (roomId == null) {
-                                Toast.makeText(context, "매칭 가능한 이웃을 찾는 중입니다.", Toast.LENGTH_SHORT).show()
-                                screen = Screen.LetterHome
-                            } else {
-                                screen = Screen.Chat("익명의 이웃", roomId = roomId)
-                            }
-                        }.onFailure {
-                            Toast.makeText(context, "편지를 보내지 못했습니다.", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                },
+                onMatched = { screen = Screen.Chat("익명의 이웃 05") },
                 onTab = { screen = it.toScreen() }
             )
             Screen.LetterHistory -> LetterHistoryScreen(
                 letters = letters,
+                loadLetters = { type -> LetterApi.getLetters(type) },
                 onBack = { screen = Screen.LetterHome },
-                onOpen = { screen = Screen.LetterDetail(it.title) }
+                onOpen = { screen = Screen.LetterDetail(it.id, it.title) }
             )
             is Screen.LetterDetail -> LetterDetailScreen(
-                letter = letters.firstOrNull { it.title == current.title } ?: letters.first(),
+                letter = letters.firstOrNull {
+                    (current.letterId != null && it.id == current.letterId) || it.title == current.title
+                } ?: Letter(
+                    title = current.title,
+                    preview = "편지 내용을 불러오고 있어요.",
+                    date = "",
+                    received = false,
+                    id = current.letterId,
+                    content = ""
+                ),
+                loadLetter = { letterId -> LetterApi.getLetter(letterId) },
                 onBack = { screen = Screen.LetterHistory }
             )
             Screen.WriteReflection -> WriteReflectionScreen(
+                viewModel = reflectionViewModel,
                 onBack = { screen = Screen.LetterHome },
-                onFinish = { screen = Screen.ReflectionDetail("천천히 걸었던 하루") },
+                onFinish = { content -> screen = Screen.ReflectionDetail(content) },
                 onProfile = {
                     profileReturnScreen = Screen.WriteReflection
                     screen = Screen.Profile
                 }
             )
             is Screen.ReflectionDetail -> ReflectionDetailScreen(
-                title = current.title,
+                viewModel = reflectionViewModel,
+                content = current.title,
+                title = "오늘의 회고 리포트",
                 onBack = { screen = Screen.LetterHome },
                 onProfile = {
                     profileReturnScreen = current
@@ -470,9 +425,14 @@ private fun ApptiveApp() {
             )
             Screen.Profile -> ProfileOverviewScreen(
                 viewModel = profileViewModel,
+                authViewModel = authViewModel,
                 onBack = { screen = profileReturnScreen },
                 onEdit = { screen = Screen.EditProfile },
-                onInterests = { screen = Screen.Interests }
+                onInterests = { screen = Screen.Interests },
+                onLogout = {
+                    isLoggedIn = false
+                    screen = Screen.Login
+                }
             )
             Screen.EditProfile -> ProfileEditScreen(
                 viewModel = profileViewModel,

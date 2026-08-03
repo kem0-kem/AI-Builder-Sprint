@@ -14,12 +14,57 @@ from app.chat.service import ChatCommandHandler
 from app.common.responses import page, success
 from app.core.errors import ApiError
 from app.db.session import get_session
+from app.feeds.models import Comment
 from app.moderation.dependencies import MODERATION_RESPONSES, Moderation
 from app.moderation.models import SubmissionStatus
 from app.moderation.repository import ModerationCommand
 from app.moderation.schemas import ContentType
 
 router = APIRouter(tags=["chat"])
+
+
+def direct_room_key(first: UUID, second: UUID) -> str:
+    return ":".join(sorted((str(first), str(second))))
+
+
+@router.post("/comments/{comment_id}/chat-room")
+async def open_comment_author_chat(
+    comment_id: UUID, user_id: CurrentUserId, session: Session
+) -> dict[str, object]:
+    """Open one idempotent anonymous direct room with a comment author."""
+    comment = await session.get(Comment, comment_id)
+    if comment is None or comment.deleted_at is not None:
+        raise ApiError("RESOURCE_NOT_FOUND", "댓글을 찾을 수 없습니다.", 404)
+    if comment.author_id == user_id:
+        raise ApiError("VALIDATION_ERROR", "자신과는 익명 대화를 시작할 수 없습니다.", 400)
+
+    key = direct_room_key(user_id, comment.author_id)
+    room = await session.scalar(select(ChatRoom).where(ChatRoom.direct_key == key))
+    if room is None:
+        room = ChatRoom(type="DIRECT", direct_key=key)
+        session.add(room)
+        await session.flush()
+
+    participants = {
+        participant.user_id: participant
+        for participant in (
+            await session.execute(
+                select(ChatParticipant).where(ChatParticipant.room_id == room.id)
+            )
+        ).scalars()
+    }
+    if user_id not in participants:
+        session.add(ChatParticipant(room_id=room.id, user_id=user_id, alias="익명의 이웃 01"))
+    if comment.author_id not in participants:
+        session.add(
+            ChatParticipant(
+                room_id=room.id,
+                user_id=comment.author_id,
+                alias="익명의 이웃 02",
+            )
+        )
+    await session.commit()
+    return success({"id": str(room.id), "type": room.type, "name": room.name})
 
 
 async def require_participant(session: Session, room_id: UUID, user_id: UUID) -> ChatParticipant:
