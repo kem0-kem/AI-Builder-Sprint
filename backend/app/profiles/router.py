@@ -1,10 +1,14 @@
+from uuid import UUID
+
 from fastapi import APIRouter
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, or_, select
 
 from app.auth.dependencies import CurrentUser, Session
 from app.auth.models import User
 from app.common.responses import success
 from app.core.errors import ApiError
+from app.letters.models import Letter
+from app.matching.models import MatchHistory
 from app.profiles.models import Interest, UserInterest
 from app.profiles.schemas import InterestReplace, ProfilePatch
 from app.regions.catalog import (
@@ -33,6 +37,46 @@ async def ensure_interests(session: Session) -> None:
         await session.commit()
 
 
+async def profile_statistics(session: Session, user_id: UUID) -> dict[str, int]:
+    sent_letters = (
+        select(func.count())
+        .select_from(Letter)
+        .where(Letter.sender_id == user_id, Letter.recipient_id.is_not(None))
+        .scalar_subquery()
+    )
+    received_letters = (
+        select(func.count())
+        .select_from(Letter)
+        .where(Letter.recipient_id == user_id)
+        .scalar_subquery()
+    )
+    match_count = (
+        select(func.count())
+        .select_from(MatchHistory)
+        .where(
+            or_(
+                MatchHistory.user_a_id == user_id,
+                MatchHistory.user_b_id == user_id,
+            )
+        )
+        .scalar_subquery()
+    )
+    row = (
+        await session.execute(
+            select(
+                sent_letters.label("sent_letters"),
+                received_letters.label("received_letters"),
+                match_count.label("match_count"),
+            )
+        )
+    ).one()
+    return {
+        "sentLetters": int(row.sent_letters or 0),
+        "receivedLetters": int(row.received_letters or 0),
+        "matchCount": int(row.match_count or 0),
+    }
+
+
 async def serialize_profile(session: Session, user: User) -> dict[str, object]:
     interests = (
         await session.execute(
@@ -49,13 +93,14 @@ async def serialize_profile(session: Session, user: User) -> dict[str, object]:
             "district": find(DISTRICTS.get(user.province_code, []), user.district_code),
             "subDistrict": find(SUB_DISTRICTS.get(user.district_code, []), user.sub_district_code),
         }
+    statistics = await profile_statistics(session, user.id)
     return {
         "id": str(user.id),
         "nickname": user.nickname,
         "bio": user.bio,
         "interests": [{"id": str(item.id), "name": item.name} for item in interests],
         "region": region,
-        "statistics": {"sentLetters": 0, "receivedLetters": 0, "matchCount": 0},
+        "statistics": statistics,
     }
 
 
