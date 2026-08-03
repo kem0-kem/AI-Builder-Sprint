@@ -49,22 +49,18 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-internal enum class FeedLoadScope { ALL, MINE }
-
-internal fun mergeFeedPage(
+internal fun mergeScopedFeedPage(
     existing: List<FeedPost>,
     incoming: List<MyFeedResult>,
-    scope: FeedLoadScope,
     append: Boolean,
 ): List<FeedPost> {
-    val base = when {
-        append -> existing
-        scope == FeedLoadScope.ALL -> emptyList()
-        else -> existing.filterNot { it.isMine }
-    }
+    val base = if (append) existing else emptyList()
     val incomingIds = incoming.mapTo(mutableSetOf()) { it.post.id }
     return base.filterNot { it.id in incomingIds } + incoming.map { it.post }
 }
+
+internal fun replaceFeedById(existing: List<FeedPost>, updated: FeedPost): List<FeedPost> =
+    existing.map { if (it.id == updated.id) updated else it }
 
 @Composable
 private fun ApptiveApp() {
@@ -83,7 +79,17 @@ private fun ApptiveApp() {
     var lastBackPressTime by remember { mutableLongStateOf(0L) }
     val likedFeeds = remember { mutableStateMapOf<String, Boolean>() }
     val likingFeeds = remember { mutableStateMapOf<String, Boolean>() }
-    val feeds = remember { mutableStateListOf<FeedPost>() }
+    val allFeeds = remember { mutableStateListOf<FeedPost>() }
+    val myFeeds = remember { mutableStateListOf<FeedPost>() }
+
+    fun replaceFeedInBothScopes(updated: FeedPost) {
+        val nextAll = replaceFeedById(allFeeds, updated)
+        val nextMine = replaceFeedById(myFeeds, updated)
+        allFeeds.clear()
+        allFeeds.addAll(nextAll)
+        myFeeds.clear()
+        myFeeds.addAll(nextMine)
+    }
 
     LaunchedEffect(sessionTokens) {
         val nextScreen = screenAfterSessionChange(screen, sessionTokens != null)
@@ -221,24 +227,25 @@ private fun ApptiveApp() {
                             showBottomBar = false
                         )
                         1 -> FeedScreen(
-                            feeds = feeds,
+                            allFeeds = allFeeds,
+                            myFeeds = myFeeds,
                             onOpenFeed = { screen = Screen.FeedDetail(it) },
                             isLiked = { likedFeeds[it] == true },
                             onToggleLike = toggleFeedLike,
                             loadFeeds = { cursor -> FeedApi.getFeeds(cursor = cursor) },
                             onFeedsLoaded = { remoteFeeds, append ->
-                                val merged = mergeFeedPage(feeds, remoteFeeds, FeedLoadScope.ALL, append)
-                                feeds.clear()
-                                feeds.addAll(merged)
+                                val merged = mergeScopedFeedPage(allFeeds, remoteFeeds, append)
+                                allFeeds.clear()
+                                allFeeds.addAll(merged)
                                 remoteFeeds.forEach { item ->
                                     likedFeeds[item.post.id] = item.liked
                                 }
                             },
                             loadMyFeeds = { cursor -> FeedApi.getMyFeeds(cursor = cursor) },
                             onMyFeedsLoaded = { remoteFeeds, append ->
-                                val merged = mergeFeedPage(feeds, remoteFeeds, FeedLoadScope.MINE, append)
-                                feeds.clear()
-                                feeds.addAll(merged)
+                                val merged = mergeScopedFeedPage(myFeeds, remoteFeeds, append)
+                                myFeeds.clear()
+                                myFeeds.addAll(merged)
                                 remoteFeeds.forEach { item ->
                                     likedFeeds[item.post.id] = item.liked
                                 }
@@ -277,23 +284,23 @@ private fun ApptiveApp() {
                     FeedApi.createFeed(categoryId, title, body)
                 },
                 onSuccess = { feedId, categoryId, category, title, body ->
-                    feeds.add(
-                        0,
-                        FeedPost(
-                            id = feedId,
-                            category = category,
-                            categoryId = categoryId,
-                            title = title,
-                            body = body,
-                            accent = Purple,
-                            isMine = true
-                        )
+                    val created = FeedPost(
+                        id = feedId,
+                        category = category,
+                        categoryId = categoryId,
+                        title = title,
+                        body = body,
+                        accent = Purple,
+                        isMine = true,
                     )
+                    allFeeds.add(0, created)
+                    myFeeds.add(0, created)
                     screen = Screen.Feed
                 }
             )
             is Screen.EditFeed -> {
-                val post = feeds.firstOrNull { it.id == current.feedId }
+                val post = allFeeds.firstOrNull { it.id == current.feedId }
+                    ?: myFeeds.firstOrNull { it.id == current.feedId }
                 if (post == null) {
                     screen = Screen.Feed
                 } else {
@@ -315,29 +322,28 @@ private fun ApptiveApp() {
                             ).map { post.id }
                         },
                         onSuccess = { _, categoryId, category, title, body ->
-                            val index = feeds.indexOfFirst { it.id == post.id }
-                            if (index >= 0) {
-                                feeds[index] = post.copy(
+                            replaceFeedInBothScopes(
+                                post.copy(
                                     category = category,
                                     categoryId = categoryId,
                                     title = title,
-                                    body = body
-                                )
-                            }
+                                    body = body,
+                                ),
+                            )
                             screen = Screen.FeedDetail(post.id)
                         }
                     )
                 }
             }
             is Screen.FeedDetail -> {
-                val post = feeds.first { it.id == current.feedId }
+                val post = allFeeds.firstOrNull { it.id == current.feedId }
+                    ?: myFeeds.first { it.id == current.feedId }
                 FeedDetailScreen(
                     post = post,
                     isLiked = likedFeeds[post.id] == true,
                     loadFeed = { feedId -> FeedApi.getFeedDetail(feedId) },
                     onFeedLoaded = { result ->
-                        val index = feeds.indexOfFirst { it.id == result.post.id }
-                        if (index >= 0) feeds[index] = result.post
+                        replaceFeedInBothScopes(result.post)
                         likedFeeds[result.post.id] = result.liked
                     },
                     onToggleLike = { toggleFeedLike(post.id) },
@@ -346,7 +352,8 @@ private fun ApptiveApp() {
                         if (FeedApi.isConfigured) {
                             appScope.launch {
                                 FeedApi.deleteFeed(post.id).onSuccess {
-                                    feeds.removeAll { it.id == post.id }
+                                    allFeeds.removeAll { it.id == post.id }
+                                    myFeeds.removeAll { it.id == post.id }
                                     likedFeeds.remove(post.id)
                                     screen = Screen.Feed
                                     Toast.makeText(context, "피드가 삭제되었습니다.", Toast.LENGTH_SHORT).show()

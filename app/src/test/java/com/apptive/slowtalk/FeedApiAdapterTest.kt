@@ -57,27 +57,49 @@ class FeedApiAdapterTest {
     }
 
     @Test
-    fun `all refresh replaces prior items globally without duplicate ids`() {
-        val id = "00000000-0000-4000-8000-000000000001"
-        val oldMine = post(id, isMine = true, title = "old")
-        val refreshed = MyFeedResult(post(id, isMine = true, title = "new"), false)
+    fun `loading mine scope does not alter the all scope page`() {
+        val allPage = (1..20).map { MyFeedResult(post(feedId(it), it % 2 == 0, "all-$it"), false) }
+        val minePage = (101..120).map { MyFeedResult(post(feedId(it), true, "mine-$it"), false) }
+        val allFeeds = mergeScopedFeedPage(emptyList(), allPage, append = false)
+        val allSnapshot = allFeeds.toList()
 
-        val merged = mergeFeedPage(listOf(oldMine), listOf(refreshed), FeedLoadScope.ALL, append = false)
+        val myFeeds = mergeScopedFeedPage(emptyList(), minePage, append = false)
 
-        assertEquals(1, merged.size)
-        assertEquals("new", merged.single().title)
+        assertEquals(20, myFeeds.size)
+        assertEquals(allSnapshot, allFeeds)
+        assertEquals((1..20).map(::feedId), allFeeds.map { it.id })
     }
 
     @Test
-    fun `mine pagination deduplicates ids across the shared feed collection`() {
-        val id = "00000000-0000-4000-8000-000000000001"
-        val existing = listOf(post(id, isMine = true, title = "old"))
-        val incoming = listOf(MyFeedResult(post(id, isMine = true, title = "new"), false))
+    fun `scope pagination appends in server order and deduplicates within that scope`() {
+        val firstPage = (1..20).map { MyFeedResult(post(feedId(it), false, "page-1-$it"), false) }
+        val secondPage = listOf(
+            MyFeedResult(post(feedId(20), false, "updated-20"), false),
+            MyFeedResult(post(feedId(21), false, "page-2-21"), false),
+        )
+        val existing = mergeScopedFeedPage(emptyList(), firstPage, append = false)
 
-        val merged = mergeFeedPage(existing, incoming, FeedLoadScope.MINE, append = true)
+        val merged = mergeScopedFeedPage(existing, secondPage, append = true)
 
-        assertEquals(listOf(id), merged.map { it.id })
-        assertEquals("new", merged.single().title)
+        assertEquals(21, merged.size)
+        assertEquals(21, merged.map { it.id }.distinct().size)
+        assertEquals((1..21).map(::feedId), merged.map { it.id })
+        assertEquals("updated-20", merged[19].title)
+    }
+
+    @Test
+    fun `feed mutation replaces matching id in both independent scopes`() {
+        val id = feedId(1)
+        val updated = post(id, true, "updated")
+        val allFeeds = listOf(post(id, true, "all-old"), post(feedId(2), false, "other"))
+        val myFeeds = listOf(post(id, true, "mine-old"))
+
+        val nextAll = replaceFeedById(allFeeds, updated)
+        val nextMine = replaceFeedById(myFeeds, updated)
+
+        assertEquals("updated", nextAll.first().title)
+        assertEquals("other", nextAll.last().title)
+        assertEquals("updated", nextMine.single().title)
     }
 
     @Test
@@ -182,4 +204,7 @@ class FeedApiAdapterTest {
         accent = Purple,
         isMine = isMine,
     )
+
+    private fun feedId(index: Int): String =
+        "00000000-0000-4000-8000-${index.toString().padStart(12, '0')}"
 }

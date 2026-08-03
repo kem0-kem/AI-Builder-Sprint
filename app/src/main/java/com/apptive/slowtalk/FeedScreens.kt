@@ -87,7 +87,8 @@ private enum class FeedIndex { ALL, MINE }
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun FeedScreen(
-    feeds: List<FeedPost>,
+    allFeeds: List<FeedPost>,
+    myFeeds: List<FeedPost>,
     onOpenFeed: (String) -> Unit,
     isLiked: (String) -> Boolean,
     onToggleLike: (String) -> Unit,
@@ -111,8 +112,8 @@ fun FeedScreen(
     var myNextCursor by remember { mutableStateOf<String?>(null) }
     val refreshScope = rememberCoroutineScope()
     val visibleFeeds = when (selectedIndex) {
-        FeedIndex.ALL -> feeds
-        FeedIndex.MINE -> feeds.filter { it.isMine }
+        FeedIndex.ALL -> allFeeds
+        FeedIndex.MINE -> myFeeds
     }
 
     suspend fun refreshAllFeeds() {
