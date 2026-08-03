@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     embedding_dimensions: int = MATCHING_EMBEDDING_DIMENSIONS
     match_min_similarity: float | None = Field(default=None, ge=0, le=1)
     matching_mode: Literal["disabled", "shadow", "enforce"] = "disabled"
-    moderation_mode: Literal["shadow", "enforce"] = "shadow"
+    moderation_mode: Literal["disabled", "shadow", "enforce"] = "shadow"
     moderation_allow_confidence: float | None = Field(default=None, ge=0, le=1)
     moderation_block_confidence: float | None = Field(default=None, ge=0, le=1)
     moderation_encryption_key: SecretStr | None = None
@@ -109,6 +109,9 @@ class Settings(BaseSettings):
 
 
 def moderation_configuration_complete(settings: Settings) -> bool:
+    if settings.moderation_mode == "disabled":
+        return True
+
     provider_values = (
         settings.upstage_api_key.get_secret_value()
         if settings.upstage_api_key is not None

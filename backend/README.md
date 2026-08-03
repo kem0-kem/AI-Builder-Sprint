@@ -4,16 +4,26 @@ FastAPI와 PostgreSQL로 구현한 SlowTalk 백엔드입니다. Android 앱 코�
 
 ## 로컬 실행
 
-```bash
-docker compose up -d postgres
+Docker Desktop과 Python 3.11 이상을 설치한 뒤 PowerShell에서 실행합니다.
+
+```powershell
+Copy-Item .env.example .env
 python -m pip install -e ".[dev]"
-alembic upgrade head
-uvicorn app.main:app --reload
+.\scripts\run-local.ps1
 ```
+
+스크립트는 PostgreSQL을 시작하고 컨테이너가 준비될 때까지 기다린 다음 Alembic
+마이그레이션을 적용하고 FastAPI 개발 서버를 실행합니다. `.env`가 없으면 예제 파일을
+복사하는 안내만 출력하고 종료하며, 비밀 값을 자동 생성하거나 Git에 추가하지 않습니다.
 
 - API: `http://localhost:8000/api/v1`
 - Swagger UI: `http://localhost:8000/docs`
-- 환경 변수는 `.env.example`을 참고합니다.
+- Liveness: `http://localhost:8000/api/v1/health`
+- Readiness: `http://localhost:8000/api/v1/ready`
+- 기본 `.env.example`은 matching과 moderation을 비활성화하므로 외부 AI 키 없이 준비 상태가 됩니다.
+
+서버를 중지하려면 실행 중인 PowerShell에서 `Ctrl+C`를 누릅니다. PostgreSQL 컨테이너도
+중지하려면 다른 PowerShell에서 `docker compose stop postgres`를 실행합니다.
 
 ## 품질 검사
 
@@ -42,6 +52,8 @@ the APK.
 
 ## Moderation rollout
 
+- `MODERATION_MODE=disabled`: 외부 AI 호출 없이 콘텐츠 CRUD를 실행합니다. 로컬 개발의
+  기본값이며 `/ready`에서 완전한 설정으로 취급합니다.
 - `MODERATION_MODE=shadow`: when `UPSTAGE_API_KEY`, `UPSTAGE_CHAT_MODEL`,
   `MODERATION_ALLOW_CONFIDENCE`, and `MODERATION_BLOCK_CONFIDENCE` are configured,
   classifies content and records only bounded metrics without persisting moderation

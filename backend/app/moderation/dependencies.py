@@ -36,6 +36,9 @@ async def get_moderation_orchestrator(
     | None
 ]:
     settings = get_settings()
+    if settings.moderation_mode == "disabled":
+        yield None
+        return
     if not moderation_configuration_complete(settings):
         yield None
         return

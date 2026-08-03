@@ -65,14 +65,20 @@ def complete_enforce_settings() -> Settings:
     )
 
 
-def test_env_example_loads_as_incomplete_moderation_configuration() -> None:
+def test_env_example_loads_as_ai_optional_local_configuration() -> None:
     env_example = Path(__file__).resolve().parents[1] / ".env.example"
 
     settings = Settings(_env_file=env_example)
 
-    assert settings.moderation_allow_confidence == 0.7
-    assert settings.moderation_block_confidence == 0.9
-    assert moderation_configuration_complete(settings) is False
+    assert settings.app_environment == "development"
+    assert settings.database_url == (
+        "postgresql+asyncpg://slowtalk:slowtalk@localhost:5432/slowtalk"
+    )
+    assert settings.api_prefix == "/api/v1"
+    assert settings.jwt_secret == "local-development-secret-change-before-deploy"
+    assert settings.matching_mode == "disabled"
+    assert settings.moderation_mode == "disabled"
+    assert moderation_configuration_complete(settings) is True
 
 
 async def test_health_uses_common_envelope(
@@ -86,6 +92,35 @@ async def test_health_uses_common_envelope(
     assert body == {
         "ok": True,
         "data": {"status": "alive"},
+        "error": None,
+        "meta": None,
+    }
+
+
+async def test_default_development_without_external_ai_is_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        app_environment="development",
+        matching_mode="disabled",
+        moderation_mode="disabled",
+        upstage_api_key=None,
+        upstage_chat_model=None,
+        upstage_embedding_model=None,
+    )
+
+    status_code, body = await system_response(monkeypatch, settings, "/api/v1/ready")
+
+    assert status_code == 200
+    assert body == {
+        "ok": True,
+        "data": {
+            "status": "ready",
+            "moderationMode": "disabled",
+            "moderationConfigured": True,
+            "fallbackActive": False,
+        },
         "error": None,
         "meta": None,
     }
