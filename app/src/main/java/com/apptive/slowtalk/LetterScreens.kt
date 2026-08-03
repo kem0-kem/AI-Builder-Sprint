@@ -101,6 +101,7 @@ fun WriteLetterScreen(
     val uiState by viewModel.uiState.collectAsState()
     val body by viewModel.content.collectAsState()
     val aiFeedback by viewModel.aiFeedback.collectAsState()
+    val isFeedbackLoading by viewModel.isFeedbackLoading.collectAsState()
     
     val profileState by profileViewModel.uiState.collectAsState()
     val provinces by profileViewModel.provinces.collectAsState()
@@ -258,16 +259,42 @@ fun WriteLetterScreen(
                                 Icon(Icons.Outlined.AutoAwesome, null, tint = Purple)
                                 Text("  AI 편지 도우미", color = Purple, fontWeight = FontWeight.ExtraBold)
                                 Spacer(Modifier.weight(1f))
-                                Text(
-                                    if (uiState is LetterUiState.Loading) "분석 중..." else "실시간 분석",
-                                    color = Purple,
-                                    fontSize = 10.sp
-                                )
+                                Surface(
+                                    modifier = Modifier.clickable(
+                                        enabled = body.isNotBlank() && !isFeedbackLoading,
+                                        onClick = viewModel::analyzeContent
+                                    ),
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (body.isNotBlank()) {
+                                        Purple.copy(alpha = 0.12f)
+                                    } else {
+                                        Color.White.copy(alpha = 0.55f)
+                                    }
+                                ) {
+                                    Text(
+                                        when {
+                                            isFeedbackLoading -> "분석 중..."
+                                            aiFeedback != null -> "다시 분석"
+                                            else -> "분석하기"
+                                        },
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        color = if (body.isNotBlank()) Purple else SubtleInk,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
                             }
                             Spacer(Modifier.height(12.dp))
                             
-                            val warning = aiFeedback?.warning
-                            if (warning?.exists == true) {
+                            val feedback = aiFeedback
+                            val warning = feedback?.warning
+                            if (feedback == null) {
+                                Text(
+                                    "편지 내용을 입력한 뒤 분석하기를 눌러주세요.",
+                                    color = SubtleInk,
+                                    fontSize = 12.sp
+                                )
+                            } else if (warning?.exists == true) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Outlined.WarningAmber, null, tint = Color(0xFFE98175))
                                     Text(
@@ -283,35 +310,40 @@ fun WriteLetterScreen(
                                     Icon(Icons.Outlined.Verified, null, tint = Color(0xFF51BF86))
                                     Column(Modifier.padding(start = 9.dp)) {
                                         Text("좋은 흐름이에요!", color = Color(0xFF23A664), fontWeight = FontWeight.Bold)
-                                        Text("상대방이 부담 없이 읽기 좋은 문장입니다.", color = SubtleInk, fontSize = 11.sp)
+                                        Text(
+                                            feedback.summary ?: "주의가 필요한 표현이 발견되지 않았습니다.",
+                                            color = SubtleInk,
+                                            fontSize = 11.sp
+                                        )
                                     }
                                 }
                             }
-                            
-                            HorizontalDivider(Modifier.padding(vertical = 12.dp), color = Color.White)
-                            Text("더 따뜻해지는 작은 팁", color = Purple, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            val tips = aiFeedback?.tips ?: listOf("감정을 표현해주셔서 좋아요.", "마지막 인사도 따뜻하게 남겨보세요.")
-                            tips.forEach { tip ->
-                                Text("• $tip", fontSize = 12.sp, lineHeight = 19.sp)
-                            }
-                            
-                            Spacer(Modifier.height(14.dp))
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = Color.White.copy(alpha = 0.5f)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+
+                            if (feedback != null) {
+                                HorizontalDivider(Modifier.padding(vertical = 12.dp), color = Color.White)
+                                Text("더 따뜻해지는 작은 팁", color = Purple, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                feedback.displayTips.forEach { tip ->
+                                    Text("• $tip", fontSize = 12.sp, lineHeight = 19.sp)
+                                }
+
+                                Spacer(Modifier.height(14.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = Color.White.copy(alpha = 0.5f)
                                 ) {
-                                    Icon(Icons.Outlined.MailOutline, null, tint = Purple, modifier = Modifier.size(16.dp))
-                                    Text(
-                                        " 따뜻한 공감 표현 예시",
-                                        modifier = Modifier.weight(1f),
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text("더보기", fontSize = 11.sp, color = SubtleInk, modifier = Modifier.clickable { })
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Outlined.MailOutline, null, tint = Purple, modifier = Modifier.size(16.dp))
+                                        Text(
+                                            " 따뜻한 공감 표현 예시",
+                                            modifier = Modifier.weight(1f),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text("더보기", fontSize = 11.sp, color = SubtleInk, modifier = Modifier.clickable { })
+                                    }
                                 }
                             }
                         }

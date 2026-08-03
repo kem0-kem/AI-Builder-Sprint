@@ -35,13 +35,13 @@ data class LetterFeedbackRequest(val content: String)
 
 @Serializable
 data class LetterFeedbackResponse(
-    val summary: String,
-    val suggestions: List<String>,
+    val summary: String? = null,
+    val suggestions: List<String> = emptyList(),
+    val warning: AiWarningDto? = null,
+    val tips: List<String> = emptyList()
 ) {
-    val warning: AiWarningDto
-        get() = AiWarningDto(exists = false)
-    val tips: List<String>
-        get() = suggestions
+    val displayTips: List<String>
+        get() = tips.ifEmpty { suggestions }
 }
 
 @Serializable
