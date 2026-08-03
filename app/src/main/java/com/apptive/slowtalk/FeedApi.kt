@@ -12,6 +12,9 @@ import com.apptive.slowtalk.data.remote.apiData
 import com.apptive.slowtalk.data.remote.apiModerated
 import com.apptive.slowtalk.data.remote.apiUnit
 import com.apptive.slowtalk.data.remote.requireResource
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 data class MyFeedResult(
     val post: FeedPost,
@@ -31,16 +34,55 @@ data class FeedFeedbackResult(
     val tips: List<String>
 )
 
+internal class FeedCategoryCatalog(
+    private val loader: suspend () -> List<FeedCategoryResult>,
+) {
+    private val loadMutex = Mutex()
+    private var loadAttempted = false
+    private var categoriesById: Map<String, FeedCategoryResult> = emptyMap()
+
+    suspend fun warmUp() {
+        if (loadAttempted) return
+        loadMutex.withLock {
+            if (loadAttempted) return
+            categoriesById = try {
+                loader().associateBy(FeedCategoryResult::id)
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (_: Exception) {
+                emptyMap()
+            }
+            loadAttempted = true
+        }
+    }
+
+    suspend fun categories(): List<FeedCategoryResult> {
+        warmUp()
+        return categoriesById.values.toList()
+    }
+
+    suspend fun toFeedPost(feed: FeedTimelineDto): FeedPost {
+        warmUp()
+        return feed.toFeedPost(categoriesById[feed.categoryId]?.name)
+    }
+
+    suspend fun categoryName(categoryId: String): String? {
+        warmUp()
+        return categoriesById[categoryId]?.name
+    }
+}
+
 object FeedApi {
     val isConfigured: Boolean = true
-    private val categoryNames = mutableMapOf<String, String>()
+    private val categoryCatalog = FeedCategoryCatalog(::fetchCategories)
 
-    suspend fun getFeedCategories(): Result<List<FeedCategoryResult>> = runCatching {
+    private suspend fun fetchCategories(): List<FeedCategoryResult> =
         apiData { RetrofitClient.feedApi.getFeedCategories() }.map {
             FeedCategoryResult(it.id, appCategoryName(it.name))
-        }.also { categories ->
-            categoryNames.putAll(categories.associate { it.id to it.name })
         }
+
+    suspend fun getFeedCategories(): Result<List<FeedCategoryResult>> = runCatching {
+        categoryCatalog.categories()
     }
 
     suspend fun createFeed(
@@ -67,26 +109,29 @@ object FeedApi {
         }
 
     suspend fun getMyFeeds(): Result<List<MyFeedResult>> = runCatching {
+        categoryCatalog.warmUp()
         apiData { RetrofitClient.feedApi.getMyFeeds() }.map { item ->
             MyFeedResult(
-                post = item.toFeedPost(categoryNames[item.categoryId]).copy(isMine = true),
+                post = categoryCatalog.toFeedPost(item).copy(isMine = true),
                 liked = item.liked
             )
         }
     }
 
     suspend fun getFeeds(): Result<List<MyFeedResult>> = runCatching {
+        categoryCatalog.warmUp()
         apiData { RetrofitClient.feedApi.getFeeds() }.map { item ->
             MyFeedResult(
-                post = item.toFeedPost(categoryNames[item.categoryId]),
+                post = categoryCatalog.toFeedPost(item),
                 liked = item.liked
             )
         }
     }
 
     suspend fun getFeedDetail(feedId: String): Result<FeedDetailResult> = runCatching {
+        categoryCatalog.warmUp()
         apiData { RetrofitClient.feedApi.getFeed(feedId) }.let { item ->
-            val category = categoryNames[item.categoryId]?.let(::appCategoryName) ?: "기타"
+            val category = categoryCatalog.categoryName(item.categoryId)?.let(::appCategoryName) ?: "기타"
             FeedDetailResult(
                 post = FeedPost(
                     id = item.id,
