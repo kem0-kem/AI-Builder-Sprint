@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -38,7 +39,6 @@ import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Report
-import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.School
 import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material.icons.outlined.SubdirectoryArrowRight
@@ -427,39 +427,45 @@ private fun FeedCard(
                     .clickable { onOpenFeed(post.id) }
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    val categoryColor = when {
+                        post.category.contains("일상") -> Color(0xFF54B978)
+                        post.category.contains("성장") -> Color(0xFF5C95E8)
+                        post.category.contains("위로") || post.category.contains("고민") -> Color(0xFFE76E91)
+                        else -> post.accent
+                    }
                     val categoryIcon = when (post.category) {
-                        "일상 이야기" -> Icons.Outlined.Eco
-                        "마음과 고민" -> Icons.Outlined.FavoriteBorder
-                        "취미 생활" -> Icons.Outlined.Palette
+                        "일상", "일상 이야기" -> Icons.Outlined.Eco
+                        "위로", "마음과 고민" -> Icons.Outlined.FavoriteBorder
+                        "배움과 성장" -> Icons.Outlined.School
                         "질문" -> Icons.AutoMirrored.Outlined.HelpOutline
                         else -> Icons.Outlined.AutoAwesome
                     }
                     Surface(
-                        modifier = Modifier.size(30.dp),
+                        modifier = Modifier.size(32.dp),
                         shape = CircleShape,
-                        color = post.accent.copy(alpha = 0.15f)
+                        color = categoryColor.copy(alpha = 0.15f)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 categoryIcon,
                                 contentDescription = null,
-                                tint = post.accent,
-                                modifier = Modifier.size(16.dp)
+                                tint = categoryColor,
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
                     Spacer(Modifier.size(8.dp))
-                    Text(post.category, color = post.accent, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text(post.category, color = categoryColor, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 }
                 Spacer(Modifier.height(8.dp))
-                Text(post.title, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Ink)
+                Text(post.title, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Ink)
                 Spacer(Modifier.height(5.dp))
-                Text(post.body, color = SubtleInk, lineHeight = 20.sp, fontSize = 13.sp)
+                Text(post.body, color = SubtleInk, lineHeight = 21.sp, fontSize = 14.sp)
                 Spacer(Modifier.height(8.dp))
                 Text(
                     if (post.isMine) "내가 쓴 익명 피드" else "익명의 이웃",
                     color = SubtleInk,
-                    fontSize = 12.sp
+                    fontSize = 13.sp
                 )
             }
             HorizontalDivider(Modifier.padding(vertical = 10.dp), color = LineColor)
@@ -937,9 +943,9 @@ private data class FeedCategoryVisual(
 )
 
 private fun FeedCategoryResult.toVisual(): FeedCategoryVisual = when (name) {
-    "일상 이야기" -> FeedCategoryVisual(id, name, Icons.Outlined.Eco, Color(0xFF54B978), Color(0xFFEAF7ED))
-    "마음과 고민" -> FeedCategoryVisual(id, name, Icons.Outlined.FavoriteBorder, Color(0xFFE76E91), Color(0xFFFFEFF3))
-    "취미 생활" -> FeedCategoryVisual(id, name, Icons.Outlined.Palette, Purple, PurpleSoft)
+    "일상", "일상 이야기" -> FeedCategoryVisual(id, name, Icons.Outlined.Eco, Color(0xFF54B978), Color(0xFFEAF7ED))
+    "위로", "마음과 고민" -> FeedCategoryVisual(id, name, Icons.Outlined.FavoriteBorder, Color(0xFFE76E91), Color(0xFFFFEFF3))
+    "배움과 성장" -> FeedCategoryVisual(id, name, Icons.Outlined.School, Color(0xFF5C95E8), Color(0xFFEAF2FF))
     else -> FeedCategoryVisual(id, name, Icons.AutoMirrored.Outlined.HelpOutline, SubtleInk, Color(0xFFF4F1ED))
 }
 
@@ -1771,7 +1777,42 @@ private fun FeedDetailCard(
         Column(Modifier.padding(20.dp)) {
             Text("익명", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
             Spacer(Modifier.height(18.dp))
-            Text(post.category, color = post.accent, fontWeight = FontWeight.SemiBold)
+            val categoryColor = when {
+                post.category.contains("일상") -> Color(0xFF54B978)
+                post.category.contains("성장") -> Color(0xFF5C95E8)
+                post.category.contains("위로") || post.category.contains("고민") -> Color(0xFFE76E91)
+                else -> post.accent
+            }
+            val categoryIcon = when (post.category) {
+                "일상", "일상 이야기" -> Icons.Outlined.Eco
+                "위로", "마음과 고민" -> Icons.Outlined.FavoriteBorder
+                "배움과 성장" -> Icons.Outlined.School
+                "질문" -> Icons.AutoMirrored.Outlined.HelpOutline
+                else -> Icons.Outlined.ChatBubbleOutline
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = CircleShape,
+                    color = categoryColor.copy(alpha = 0.15f),
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = categoryIcon,
+                            contentDescription = post.category,
+                            tint = categoryColor,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    post.category,
+                    color = categoryColor,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 16.sp
+                )
+            }
             Spacer(Modifier.height(12.dp))
             Text(post.title, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
             Spacer(Modifier.height(10.dp))

@@ -327,25 +327,6 @@ fun WriteLetterScreen(
                                     Text("• $tip", fontSize = 12.sp, lineHeight = 19.sp)
                                 }
 
-                                Spacer(Modifier.height(14.dp))
-                                Surface(
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = Color.White.copy(alpha = 0.5f)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(Icons.Outlined.MailOutline, null, tint = Purple, modifier = Modifier.size(16.dp))
-                                        Text(
-                                            " 따뜻한 공감 표현 예시",
-                                            modifier = Modifier.weight(1f),
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text("더보기", fontSize = 11.sp, color = SubtleInk, modifier = Modifier.clickable { })
-                                    }
-                                }
                             }
                         }
                     }
@@ -395,6 +376,15 @@ fun WriteLetterScreen(
                                 }
                             }
                         }
+                    }
+                }
+                (uiState as? LetterUiState.Error)?.let { error ->
+                    item {
+                        Text(
+                            text = error.message,
+                            color = Color(0xFFD95C55),
+                            fontSize = 13.sp,
+                        )
                     }
                 }
                 item {
@@ -1109,7 +1099,12 @@ private fun IconBox(icon: ImageVector, onClick: () -> Unit = {}) {
 private fun uriToFile(context: android.content.Context, uri: Uri): File? {
     return try {
         val inputStream = context.contentResolver.openInputStream(uri) ?: return null
-        val file = File(context.cacheDir, "temp_letter_${System.currentTimeMillis()}.jpg")
+        val extension = when (context.contentResolver.getType(uri)) {
+            "image/png" -> "png"
+            "image/webp" -> "webp"
+            else -> "jpg"
+        }
+        val file = File(context.cacheDir, "temp_letter_${System.currentTimeMillis()}.$extension")
         val outputStream = FileOutputStream(file)
         inputStream.copyTo(outputStream)
         inputStream.close()

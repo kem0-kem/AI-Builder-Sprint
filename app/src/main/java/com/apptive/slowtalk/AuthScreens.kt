@@ -51,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
@@ -277,7 +278,11 @@ fun SignUpScreen(
                     AuthInputField(
                         value = nameState,
                         onValueChange = {
-                            nameState = TextFieldValue(normalizeUsernameInput(it.text))
+                            val normalized = normalizeUsernameInput(it.text)
+                            nameState = it.copy(
+                                text = normalized,
+                                selection = TextRange(it.selection.end.coerceAtMost(normalized.length))
+                            )
                             usernameCheckResult = null
                             showUsernameFormatError = false
                         },

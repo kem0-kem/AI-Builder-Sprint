@@ -112,7 +112,6 @@ fun WriteReflectionScreen(
             viewModel.resetState()
         } else if (uiState is ReflectionUiState.Success) {
             onFinish(textState.text)
-            viewModel.resetState()
         }
     }
     
@@ -358,7 +357,12 @@ private fun IconBox(icon: ImageVector, onClick: () -> Unit = {}) {
 private fun uriToFile(context: android.content.Context, uri: Uri): File? {
     return try {
         val inputStream = context.contentResolver.openInputStream(uri) ?: return null
-        val file = File(context.cacheDir, "temp_reflection_${System.currentTimeMillis()}.jpg")
+        val extension = when (context.contentResolver.getType(uri)) {
+            "image/png" -> "png"
+            "image/webp" -> "webp"
+            else -> "jpg"
+        }
+        val file = File(context.cacheDir, "temp_reflection_${System.currentTimeMillis()}.$extension")
         val outputStream = FileOutputStream(file)
         inputStream.copyTo(outputStream)
         inputStream.close()
@@ -381,10 +385,12 @@ fun ReflectionDetailScreen(
     val uiState by viewModel.uiState.collectAsState()
     val scrollState = rememberScrollState()
 
-    LaunchedEffect(Unit) {
-        viewModel.fetchFeedback(content)
+    val feedbackResponse = when (val state = uiState) {
+        is ReflectionUiState.Success -> state.feedback
+        is ReflectionUiState.FeedbackSuccess -> state.feedback
+        else -> null
     }
-    
+
     PaperBackground {
         Column(
             modifier = Modifier
@@ -404,7 +410,10 @@ fun ReflectionDetailScreen(
                     contentDescription = "뒤로가기",
                     modifier = Modifier
                         .size(28.dp)
-                        .clickable(onClick = onBack),
+                        .clickable {
+                            viewModel.resetState()
+                            onBack()
+                        },
                     tint = Ink
                 )
                 Text(
@@ -477,8 +486,6 @@ fun ReflectionDetailScreen(
                 Spacer(Modifier.height(40.dp))
                 
                 // Summary Title
-                val feedbackResponse = (uiState as? ReflectionUiState.FeedbackSuccess)?.feedback
-                
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Surface(
                         modifier = Modifier.size(48.dp),

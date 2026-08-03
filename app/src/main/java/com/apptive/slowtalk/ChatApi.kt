@@ -8,6 +8,9 @@ import com.apptive.slowtalk.data.remote.RetrofitClient
 import com.apptive.slowtalk.data.remote.apiData
 import com.apptive.slowtalk.data.remote.apiModerated
 import com.apptive.slowtalk.data.remote.requireResource
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.Response
@@ -41,18 +44,33 @@ object ChatApi {
     }
 
     suspend fun getRooms(): Result<List<Conversation>> = runCatching {
-        apiData { RetrofitClient.chatApi.getChatRooms() }.map { room ->
-            val isGroup = room.type == "GROUP"
-            Conversation(
-                title = room.name ?: "익명의 이웃",
-                preview = "",
-                time = displayTime(room.createdAt),
-                unread = false,
-                isGroup = isGroup,
-                members = if (isGroup) 0 else 1,
-                chatRoomId = room.id
-            )
+        val rooms = apiData { RetrofitClient.chatApi.getChatRooms() }
+        coroutineScope {
+            rooms.map { room ->
+                async {
+                    val latestMessage = runCatching {
+                        apiData { RetrofitClient.chatApi.getMessages(room.id) }
+                            .maxByOrNull { it.createdAt }
+                    }.getOrNull()
+                    room to latestMessage
+                }
+            }.awaitAll()
         }
+            .sortedByDescending { (room, latestMessage) ->
+                latestMessage?.createdAt ?: room.createdAt
+            }
+            .map { (room, latestMessage) ->
+                val isGroup = room.type == "GROUP"
+                Conversation(
+                    title = room.name ?: "익명의 이웃",
+                    preview = latestMessage?.content.orEmpty(),
+                    time = displayTime(latestMessage?.createdAt ?: room.createdAt),
+                    unread = false,
+                    isGroup = isGroup,
+                    members = if (isGroup) 0 else 1,
+                    chatRoomId = room.id
+                )
+            }
     }
 
     suspend fun getRoom(chatRoomId: String): Result<ChatRoomInfo> = runCatching {
@@ -67,7 +85,9 @@ object ChatApi {
     }
 
     suspend fun getMessages(chatRoomId: String): Result<List<ChatMessage>> = runCatching {
-        apiData { RetrofitClient.chatApi.getMessages(chatRoomId) }.map { it.toModel() }
+        apiData { RetrofitClient.chatApi.getMessages(chatRoomId) }
+            .sortedBy { it.createdAt }
+            .map { it.toModel() }
     }
 
     suspend fun sendMessage(chatRoomId: String, content: String): Result<ChatMessage> = runCatching {
@@ -87,6 +107,13 @@ object ChatApi {
             )
         }.let { response ->
             response.unreadCount
+        }
+    }
+
+    suspend fun leaveRoom(chatRoomId: String): Result<Unit> = runCatching {
+        val response = RetrofitClient.chatApi.leaveChatRoom(chatRoomId)
+        check(response.isSuccessful) {
+            "대화방을 나가지 못했습니다. (HTTP ${response.code()})"
         }
     }
 }
