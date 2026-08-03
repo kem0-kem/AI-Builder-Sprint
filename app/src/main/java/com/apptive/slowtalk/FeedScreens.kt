@@ -63,6 +63,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -996,6 +997,8 @@ fun FeedDetailScreen(
     loadFeed: suspend (String) -> Result<FeedDetailResult>,
     onFeedLoaded: (FeedDetailResult) -> Unit,
     onToggleLike: () -> Unit,
+    openCommentChat: suspend (String) -> Result<ChatRoomInfo>,
+    onCommentChatOpened: (ChatRoomInfo) -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onReport: () -> Unit,
@@ -1009,6 +1012,7 @@ fun FeedDetailScreen(
     var menuExpanded by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showReportDialog by remember { mutableStateOf(false) }
+    val openingCommentChats = remember { mutableStateMapOf<String, Boolean>() }
     val commentFocusRequester = remember { FocusRequester() }
     val refreshScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -1122,6 +1126,31 @@ fun FeedDetailScreen(
                     .onFailure {
                         Toast.makeText(context, "댓글 신고를 서버에 전송하지 못했습니다. 다시 시도해 주세요.", Toast.LENGTH_SHORT).show()
                     }
+            }
+        }
+    }
+
+    fun openChatFromComment(target: Comment) {
+        val commentId = target.id ?: return
+        if (target.isMine || openingCommentChats[commentId] == true) return
+
+        openingCommentChats[commentId] = true
+        refreshScope.launch {
+            try {
+                requestCommentChat(
+                    commentId = commentId,
+                    openCommentChat = openCommentChat,
+                    onCommentChatOpened = onCommentChatOpened,
+                    onFailure = {
+                        Toast.makeText(
+                            context,
+                            "채팅방을 열지 못했습니다. 다시 시도해 주세요.",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    },
+                )
+            } finally {
+                openingCommentChats.remove(commentId)
             }
         }
     }
@@ -1414,6 +1443,8 @@ fun FeedDetailScreen(
                         CommentThread(
                             comment = comments[index],
                             onReply = { author -> replyTarget = index to author },
+                            onChat = ::openChatFromComment,
+                            isChatOpening = { commentId -> openingCommentChats[commentId] == true },
                             onEditRoot = { content -> editCommentAt(index, null, content) },
                             onDeleteRoot = { deleteCommentAt(index, null) },
                             onReportRoot = { reportCommentAt(index, null) },
@@ -1434,6 +1465,8 @@ fun FeedDetailScreen(
 private fun CommentThread(
     comment: Comment,
     onReply: (String) -> Unit,
+    onChat: (Comment) -> Unit,
+    isChatOpening: (String) -> Boolean,
     onEditRoot: (String) -> Unit,
     onDeleteRoot: () -> Unit,
     onReportRoot: () -> Unit,
@@ -1446,6 +1479,12 @@ private fun CommentThread(
             comment = comment,
             modifier = Modifier.fillMaxWidth(),
             onReply = { onReply(comment.author) },
+            onChat = if (!comment.isMine && comment.id != null) {
+                { onChat(comment) }
+            } else {
+                null
+            },
+            isChatOpening = comment.id?.let(isChatOpening) == true,
             onEdit = onEditRoot,
             onDelete = onDeleteRoot,
             onReport = onReportRoot
@@ -1469,6 +1508,12 @@ private fun CommentThread(
                     comment = reply,
                     modifier = Modifier.weight(1f),
                     onReply = { onReply(reply.author) },
+                    onChat = if (!reply.isMine && reply.id != null) {
+                        { onChat(reply) }
+                    } else {
+                        null
+                    },
+                    isChatOpening = reply.id?.let(isChatOpening) == true,
                     onEdit = { content -> onEditReply(replyIndex, content) },
                     onDelete = { onDeleteReply(replyIndex) },
                     onReport = { onReportReply(replyIndex) },
@@ -1484,6 +1529,8 @@ private fun CommentCard(
     comment: Comment,
     modifier: Modifier,
     onReply: () -> Unit,
+    onChat: (() -> Unit)?,
+    isChatOpening: Boolean,
     onEdit: (String) -> Unit,
     onDelete: () -> Unit,
     onReport: () -> Unit,
@@ -1665,6 +1712,28 @@ private fun CommentCard(
                                 }
                             )
                         } else {
+                            if (onChat != null) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(if (isChatOpening) "채팅방 여는 중" else "채팅하기")
+                                    },
+                                    leadingIcon = {
+                                        if (isChatOpening) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(20.dp),
+                                                strokeWidth = 2.dp,
+                                            )
+                                        } else {
+                                            Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null)
+                                        }
+                                    },
+                                    enabled = !isChatOpening,
+                                    onClick = {
+                                        menuExpanded = false
+                                        onChat()
+                                    },
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text("신고") },
                                 leadingIcon = {

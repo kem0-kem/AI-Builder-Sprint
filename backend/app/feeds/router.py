@@ -8,6 +8,8 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.auth.dependencies import CurrentUserId, Session
+from app.chat.schemas import ChatRoomSuccessResponse
+from app.chat.service import get_or_create_direct_room
 from app.common.responses import page, success
 from app.core.errors import ApiError
 from app.feeds.models import Comment, Feed, FeedCategory, FeedLike, ModerationReport
@@ -358,6 +360,27 @@ async def delete_comment(comment_id: UUID, user_id: CurrentUserId, session: Sess
     comment.deleted_at = datetime.now(UTC)
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/comments/{comment_id}/chat-room",
+    response_model=ChatRoomSuccessResponse,
+)
+async def create_comment_chat_room(
+    comment_id: UUID,
+    user_id: CurrentUserId,
+    session: Session,
+) -> dict[str, object]:
+    comment = await require_comment(session, comment_id)
+    if comment.author_id == user_id:
+        raise ApiError(
+            "VALIDATION_ERROR",
+            "자기 댓글에서는 채팅을 시작할 수 없습니다.",
+            400,
+        )
+    room = await get_or_create_direct_room(session, user_id, comment.author_id)
+    await session.commit()
+    return success({"id": str(room.id), "type": room.type, "name": room.name})
 
 
 @router.post("/comments/{comment_id}/reports", status_code=status.HTTP_201_CREATED)

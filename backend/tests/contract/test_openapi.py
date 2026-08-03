@@ -81,6 +81,30 @@ def test_moderated_writes_document_async_and_blocked_responses() -> None:
         assert {"202", "422"} <= set(responses)
 
 
+def test_comment_chat_room_has_bodyless_typed_success_contract() -> None:
+    document = create_app().openapi()
+    operation = document["paths"]["/api/v1/comments/{comment_id}/chat-room"]["post"]
+    response_schema = operation["responses"]["200"]["content"]["application/json"][
+        "schema"
+    ]
+
+    assert "requestBody" not in operation
+    assert "$ref" in response_schema
+
+    response_component = document["components"]["schemas"][
+        response_schema["$ref"].rsplit("/", 1)[-1]
+    ]
+    data_schema = response_component["properties"]["data"]
+    assert "$ref" in data_schema
+
+    data_component = document["components"]["schemas"][
+        data_schema["$ref"].rsplit("/", 1)[-1]
+    ]
+    assert {"id", "type", "name"} <= set(data_component["properties"])
+    assert data_component["properties"]["type"]["const"] == "DIRECT"
+    assert data_component["properties"]["name"]["type"] == "null"
+
+
 def test_openapi_snapshot_matches_application() -> None:
     snapshot = Path(__file__).parents[2] / "openapi" / "slowtalk-v1.json"
     assert json.loads(snapshot.read_text(encoding="utf-8")) == create_app().openapi()
