@@ -737,6 +737,57 @@
         }
       }
     },
+    "/api/v1/comments/{comment_id}/chat-room": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Open Comment Author Chat",
+        "description": "Open one idempotent anonymous direct room with a comment author.",
+        "operationId": "open_comment_author_chat_api_v1_comments__comment_id__chat_room_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "comment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Comment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Open Comment Author Chat Api V1 Comments  Comment Id  Chat Room Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/chat-rooms": {
       "get": {
         "tags": [

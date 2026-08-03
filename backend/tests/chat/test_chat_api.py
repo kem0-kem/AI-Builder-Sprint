@@ -2,8 +2,8 @@ from uuid import uuid4
 
 from httpx import AsyncClient
 
-from tests.letters.test_letter_delivery import register
 from tests.feeds.test_feed_api import create_feed
+from tests.letters.test_letter_delivery import register
 
 
 async def test_comment_author_chat_is_idempotent(client: AsyncClient) -> None:

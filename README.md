@@ -1,96 +1,168 @@
-# AI Builder Sprint 2026
+# SlowTalk
 
-## SlowTalk 제출 자료
+빠른 관계 맺기에 지친 사람들을 위한 지역 기반 느린 연결 플랫폼입니다. 손편지 OCR, AI 글쓰기 피드백, 의미 기반 매칭, 익명·모임 대화와 회고를 하나의 Android 앱에서 제공합니다.
 
-- [AI 활용 증빙 — Upstage Document Parse, Solar Chat, Solar Embedding](AI_USAGE_EVIDENCE.md)
-- [Android 앱 시연 영상](docs/demo/slowtalk-demo.mp4)
+- 운영 API: [backend-production-2f6a.up.railway.app](https://backend-production-2f6a.up.railway.app/docs)
+- [AI 활용 증빙](AI_USAGE_EVIDENCE.md)
+- [자막 포함 시연 영상](docs/demo/slowtalk-demo.mp4)
+- [기능 명세](docs/superpowers/specs) / [구현 계획](docs/superpowers/plans)
 
-> 총 168시간, AI와 함께 만드는 도전
+## Upstage API 활용
 
-## 대회 소개
+| Upstage 기능 | 제품 내 용도 | 연결 지점 |
+| --- | --- | --- |
+| Document Parse | 카메라·갤러리에서 가져온 손편지와 회고 이미지 OCR | `POST /v1/document-digitization`, `document-parse`, `ocr=force` |
+| Solar Chat | 편지·피드·회고 내용별 AI 글쓰기 피드백과 콘텐츠 안전성 분류 | `POST /v1/chat/completions`, `UPSTAGE_CHAT_MODEL` |
+| Solar Embedding | 편지·사용자 프로필을 1,024차원 벡터로 변환해 의미 기반 연결 | `POST /v1/embeddings`, `solar-embedding-2` |
 
-**AI Builder Sprint 2026**은 부산대학교 **APPTIVE**가 주최하고, **Upstage**, 부산대학교 **Anchor 사업단** 및 부산대학교 **AI융합교육원**이 후원하는 해커톤입니다. 참가자들은 자유로운 기술 스택을 바탕으로 실제로 동작하는 서비스를 직접 코드로 구현합니다.
+`UPSTAGE_API_KEY`는 GitHub나 APK에 넣지 않고 백엔드 실행 환경에만 주입합니다. 구체적인 요청 흐름, 프롬프트 원칙, fallback 범위와 테스트 근거는 [AI_USAGE_EVIDENCE.md](AI_USAGE_EVIDENCE.md)에 정리되어 있습니다.
 
-| 항목 | 내용 |
-| --- | --- |
-| 주제 | AI를 통해 인간다움을 더욱 잘 드러낼 수 있는 서비스 개발 |
-| 팀 구성 | 2~4인 1팀 |
-| 개발 방식 | 코드 기반 앱 개발 필수 (노코드/로우코드 단독 사용 불가) |
+## 개발 과정의 AI 활용
 
-### 진행 흐름
+Codex를 코드 탐색, Android–FastAPI API 계약 구현, 장애 재현, 회귀 테스트, Railway 배포 점검과 문서화에 활용했습니다. AI가 같은 저장소 규칙과 검증 절차를 반복 적용할 수 있도록 아래 파일도 함께 관리합니다.
 
-1. **팀 단위 참가 신청** — 팀원 정보, 프로젝트 아이디어, 활용 예정 AI 기술·API 제출
-2. **참가팀 선발** (20~50팀) — 아이디어 참신성·실현 가능성·AI 활용 계획 기반 서류 심사
-3. **예선 개발 기간** (7.27 ~ 8.3, 약 1주일) — API 크레딧 발급, 아이디어 구체화 및 개발
-4. **결과물 제출 및 1차 심사** — 데모 영상/배포 링크, 코드 저장소, 발표 자료, AI 활용 증빙 제출
-5. **본선 발표 및 질의응답** (8.7) — 팀당 7분 발표 + 5분 Q&A, 심사 후 수상팀 확정
+- [AGENTS.md](AGENTS.md): 모든 코딩 에이전트가 따르는 아키텍처·보안·검증 규칙
+- [CLAUDE.md](CLAUDE.md), [.claude/settings.json](.claude/settings.json): Claude Code용 프로젝트 지침과 공유 권한 설정
+- [.agents/skills/slowtalk-development/SKILL.md](.agents/skills/slowtalk-development/SKILL.md): SlowTalk 기능 구현·진단·배포 준비를 위한 저장소 전용 스킬
+- [AI_USAGE_EVIDENCE.md](AI_USAGE_EVIDENCE.md): 제품 내 Upstage 사용과 개발 과정 AI 활용 증빙
 
-### 기술 스택 및 규칙
+`.omc`는 이 프로젝트의 개발 과정에서 사용하지 않아 실제 사용하지 않은 설정을 증빙처럼 만들지 않았습니다. 개인 설정인 `.claude/settings.local.json`, 환경 파일, API 키와 서명 키는 추적하지 않습니다.
 
-- 사용 API·모델은 자유이며, **Upstage API**(Solar LLM, Document Parse, Information Extract) 활용 시 심사 가점
-- Claude, GPT, Gemini 등 타사 모델 병행 사용 가능 (제약 없음)
-- 프레임워크/언어 자유 (Python, JavaScript, React, Flutter 등)
-- 결과물은 데모 가능한 동작하는 앱 (웹앱, 모바일앱, CLI 도구 등 형태 무관)
-- 코딩 에이전트(Claude Code, Codex 등) 활용 시 `.claude/`, `AGENTS.md` 등 관련 설정·지침 파일을 저장소에 포함해야 심사에 반영됩니다
+## 구성
 
-### 심사 기준
-
-| 기준 | 배점 |
-| --- | --- |
-| 창의성 | 20점 |
-| AI 활용도 | 20점 |
-| 완성도 | 20점 |
-| 실용성 | 20점 |
-| 발표력 (본선) | 20점 |
-| Upstage API 활용 가점 | +5점 |
-| 지역사회 기여도 가점 | +5점 |
-
-### 시상 내역
-
-- 대상 1팀: 100만원 + 상품
-- 최우수상 1팀: 50만원 + 상품
-- 우수상 1팀: 상품
-- 본선 참가 10팀: Upstage 굿즈 + 참가 인증서
-
-## Git Fork 하는 방법
-
-참가팀은 이 저장소를 팀 대표의 GitHub 계정으로 **Fork**한 뒤, 해당 Fork 저장소에서 프로젝트를 개발하고 최종 결과물을 제출합니다.
-
-### 1. 저장소 Fork하기
-
-1. [AI-Builder-Sprint 저장소](https://github.com/ApptiveDev/AI-Builder-Sprint)에 접속합니다.
-2. 우측 상단의 **Fork** 버튼을 클릭합니다.
-  <img width="1888" height="1131" alt="스크린샷 2026-07-27 오전 12 31 16" src="https://github.com/user-attachments/assets/2f0f7f80-6c92-4ba5-87c5-89ed6107eeab" />
-
-3. 본인(또는 팀 대표) GitHub 계정으로 저장소가 복사됩니다. (`https://github.com/<내-계정>/AI-Builder-Sprint`)
-
-### 2. Fork한 저장소 로컬로 클론하기
-
-```bash
-git clone https://github.com/<내-계정>/AI-Builder-Sprint.git
-cd AI-Builder-Sprint
+```text
+Android (Kotlin, Jetpack Compose)
+  └─ HTTPS/JSON → FastAPI on Railway
+                    ├─ PostgreSQL 16 + pgvector
+                    └─ Upstage Document Parse / Solar Chat / Solar Embedding
 ```
 
-### 3. 개발 진행 및 커밋
+| 영역 | 실행 환경 |
+| --- | --- |
+| Android | Kotlin 2.2.10, Jetpack Compose, JDK 17, minSdk 26, target/compile SDK 37 |
+| Backend | Python 3.11+, FastAPI, Uvicorn, SQLAlchemy async, Alembic |
+| Database | PostgreSQL 16 + pgvector; 로컬 Docker Compose 또는 Railway PostgreSQL |
+| 배포 | Railway Dockerfile 배포, pre-deploy Alembic migration, `/api/v1/health` health check |
+| AI | Upstage API; API 키와 모델 선택은 백엔드 환경변수로 주입 |
 
-```bash
-git checkout -b develop
-# 코드 작성 및 수정
-git add .
-git commit -m "feat: 프로젝트 초기 구현"
-git push origin develop
+## 로컬 기동
+
+### 1. 백엔드와 DB
+
+필수 도구는 Python 3.11+, Docker Desktop입니다. PowerShell 기준으로 실행합니다.
+
+```powershell
+cd backend
+Copy-Item .env.example .env
+docker compose up -d postgres
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[dev]"
+alembic upgrade head
+uvicorn app.main:app --reload
 ```
 
-포크된 저장소 내에서 개발을 진행해주시면 됩니다.
+- API base URL: `http://localhost:8000/api/v1/`
+- Swagger UI: `http://localhost:8000/docs`
+- 상태 확인: `http://localhost:8000/api/v1/health`
 
-### 4. 결과물 제출
+AI 기능을 실제 Upstage API로 시험하려면 `backend/.env`의 `UPSTAGE_API_KEY`와 `UPSTAGE_CHAT_MODEL`을 채웁니다. 키 없이도 일반 API는 실행할 수 있지만 AI 기능 및 readiness 결과는 선택한 모드에 따라 제한됩니다.
 
-- **팀별로 Fork한 본인 저장소 URL을 제출 양식에 기재합니다.**
-- 제출 마감 전까지 코드, 데모 영상/배포 링크, 발표 자료를 함께 준비해 제출해주세요.
-- 코딩 에이전트를 활용한 경우 `.claude/`, `AGENTS.md` 등 설정 파일도 반드시 저장소에 포함해주세요.
+### 2. Android 앱
 
+Android Studio에서 SDK 37과 Android Emulator를 설치하고 저장소를 엽니다. Android Studio가 생성한 `local.properties`에 SDK 경로와 로컬 API 주소를 설정합니다.
 
-## 문의
+```properties
+sdk.dir=C\:\\Users\\<USER>\\AppData\\Local\\Android\\Sdk
+API_BASE_URL=http://10.0.2.2:8000/api/v1/
+```
 
-- 대회 관련 문의: 해커톤 문의 오픈채팅방
-- 주최: 부산대학교 APPTIVE, 정보컴퓨터공학부 동아리연합회 / 후원: Upstage, 부산대 Anchor 사업단, 부산대 AI융합교육원
+`10.0.2.2`는 Android Emulator에서 호스트 PC를 가리킵니다. 실제 단말에서는 같은 네트워크의 PC 주소를 사용합니다.
+
+```powershell
+.\gradlew.bat assembleDebug
+.\gradlew.bat installDebug
+```
+
+운영 API를 향한 APK는 다음처럼 빌드합니다.
+
+```powershell
+.\gradlew.bat assembleDebug `
+  -PAPI_BASE_URL=https://backend-production-2f6a.up.railway.app/api/v1/
+```
+
+`API_AUTH_TOKEN`은 개발 호환용 선택값이며 배포 APK에는 넣지 않습니다. 사용자는 앱 로그인으로 받은 토큰을 Android 암호화 저장소에 보관합니다.
+
+## 환경변수와 빌드 속성
+
+실제 비밀값은 커밋하지 말고 로컬은 `backend/.env`, Railway는 서비스 Variables에 설정합니다. 전체 템플릿은 [backend/.env.example](backend/.env.example)에서 확인할 수 있습니다.
+
+### Android Gradle 속성
+
+| 이름 | 필수 | 설명 |
+| --- | --- | --- |
+| `API_BASE_URL` | 예 | `/api/v1/`까지 포함한 백엔드 주소 |
+| `API_AUTH_TOKEN` | 아니요 | 개발 호환용 토큰. 운영 APK에는 미포함 |
+
+### 백엔드 기본 설정
+
+| 이름 | 필수 | 기본값/설명 |
+| --- | --- | --- |
+| `APP_ENVIRONMENT` | 예 | `development`, `test`, `production` |
+| `DATABASE_URL` | 예 | PostgreSQL 연결 URL. Railway의 일반 URL도 async 형식으로 정규화 |
+| `CORS_ORIGINS` | 웹 클라이언트만 | 허용 origin의 JSON 배열; Android에는 불필요 |
+| `JWT_SECRET` | 예 | 최소 32자의 임의 비밀값 |
+| `ACCESS_TOKEN_TTL_SECONDS` | 아니요 | 기본 `900` |
+| `REFRESH_TOKEN_TTL_SECONDS` | 아니요 | 기본 `2592000` |
+| `PORT` | 배포 시 자동 | Railway가 주입하며 기본 fallback은 `8000` |
+
+### Upstage 및 의미 매칭
+
+| 이름 | 필수 | 기본값/설명 |
+| --- | --- | --- |
+| `UPSTAGE_API_KEY` | AI 기능 사용 시 | 비밀값. 저장소·로그·APK에 포함 금지 |
+| `UPSTAGE_BASE_URL` | 아니요 | `https://api.upstage.ai/v1` |
+| `UPSTAGE_CHAT_MODEL` | Solar Chat 사용 시 | 글쓰기 피드백·모더레이션에 사용할 운영 모델명 |
+| `UPSTAGE_DOCUMENT_MODEL` | 아니요 | `document-parse` |
+| `UPSTAGE_EMBEDDING_MODEL` | 아니요 | `solar-embedding-2` |
+| `EMBEDDING_DIMENSIONS` | 아니요 | `1024`; 시작 시 응답 차원을 검증 |
+| `MATCHING_MODE` | 아니요 | `disabled`, `shadow`, `enforce` |
+| `MATCH_MIN_SIMILARITY` | shadow/enforce 시 | 의미 매칭 최소 유사도 임계값 |
+
+### 콘텐츠 모더레이션
+
+| 이름 | 필수 | 기본값/설명 |
+| --- | --- | --- |
+| `MODERATION_MODE` | 아니요 | `shadow` 기본; `disabled`, `shadow`, `enforce` |
+| `ALLOW_DEVELOPMENT_MODERATION_FALLBACK` | 아니요 | 개발·테스트에서만 fallback 허용, 기본 `false` |
+| `MODERATION_ALLOW_CONFIDENCE` | 아니요 | 허용 임계값, 기본 `0.7` |
+| `MODERATION_BLOCK_CONFIDENCE` | 아니요 | 차단 임계값, 기본 `0.9` |
+| `MODERATION_ENCRYPTION_KEY` | enforce 시 | 내부 명령 암호화 키 |
+| `CONTENT_HASH_PEPPER` | enforce 시 | 콘텐츠 해시용 비밀 pepper |
+| `INTERNAL_MODERATION_TOKEN` | enforce 시 | 내부 moderation worker 인증 토큰 |
+
+## 테스트
+
+```powershell
+cd backend
+ruff check .
+mypy app
+pytest -q
+python scripts/export_openapi.py openapi/slowtalk-v1.json
+
+cd ..
+.\gradlew.bat test
+.\gradlew.bat assembleDebug
+```
+
+Upstage 호출은 provider gateway 단위에서 mock해 요청 모델, 프롬프트 정책, OCR multipart, embedding 차원과 오류 처리를 회귀 검증합니다. 실제 키를 사용하는 smoke test는 로컬 또는 Railway의 비밀 환경에서만 수행합니다.
+
+## Railway 배포
+
+1. Railway PostgreSQL 서비스를 만들고 백엔드 서비스에 `DATABASE_URL` reference를 연결합니다.
+2. 서비스 Root Directory를 `/backend`, config path를 `/backend/railway.toml`로 지정합니다.
+3. 위 환경변수를 Railway Variables에 등록하고 `APP_ENVIRONMENT=production`으로 설정합니다.
+4. GitHub 연동 배포 또는 `railway up`을 실행합니다. 배포 전에 `alembic upgrade head`가 자동 실행됩니다.
+5. `/api/v1/health`가 `200`, 선택한 AI 모드까지 준비된 경우 `/api/v1/ready`가 `200`인지 확인합니다.
+
+운영 비밀값은 Railway Variables에서만 관리하며 `.env` 파일을 업로드하지 않습니다.
