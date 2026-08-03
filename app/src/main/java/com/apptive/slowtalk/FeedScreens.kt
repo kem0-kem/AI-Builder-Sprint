@@ -789,13 +789,13 @@ fun WriteFeedScreen(
                                         Column(Modifier.padding(start = 9.dp)) {
                                             Text(
                                                  aiFeedback?.warningMessage
-                                                     ?: "좋은 흐름이에요!",
+                                                     ?: aiFeedback?.summary.orEmpty(),
                                                 color = if (aiFeedback?.hasWarning == true) {
                                                     Color(0xFFD95C55)
                                                 } else if (body.length < 30) {
                                                     Purple
                                                 } else {
-                                                    Color(0xFF2FAE68)
+                                                    Purple
                                                 },
                                                 fontWeight = FontWeight.Bold
                                             )
