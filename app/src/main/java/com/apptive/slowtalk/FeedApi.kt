@@ -33,6 +33,7 @@ data class FeedDetailResult(
 data class FeedCategoryResult(val id: String, val name: String)
 
 data class FeedFeedbackResult(
+    val summary: String,
     val hasWarning: Boolean,
     val warningMessage: String?,
     val tips: List<String>
@@ -114,6 +115,7 @@ object FeedApi {
                 RetrofitClient.feedApi.getFeedFeedback(FeedFeedbackRequest(title, content))
             }.let {
                 FeedFeedbackResult(
+                    summary = it.summary,
                     hasWarning = false,
                     warningMessage = null,
                     tips = it.suggestions

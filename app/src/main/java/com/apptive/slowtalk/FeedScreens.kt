@@ -518,9 +518,9 @@ fun WriteFeedScreen(
     onSubmit: suspend (String, String, String, String) -> Result<String>,
     onSuccess: (String, String, String, String, String) -> Unit
 ) {
-    var categories by remember { mutableStateOf(feedCategoryVisuals) }
+    var categories by remember { mutableStateOf(emptyList<FeedCategoryVisual>()) }
     var category by remember(initialPost?.id) {
-        mutableStateOf(initialPost?.category ?: categories.first().name)
+        mutableStateOf(initialPost?.category.orEmpty())
     }
     var title by remember(initialPost?.id) { mutableStateOf(initialPost?.title.orEmpty()) }
     var body by remember(initialPost?.id) { mutableStateOf(initialPost?.body.orEmpty()) }
@@ -768,6 +768,13 @@ fun WriteFeedScreen(
                                 modifier = Modifier.padding(vertical = 14.dp),
                                 color = Purple.copy(alpha = 0.12f)
                             )
+                            if (aiFeedback == null) {
+                                Text(
+                                    "제목과 본문을 작성한 뒤 분석하기를 눌러주세요.",
+                                    color = SubtleInk,
+                                    fontSize = 12.sp
+                                )
+                            } else {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
                                             Icons.Outlined.CheckCircle,
@@ -781,28 +788,19 @@ fun WriteFeedScreen(
                                         )
                                         Column(Modifier.padding(start = 9.dp)) {
                                             Text(
-                                                aiFeedback?.warningMessage
-                                                    ?: if (body.length < 30) {
-                                                        "조금 더 들려주세요"
-                                                    } else {
-                                                        "좋은 흐름이에요!"
-                                                    },
+                                                 aiFeedback?.warningMessage
+                                                     ?: aiFeedback?.summary.orEmpty(),
                                                 color = if (aiFeedback?.hasWarning == true) {
                                                     Color(0xFFD95C55)
                                                 } else if (body.length < 30) {
                                                     Purple
                                                 } else {
-                                                    Color(0xFF2FAE68)
+                                                    Purple
                                                 },
                                                 fontWeight = FontWeight.Bold
                                             )
                                             Text(
-                                                aiFeedback?.tips?.firstOrNull()
-                                                    ?: if (body.length < 30) {
-                                                        "구체적인 순간이 더해지면 이야기가 풍성해져요."
-                                                    } else {
-                                                        "편안하고 자연스러운 글이에요."
-                                                    },
+                                                 aiFeedback?.tips?.firstOrNull().orEmpty(),
                                                 color = SubtleInk,
                                                 fontSize = 11.sp
                                             )
@@ -832,8 +830,8 @@ fun WriteFeedScreen(
                                                 aiFeedback?.tips
                                                     ?.take(2)
                                                     ?.joinToString("\n") { "• $it" }
-                                                    ?.takeIf { it.isNotBlank() }
-                                                    ?: "• 구체적인 순간을 떠올려보세요.\n• 감정을 한 단어로 표현해보세요.",
+                                                     ?.takeIf { it.isNotBlank() }
+                                                     .orEmpty(),
                                                 modifier = Modifier.padding(top = 7.dp),
                                                 color = SubtleInk,
                                                 fontSize = 10.sp,
@@ -856,6 +854,7 @@ fun WriteFeedScreen(
                                             )
                                         }
                                     }
+                            }
                         }
                     }
                 }
@@ -886,7 +885,7 @@ fun WriteFeedScreen(
                                 isSubmitting = false
                             }
                         },
-                        enabled = title.isNotBlank() && body.isNotBlank() && !isSubmitting,
+                        enabled = category.isNotBlank() && title.isNotBlank() && body.isNotBlank() && !isSubmitting,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(54.dp),
@@ -935,13 +934,6 @@ private data class FeedCategoryVisual(
     val icon: ImageVector,
     val tint: Color,
     val background: Color
-)
-
-private val feedCategoryVisuals = listOf(
-    FeedCategoryVisual("00000000-0000-0000-0000-000000000001", "일상 이야기", Icons.Outlined.Eco, Color(0xFF54B978), Color(0xFFEAF7ED)),
-    FeedCategoryVisual("00000000-0000-0000-0000-000000000002", "마음과 고민", Icons.Outlined.FavoriteBorder, Color(0xFFE76E91), Color(0xFFFFEFF3)),
-    FeedCategoryVisual("00000000-0000-0000-0000-000000000003", "취미 생활", Icons.Outlined.Palette, Purple, PurpleSoft),
-    FeedCategoryVisual("00000000-0000-0000-0000-000000000004", "질문", Icons.AutoMirrored.Outlined.HelpOutline, SubtleInk, Color(0xFFF4F1ED))
 )
 
 private fun FeedCategoryResult.toVisual(): FeedCategoryVisual = when (name) {

@@ -29,7 +29,10 @@ class ReflectionViewModel(
     fun createReport(content: String) {
         viewModelScope.launch {
             _uiState.value = ReflectionUiState.Loading
-            repository.createReport(content)
+            runCatching {
+                repository.getReportFeedback(content).getOrThrow()
+                repository.createReport(content).getOrThrow()
+            }
                 .onSuccess { _uiState.value = ReflectionUiState.Success(it) }
                 .onFailure { _uiState.value = ReflectionUiState.Error(it.message ?: "Failed to create report") }
         }
