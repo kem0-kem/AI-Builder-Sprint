@@ -62,6 +62,24 @@ internal fun mergeScopedFeedPage(
 internal fun replaceFeedById(existing: List<FeedPost>, updated: FeedPost): List<FeedPost> =
     existing.map { if (it.id == updated.id) updated else it }
 
+internal fun screenForOpenedCommentChat(room: ChatRoomInfo): Screen.Chat = Screen.Chat(
+    title = room.name ?: "익명의 이웃",
+    isGroup = room.isGroup,
+    chatRoomId = room.id,
+)
+
+internal suspend fun requestCommentChat(
+    commentId: String,
+    openCommentChat: suspend (String) -> Result<ChatRoomInfo>,
+    onCommentChatOpened: (ChatRoomInfo) -> Unit,
+    onFailure: (Throwable) -> Unit,
+) {
+    openCommentChat(commentId).fold(
+        onSuccess = onCommentChatOpened,
+        onFailure = onFailure,
+    )
+}
+
 @Composable
 private fun ApptiveApp() {
     val context = LocalContext.current
@@ -347,6 +365,10 @@ private fun ApptiveApp() {
                         likedFeeds[result.post.id] = result.liked
                     },
                     onToggleLike = { toggleFeedLike(post.id) },
+                    openCommentChat = ChatApi::openFromComment,
+                    onCommentChatOpened = { room ->
+                        screen = screenForOpenedCommentChat(room)
+                    },
                     onEdit = { screen = Screen.EditFeed(post.id) },
                     onDelete = {
                         if (FeedApi.isConfigured) {
