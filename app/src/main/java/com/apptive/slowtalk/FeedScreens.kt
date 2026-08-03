@@ -540,19 +540,6 @@ fun WriteFeedScreen(
         }
     }
 
-    LaunchedEffect(title, body) {
-        if (title.isBlank() || body.isBlank()) {
-            aiFeedback = null
-            isFeedbackLoading = false
-        } else {
-            delay(700)
-            isFeedbackLoading = true
-            requestFeedback(title.trim(), body.trim())
-                .onSuccess { aiFeedback = it }
-            isFeedbackLoading = false
-        }
-    }
-
     PaperBackground {
         Scaffold(containerColor = Color.Transparent) { padding ->
             LazyColumn(
@@ -635,7 +622,10 @@ fun WriteFeedScreen(
                             Spacer(Modifier.height(6.dp))
                             OutlinedTextField(
                                 value = title,
-                                onValueChange = { title = it.take(60) },
+                                onValueChange = {
+                                    title = it.take(60)
+                                    aiFeedback = null
+                                },
                                 modifier = Modifier.fillMaxWidth(),
                                 placeholder = { Text("오늘 어떤 일이 있었나요?") },
                                 singleLine = true
@@ -645,7 +635,10 @@ fun WriteFeedScreen(
                             Spacer(Modifier.height(6.dp))
                             OutlinedTextField(
                                 value = body,
-                                onValueChange = { body = it.take(1000) },
+                                onValueChange = {
+                                    body = it.take(1000)
+                                    aiFeedback = null
+                                },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(280.dp),
@@ -723,17 +716,42 @@ fun WriteFeedScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Surface(
+                                    modifier = Modifier.clickable(
+                                        enabled = title.isNotBlank() &&
+                                            body.isNotBlank() &&
+                                            !isFeedbackLoading
+                                    ) {
+                                        val requestedTitle = title.trim()
+                                        val requestedBody = body.trim()
+                                        submitScope.launch {
+                                            isFeedbackLoading = true
+                                            requestFeedback(requestedTitle, requestedBody)
+                                                .onSuccess {
+                                                    if (
+                                                        title.trim() == requestedTitle &&
+                                                        body.trim() == requestedBody
+                                                    ) {
+                                                        aiFeedback = it
+                                                    }
+                                                }
+                                            isFeedbackLoading = false
+                                        }
+                                    },
                                     shape = RoundedCornerShape(12.dp),
-                                    color = Purple.copy(alpha = 0.1f)
+                                    color = if (title.isNotBlank() && body.isNotBlank()) {
+                                        Purple.copy(alpha = 0.12f)
+                                    } else {
+                                        LineColor.copy(alpha = 0.7f)
+                                    }
                                 ) {
                                     Text(
                                         when {
-                                            isFeedbackLoading -> "분석 중"
-                                            aiFeedback != null -> "분석 완료"
-                                            else -> "입력 대기"
+                                            isFeedbackLoading -> "분석 중..."
+                                            aiFeedback != null -> "다시 분석"
+                                            else -> "분석하기"
                                         },
                                         modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
-                                        color = Purple,
+                                        color = if (title.isNotBlank() && body.isNotBlank()) Purple else SubtleInk,
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.SemiBold
                                     )
