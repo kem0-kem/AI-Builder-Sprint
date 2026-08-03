@@ -216,6 +216,46 @@ async def test_feedback_retries_once_after_malformed_model_output() -> None:
 
 
 @pytest.mark.asyncio
+async def test_feedback_retries_once_when_model_responds_in_english() -> None:
+    calls = 0
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        feedback = (
+            {
+                "summary": "The draft describes a peaceful walk.",
+                "suggestions": ["Add one concrete sound from the walk."],
+            }
+            if calls == 1
+            else {
+                "summary": "조용한 산책에서 느낀 평온함이 중심인 글이에요.",
+                "suggestions": ["산책 중 들었던 소리를 한 가지 덧붙여 보세요."],
+            }
+        )
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": json.dumps(feedback, ensure_ascii=False)}}]},
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="https://api.upstage.ai/v1"
+    ) as client:
+        assistant = UpstageWritingAssistant(
+            client=client,
+            api_key="test-key",
+            document_model="document-parse",
+            chat_model="solar-pro",
+        )
+        result = await assistant.feedback(
+            WritingContext.LETTER, None, "A quiet walk made me feel peaceful."
+        )
+
+    assert calls == 2
+    assert "평온함" in result.summary
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "response",
     [

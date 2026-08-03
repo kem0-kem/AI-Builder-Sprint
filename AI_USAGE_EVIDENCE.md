@@ -112,7 +112,7 @@ backend\.venv\Scripts\pytest.exe `
   backend\tests\moderation\test_ocr_moderation.py -q
 ```
 
-결과: **73 passed**
+결과: **74 passed**
 
 검증 범위에는 multipart 파일 전송, MIME 타입, OCR 응답 정규화, 입력별 Solar Chat 글쓰기 피드백, Solar Chat JSON 파싱, Upstage 오류 매핑, 민감정보 비노출, embedding 순서와 1,024차원 검증이 포함됩니다. 시연 영상에서는 실제 Android 앱의 갤러리 이미지를 편지 입력란으로 변환하는 전체 흐름을 확인할 수 있습니다.
 
