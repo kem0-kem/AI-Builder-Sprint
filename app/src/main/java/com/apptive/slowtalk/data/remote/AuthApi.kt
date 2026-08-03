@@ -13,12 +13,12 @@ interface AuthApi {
     @POST("auth/login")
     suspend fun login(@Body request: LoginRequest): ApiEnvelope<LoginResponse>
 
-    @GET("auth/check-email")
+    @GET("auth/email-availability")
     suspend fun checkEmail(@Query("email") email: String): ApiEnvelope<EmailCheckResponse>
 
     @GET("auth/check-username")
     suspend fun checkUsername(@Query("username") username: String): ApiEnvelope<EmailCheckResponse>
 
     @POST("auth/logout")
-    suspend fun logout(): Response<Unit>
+    suspend fun logout(@Body request: RefreshRequest): Response<Unit>
 }

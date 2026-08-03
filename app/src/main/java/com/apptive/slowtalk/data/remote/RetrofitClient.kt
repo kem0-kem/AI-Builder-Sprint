@@ -1,6 +1,7 @@
 package com.apptive.slowtalk.data.remote
 
 import com.apptive.slowtalk.BuildConfig
+import com.apptive.slowtalk.data.auth.AuthSession
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
@@ -43,6 +44,24 @@ internal fun createOkHttpClient(
 ): OkHttpClient =
     OkHttpClient.Builder()
         .apply {
+            addInterceptor { chain ->
+                val original = chain.request()
+                val accessToken = AuthSession.accessToken
+                val request = if (
+                    accessToken.isNullOrBlank() ||
+                    original.header("Authorization") != null ||
+                    isPublicAuthRequest(original.url.encodedPath)
+                ) {
+                    original
+                } else {
+                    original.newBuilder()
+                        .header("Authorization", "Bearer $accessToken")
+                        .build()
+                }
+                val response = chain.proceed(request)
+                if (response.code == 401) AuthSession.clear()
+                response
+            }
             if (isDebug) {
                 addInterceptor(
                     HttpLoggingInterceptor(logger).apply {
@@ -53,6 +72,17 @@ internal fun createOkHttpClient(
             }
         }
         .build()
+
+private fun isPublicAuthRequest(encodedPath: String): Boolean =
+    PUBLIC_AUTH_PATHS.any(encodedPath::endsWith)
+
+private val PUBLIC_AUTH_PATHS = setOf(
+    "/auth/signup",
+    "/auth/login",
+    "/auth/email-availability",
+    "/auth/check-username",
+    "/auth/token/refresh",
+)
 
 object RetrofitClient {
     internal val baseUrl = configuredBaseUrl(BuildConfig.API_BASE_URL, BuildConfig.DEBUG)

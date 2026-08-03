@@ -64,11 +64,6 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField(
-            "String",
-            "API_AUTH_TOKEN",
-            configurationValue("API_AUTH_TOKEN").asBuildConfigStringLiteral(),
-        )
     }
 
     buildTypes {

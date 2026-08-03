@@ -41,7 +41,7 @@ class AuthViewModel(
     fun signup(nickname: String, email: String, password: String, onSuccess: () -> Unit) {
         viewModelScope.launch {
             _uiState.value = AuthUiState.Loading
-            repository.signup(SignupRequest(email, password, nickname))
+            repository.signup(SignupRequest(email, password, nickname, username = nickname))
                 .onSuccess {
                     _uiState.value = AuthUiState.Idle
                     onSuccess()

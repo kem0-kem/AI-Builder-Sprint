@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.apptive.slowtalk.ui.auth.AuthViewModel
+import com.apptive.slowtalk.data.auth.AuthSession
 import com.apptive.slowtalk.ui.letter.LetterViewModel
 import com.apptive.slowtalk.ui.profile.ProfileViewModel
 import com.apptive.slowtalk.ui.reflection.ReflectionViewModel
@@ -56,7 +57,7 @@ private fun ApptiveApp() {
     val authViewModel: AuthViewModel = viewModel()
     val reflectionViewModel: ReflectionViewModel = viewModel()
     val letterViewModel: LetterViewModel = viewModel()
-    var isLoggedIn by remember { mutableStateOf(false) }
+    var isLoggedIn by remember { mutableStateOf(AuthSession.isAuthenticated) }
     var screen by remember { mutableStateOf<Screen>(if (isLoggedIn) Screen.Feed else Screen.Login) }
     var profileReturnScreen by remember { mutableStateOf<Screen>(Screen.Feed) }
     var conversationIndex by remember { mutableStateOf(0) }

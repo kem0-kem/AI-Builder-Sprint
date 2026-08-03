@@ -34,6 +34,11 @@ data class LoginResponse(
 )
 
 @Serializable
+data class RefreshRequest(
+    val refreshToken: String,
+)
+
+@Serializable
 data class EmailCheckResponse(
     val available: Boolean
 )
