@@ -53,6 +53,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -648,6 +649,7 @@ fun ProfileEditScreen(
     val provinces by viewModel.provinces.collectAsState()
     val districts by viewModel.districts.collectAsState()
     val subDistricts by viewModel.subDistricts.collectAsState()
+    val operationError by viewModel.operationError.collectAsState()
     
     val currentProfile = (uiState as? ProfileUiState.Success)?.profile
 
@@ -709,15 +711,23 @@ fun ProfileEditScreen(
                                 viewModel.updateProfile(
                                     nickname = nickname,
                                     bio = intro,
-                                    interest = currentProfile?.interest ?: "",
                                     province = selectedProvince,
                                     district = selectedDistrict,
-                                    subDistrict = selectedNeighborhood
+                                    subDistrict = selectedNeighborhood,
+                                    onSuccess = onBack,
                                 )
-                                onBack()
                             },
                             color = Purple,
                             fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                if (operationError != null) {
+                    item {
+                        Text(
+                            operationError.orEmpty(),
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 12.sp,
                         )
                     }
                 }

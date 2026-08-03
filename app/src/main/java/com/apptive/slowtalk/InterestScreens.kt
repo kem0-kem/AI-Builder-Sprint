@@ -25,6 +25,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -44,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.text.input.TextFieldValue
+import com.apptive.slowtalk.ui.profile.ProfileUiState
 import com.apptive.slowtalk.ui.profile.ProfileViewModel
 
 @Composable
@@ -53,11 +55,25 @@ fun InterestSettingScreen(
     onComplete: () -> Unit
 ) {
     val allInterests by viewModel.allInterests.collectAsState()
+    val profileState by viewModel.uiState.collectAsState()
+    val operationError by viewModel.operationError.collectAsState()
     var queryState by remember { mutableStateOf(TextFieldValue("")) }
     val selectedIds = remember { mutableStateListOf<String>() }
 
     androidx.compose.runtime.LaunchedEffect(Unit) {
         viewModel.fetchAllInterests()
+    }
+
+    androidx.compose.runtime.LaunchedEffect(profileState) {
+        val savedIds = (profileState as? ProfileUiState.Success)
+            ?.profile
+            ?.interests
+            ?.map { it.id }
+            .orEmpty()
+            .take(3)
+        if (selectedIds.isEmpty()) {
+            selectedIds.addAll(savedIds)
+        }
     }
 
     fun toggle(id: String) {
@@ -246,6 +262,19 @@ fun InterestSettingScreen(
                                 .padding(vertical = 28.dp),
                             textAlign = TextAlign.Center,
                             color = SubtleInk
+                        )
+                    }
+                }
+                if (operationError != null) {
+                    item {
+                        Text(
+                            operationError.orEmpty(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 12.sp,
                         )
                     }
                 }

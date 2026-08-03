@@ -7,14 +7,13 @@ interface RegionApi {
     @GET("regions/provinces")
     suspend fun getProvinces(): ApiEnvelope<List<RegionOptionDto>>
 
-    @GET("regions/provinces/{province}/districts")
+    @GET("regions/provinces/{provinceCode}/districts")
     suspend fun getDistricts(
-        @Path("province") province: String
+        @Path("provinceCode") provinceCode: String,
     ): ApiEnvelope<List<RegionOptionDto>>
 
-    @GET("regions/provinces/{province}/districts/{district}/sub-districts")
+    @GET("regions/districts/{districtCode}/sub-districts")
     suspend fun getSubDistricts(
-        @Path("province") province: String,
-        @Path("district") district: String
+        @Path("districtCode") districtCode: String,
     ): ApiEnvelope<List<RegionOptionDto>>
 }

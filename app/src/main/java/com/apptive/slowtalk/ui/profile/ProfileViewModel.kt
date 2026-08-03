@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.apptive.slowtalk.data.remote.InterestDto
 import com.apptive.slowtalk.data.remote.ProfileUpdateRequest
+import com.apptive.slowtalk.data.remote.RegionOptionDto
 import com.apptive.slowtalk.data.remote.RegionPatchDto
 import com.apptive.slowtalk.data.remote.UserProfileDto
 import com.apptive.slowtalk.data.repository.InterestRepository
@@ -15,8 +16,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 sealed class ProfileUiState {
-    object Idle : ProfileUiState()
-    object Loading : ProfileUiState()
+    data object Idle : ProfileUiState()
+    data object Loading : ProfileUiState()
     data class Success(val profile: UserProfileDto) : ProfileUiState()
     data class Error(val message: String) : ProfileUiState()
 }
@@ -24,9 +25,8 @@ sealed class ProfileUiState {
 class ProfileViewModel(
     private val profileRepository: ProfileRepository = ProfileRepository(),
     private val regionRepository: RegionRepository = RegionRepository(),
-    private val interestRepository: InterestRepository = InterestRepository()
+    private val interestRepository: InterestRepository = InterestRepository(),
 ) : ViewModel() {
-
     private val _uiState = MutableStateFlow<ProfileUiState>(ProfileUiState.Idle)
     val uiState: StateFlow<ProfileUiState> = _uiState.asStateFlow()
 
@@ -42,63 +42,173 @@ class ProfileViewModel(
     private val _allInterests = MutableStateFlow<List<InterestDto>>(emptyList())
     val allInterests: StateFlow<List<InterestDto>> = _allInterests.asStateFlow()
 
+    private val _operationError = MutableStateFlow<String?>(null)
+    val operationError: StateFlow<String?> = _operationError.asStateFlow()
+
+    private var provinceOptions: List<RegionOptionDto> = emptyList()
+    private var districtOptions: List<RegionOptionDto> = emptyList()
+    private var subDistrictOptions: List<RegionOptionDto> = emptyList()
+    private var districtProvinceCode: String? = null
+
     fun fetchProfile() {
         viewModelScope.launch {
             _uiState.value = ProfileUiState.Loading
             profileRepository.getMyProfile()
-                .onSuccess { _uiState.value = ProfileUiState.Success(it) }
-                .onFailure { _uiState.value = ProfileUiState.Error(it.message ?: "Unknown error") }
+                .onSuccess {
+                    _operationError.value = null
+                    _uiState.value = ProfileUiState.Success(it)
+                }
+                .onFailure { _uiState.value = ProfileUiState.Error(messageFor(it)) }
         }
     }
 
-    fun updateProfile(nickname: String, bio: String, interest: String, province: String, district: String, subDistrict: String?) {
+    fun updateProfile(
+        nickname: String,
+        bio: String,
+        province: String,
+        district: String,
+        subDistrict: String?,
+        onSuccess: () -> Unit = {},
+    ) {
         viewModelScope.launch {
+            _operationError.value = null
             val updateDto = ProfileUpdateRequest(
                 nickname = nickname,
                 bio = bio,
-                region = RegionPatchDto(province, district, subDistrict)
+                region = RegionPatchDto(
+                    provinceCode = regionCode(province, provinceOptions, RegionLevel.PROVINCE),
+                    districtCode = regionCode(district, districtOptions, RegionLevel.DISTRICT),
+                    subDistrictCode = subDistrict?.let {
+                        regionCode(it, subDistrictOptions, RegionLevel.SUB_DISTRICT)
+                    },
+                ),
             )
             profileRepository.updateProfile(updateDto)
-                .onSuccess { fetchProfile() } // 갱신
-                .onFailure { /* 에러 처리 */ }
+                .onSuccess {
+                    _uiState.value = ProfileUiState.Success(it)
+                    onSuccess()
+                }
+                .onFailure { _operationError.value = messageFor(it) }
         }
     }
 
     fun fetchProvinces() {
         viewModelScope.launch {
-            regionRepository.getProvinces()
-                .onSuccess { _provinces.value = it }
+            runCatching { loadProvinceOptions() }
+                .onSuccess {
+                    _operationError.value = null
+                    _provinces.value = it.map(RegionOptionDto::name)
+                }
+                .onFailure { _operationError.value = messageFor(it) }
         }
     }
 
     fun fetchDistricts(province: String) {
         viewModelScope.launch {
-            regionRepository.getDistricts(province)
-                .onSuccess { _districts.value = it }
+            districtOptions = emptyList()
+            subDistrictOptions = emptyList()
+            districtProvinceCode = null
+            _districts.value = emptyList()
+            _subDistricts.value = emptyList()
+            runCatching { loadDistrictOptions(province) }
+                .onSuccess {
+                    _operationError.value = null
+                    _districts.value = it.map(RegionOptionDto::name)
+                }
+                .onFailure { _operationError.value = messageFor(it) }
         }
     }
 
     fun fetchSubDistricts(province: String, district: String) {
         viewModelScope.launch {
-            regionRepository.getSubDistricts(province, district)
-                .onSuccess { _subDistricts.value = it }
+            subDistrictOptions = emptyList()
+            _subDistricts.value = emptyList()
+            runCatching {
+                val provinceCode = regionCode(
+                    province,
+                    ensureProvinceOptions(),
+                    RegionLevel.PROVINCE,
+                )
+                if (districtProvinceCode != provinceCode) {
+                    loadDistrictOptions(province)
+                }
+                val districtCode = regionCode(district, districtOptions, RegionLevel.DISTRICT)
+                regionRepository.getSubDistricts(districtCode).getOrThrow()
+            }
+                .onSuccess {
+                    _operationError.value = null
+                    subDistrictOptions = it
+                    _subDistricts.value = it.map(RegionOptionDto::name)
+                }
+                .onFailure { _operationError.value = messageFor(it) }
         }
     }
 
     fun fetchAllInterests() {
         viewModelScope.launch {
             interestRepository.getAllInterests()
-                .onSuccess { _allInterests.value = it }
+                .onSuccess {
+                    _operationError.value = null
+                    _allInterests.value = it
+                }
+                .onFailure { _operationError.value = messageFor(it) }
         }
     }
 
     fun updateInterests(interestIds: List<String>, onComplete: () -> Unit) {
         viewModelScope.launch {
+            _operationError.value = null
             interestRepository.updateMyInterests(interestIds)
-                .onSuccess { 
-                    fetchProfile()
+                .onSuccess {
+                    _uiState.value = ProfileUiState.Success(it)
                     onComplete()
                 }
+                .onFailure { _operationError.value = messageFor(it) }
         }
     }
+
+    private fun regionCode(
+        value: String,
+        options: List<RegionOptionDto>,
+        level: RegionLevel,
+    ): String = options.firstOrNull { it.name == value || it.code == value }?.code
+        ?: profileRegionOption(level)?.takeIf { it.name == value || it.code == value }?.code
+        ?: value
+
+    private suspend fun ensureProvinceOptions(): List<RegionOptionDto> =
+        provinceOptions.ifEmpty { loadProvinceOptions() }
+
+    private suspend fun loadProvinceOptions(): List<RegionOptionDto> {
+        val loaded = regionRepository.getProvinces().getOrThrow()
+        provinceOptions = loaded
+        _provinces.value = loaded.map(RegionOptionDto::name)
+        return loaded
+    }
+
+    private suspend fun loadDistrictOptions(province: String): List<RegionOptionDto> {
+        val provinceCode = regionCode(
+            province,
+            ensureProvinceOptions(),
+            RegionLevel.PROVINCE,
+        )
+        val loaded = regionRepository.getDistricts(provinceCode).getOrThrow()
+        districtOptions = loaded
+        districtProvinceCode = provinceCode
+        _districts.value = loaded.map(RegionOptionDto::name)
+        return loaded
+    }
+
+    private fun profileRegionOption(level: RegionLevel): RegionOptionDto? {
+        val profile = (_uiState.value as? ProfileUiState.Success)?.profile ?: return null
+        return when (level) {
+            RegionLevel.PROVINCE -> profile.region?.province
+            RegionLevel.DISTRICT -> profile.region?.district
+            RegionLevel.SUB_DISTRICT -> profile.region?.subDistrict
+        }
+    }
+
+    private fun messageFor(throwable: Throwable): String =
+        throwable.message ?: "요청을 처리하지 못했습니다."
+
+    private enum class RegionLevel { PROVINCE, DISTRICT, SUB_DISTRICT }
 }
