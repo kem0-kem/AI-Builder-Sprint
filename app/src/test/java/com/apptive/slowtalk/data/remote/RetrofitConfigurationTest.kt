@@ -138,14 +138,49 @@ class RetrofitConfigurationTest {
             val tokens = createBackendTokenRefresher(server.url("/api/v1/").toString())
                 .refresh("source-refresh")
 
-            assertEquals("rotated-access", tokens?.accessToken)
-            assertEquals("rotated-refresh", tokens?.refreshToken)
+            assertEquals(
+                AuthRefreshOutcome.Rotated(
+                    com.apptive.slowtalk.data.auth.AuthTokens("rotated-access", "rotated-refresh"),
+                ),
+                tokens,
+            )
             val request = server.takeRequest()
             assertEquals("/api/v1/auth/token/refresh", request.path)
             assertEquals("{\"refreshToken\":\"source-refresh\"}", request.body.readUtf8())
         } finally {
             server.shutdown()
         }
+    }
+
+
+    @Test
+    fun `backend token refresher distinguishes rejected and transient responses`() {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(401))
+        server.enqueue(MockResponse().setResponseCode(403))
+        server.enqueue(MockResponse().setResponseCode(503))
+        server.enqueue(MockResponse().setResponseCode(200).setBody("not-json"))
+        server.start()
+        try {
+            val refresher = createBackendTokenRefresher(server.url("/api/v1/").toString())
+
+            assertEquals(AuthRefreshOutcome.Rejected, refresher.refresh("refresh-one"))
+            assertEquals(AuthRefreshOutcome.Rejected, refresher.refresh("refresh-two"))
+            assertEquals(AuthRefreshOutcome.TransientFailure, refresher.refresh("refresh-three"))
+            assertEquals(AuthRefreshOutcome.TransientFailure, refresher.refresh("refresh-four"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `backend token refresher treats network failure as transient`() {
+        val server = MockWebServer()
+        server.start()
+        val refresher = createBackendTokenRefresher(server.url("/api/v1/").toString())
+        server.shutdown()
+
+        assertEquals(AuthRefreshOutcome.TransientFailure, refresher.refresh("refresh-value"))
     }
 
     @Test

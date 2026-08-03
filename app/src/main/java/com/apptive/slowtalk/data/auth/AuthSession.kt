@@ -33,10 +33,11 @@ private class EncryptedPreferencesAuthTokenStore(
 
     init {
         // Remove credentials written by the pre-encryption implementation.
-        context.getSharedPreferences(LEGACY_PREFERENCES_NAME, Context.MODE_PRIVATE)
+        val cleaned = context.getSharedPreferences(LEGACY_PREFERENCES_NAME, Context.MODE_PRIVATE)
             .edit()
             .clear()
-            .apply()
+            .commit()
+        check(cleaned) { "Could not remove the legacy authentication session." }
     }
 
     override fun load(): AuthTokens? {
@@ -47,14 +48,19 @@ private class EncryptedPreferencesAuthTokenStore(
     }
 
     override fun save(tokens: AuthTokens) {
-        preferences.edit()
+        val saved = preferences.edit()
             .putString(KEY_ACCESS_TOKEN, tokens.accessToken)
             .putString(KEY_REFRESH_TOKEN, tokens.refreshToken)
-            .apply()
+            .commit()
+        check(saved) { "Could not persist the authentication session." }
     }
 
     override fun clear() {
-        preferences.edit().remove(KEY_ACCESS_TOKEN).remove(KEY_REFRESH_TOKEN).apply()
+        val cleared = preferences.edit()
+            .remove(KEY_ACCESS_TOKEN)
+            .remove(KEY_REFRESH_TOKEN)
+            .commit()
+        check(cleared) { "Could not remove the persisted authentication session." }
     }
 
     private companion object {
@@ -106,15 +112,22 @@ object AuthSession {
 
     @Synchronized
     fun clear() {
-        tokenStore?.clear()
-        _tokens.value = null
+        try {
+            tokenStore?.clear()
+        } finally {
+            // Fail closed for the current process even when persistent storage is unavailable.
+            _tokens.value = null
+        }
     }
 
     @Synchronized
     fun compareAndClear(expectedAccessToken: String): Boolean {
         if (_tokens.value?.accessToken != expectedAccessToken) return false
-        tokenStore?.clear()
-        _tokens.value = null
+        try {
+            tokenStore?.clear()
+        } finally {
+            _tokens.value = null
+        }
         return true
     }
 

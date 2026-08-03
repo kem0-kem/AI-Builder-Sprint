@@ -44,7 +44,7 @@ internal fun webSocketBaseUrl(apiBaseUrl: String): String =
 internal fun createOkHttpClient(
     isDebug: Boolean,
     logger: HttpLoggingInterceptor.Logger = HttpLoggingInterceptor.Logger.DEFAULT,
-    tokenRefresher: AuthTokenRefresher = AuthTokenRefresher { null },
+    tokenRefresher: AuthTokenRefresher = AuthTokenRefresher { AuthRefreshOutcome.TransientFailure },
 ): OkHttpClient =
     OkHttpClient.Builder()
         .authenticator(SessionAuthenticator(tokenRefresher))
@@ -94,7 +94,13 @@ private val PUBLIC_AUTH_PATHS = setOf(
 )
 
 fun interface AuthTokenRefresher {
-    fun refresh(refreshToken: String): AuthTokens?
+    fun refresh(refreshToken: String): AuthRefreshOutcome
+}
+
+sealed interface AuthRefreshOutcome {
+    data class Rotated(val tokens: AuthTokens) : AuthRefreshOutcome
+    data object Rejected : AuthRefreshOutcome
+    data object TransientFailure : AuthRefreshOutcome
 }
 
 private data class LocalAuthToken(val accessToken: String)
@@ -107,7 +113,7 @@ private class SessionAuthenticator(
     override fun authenticate(route: okhttp3.Route?, response: okhttp3.Response): Request? {
         val attached = response.request.tag(LocalAuthToken::class.java) ?: return null
         if (responseCount(response) >= 2) {
-            AuthSession.compareAndClear(attached.accessToken)
+            runCatching { AuthSession.compareAndClear(attached.accessToken) }
             return null
         }
         synchronized(refreshLock) {
@@ -115,19 +121,19 @@ private class SessionAuthenticator(
             if (current.accessToken != attached.accessToken) {
                 return response.request.withLocalToken(current.accessToken)
             }
-            val rotated = runCatching {
+            val outcome = runCatching {
                 tokenRefresher.refresh(current.refreshToken)
-            }.getOrNull()
-            if (rotated == null) {
-                AuthSession.compareAndClear(attached.accessToken)
-                return null
-            }
-            return runCatching {
-                AuthSession.save(rotated.accessToken, rotated.refreshToken)
-                response.request.withLocalToken(rotated.accessToken)
-            }.getOrElse {
-                AuthSession.compareAndClear(attached.accessToken)
-                null
+            }.getOrDefault(AuthRefreshOutcome.TransientFailure)
+            return when (outcome) {
+                is AuthRefreshOutcome.Rotated -> runCatching {
+                    AuthSession.save(outcome.tokens.accessToken, outcome.tokens.refreshToken)
+                    response.request.withLocalToken(outcome.tokens.accessToken)
+                }.getOrNull()
+                AuthRefreshOutcome.Rejected -> {
+                    runCatching { AuthSession.compareAndClear(attached.accessToken) }
+                    null
+                }
+                AuthRefreshOutcome.TransientFailure -> null
             }
         }
     }
@@ -157,13 +163,19 @@ internal fun createBackendTokenRefresher(apiBaseUrl: String): AuthTokenRefresher
             .url(refreshUrl)
             .post(payload.toRequestBody("application/json".toMediaType()))
             .build()
-        refreshClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return@AuthTokenRefresher null
-            val body = response.body?.string() ?: return@AuthTokenRefresher null
-            val envelope = apiJson.decodeFromString<ApiEnvelope<LoginResponse>>(body)
-            val pair = envelope.requireData()
-            AuthTokens(pair.accessToken, pair.refreshToken)
-        }
+        runCatching {
+            refreshClient.newCall(request).execute().use { response ->
+                if (response.code == 401 || response.code == 403) {
+                    return@use AuthRefreshOutcome.Rejected
+                }
+                if (!response.isSuccessful) return@use AuthRefreshOutcome.TransientFailure
+                val body = response.body?.string()
+                    ?: return@use AuthRefreshOutcome.TransientFailure
+                val envelope = apiJson.decodeFromString<ApiEnvelope<LoginResponse>>(body)
+                val pair = envelope.requireData()
+                AuthRefreshOutcome.Rotated(AuthTokens(pair.accessToken, pair.refreshToken))
+            }
+        }.getOrDefault(AuthRefreshOutcome.TransientFailure)
     }
 }
 

@@ -76,11 +76,24 @@ class AuthSessionTest {
         assertFalse(cleared)
         assertEquals(AuthTokens("new-access", "new-refresh"), AuthSession.tokens.value)
     }
+
+    @Test
+    fun `failed durable clear fails closed in memory`() {
+        val store = FakeAuthTokenStore(failOnClear = true)
+        AuthSession.initialize(store)
+        AuthSession.save("access-value", "refresh-value")
+
+        val failure = runCatching { AuthSession.clear() }.exceptionOrNull()
+
+        assertTrue(failure is IllegalStateException)
+        assertNull(AuthSession.tokens.value)
+    }
 }
 
 internal class FakeAuthTokenStore(
     initialTokens: AuthTokens? = null,
     private val failOnSave: Boolean = false,
+    private val failOnClear: Boolean = false,
 ) : AuthTokenStore {
     private var tokens = initialTokens
 
@@ -92,6 +105,7 @@ internal class FakeAuthTokenStore(
     }
 
     override fun clear() {
+        if (failOnClear) error("durable clear failed")
         tokens = null
     }
 }

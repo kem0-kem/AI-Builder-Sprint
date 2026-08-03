@@ -52,7 +52,7 @@ class AuthRepository(private val api: AuthApi = RetrofitClient.authApi) {
         } catch (_: Exception) {
             Result.success("로그아웃되었습니다.")
         } finally {
-            AuthSession.clear()
+            runCatching { AuthSession.clear() }
         }
     }
 }

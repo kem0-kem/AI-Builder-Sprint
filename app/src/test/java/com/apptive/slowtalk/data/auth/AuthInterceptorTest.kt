@@ -2,6 +2,7 @@ package com.apptive.slowtalk.data.auth
 
 import com.apptive.slowtalk.data.remote.createOkHttpClient
 import com.apptive.slowtalk.data.remote.AuthTokenRefresher
+import com.apptive.slowtalk.data.remote.AuthRefreshOutcome
 import okhttp3.Request
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -67,11 +68,15 @@ class AuthInterceptorTest {
     }
 
     @Test
-    fun `unauthorized response clears session`() {
+    fun `rejected refresh clears session`() {
         AuthSession.save("access-value", "refresh-value")
         server.enqueue(MockResponse().setResponseCode(401))
 
-        call("users/me")
+        val request = Request.Builder().url(server.url("users/me")).build()
+        createOkHttpClient(
+            isDebug = false,
+            tokenRefresher = AuthTokenRefresher { AuthRefreshOutcome.Rejected },
+        ).newCall(request).execute().close()
 
         assertNull(AuthSession.accessToken)
         assertNull(AuthSession.refreshToken)
@@ -104,7 +109,7 @@ class AuthInterceptorTest {
             tokenRefresher = AuthTokenRefresher { refreshToken ->
                 assertEquals("old-refresh", refreshToken)
                 refreshes.incrementAndGet()
-                AuthTokens("new-access", "new-refresh")
+                AuthRefreshOutcome.Rotated(AuthTokens("new-access", "new-refresh"))
             },
         )
 
@@ -130,7 +135,7 @@ class AuthInterceptorTest {
                 refreshes.incrementAndGet()
                 entered.countDown()
                 release.await(2, TimeUnit.SECONDS)
-                AuthTokens("new-access", "new-refresh")
+                AuthRefreshOutcome.Rotated(AuthTokens("new-access", "new-refresh"))
             },
         )
         val done = CountDownLatch(2)
@@ -155,7 +160,7 @@ class AuthInterceptorTest {
         server.enqueue(MockResponse().setResponseCode(401))
         val client = createOkHttpClient(
             isDebug = false,
-            tokenRefresher = AuthTokenRefresher { null },
+            tokenRefresher = AuthTokenRefresher { AuthRefreshOutcome.Rejected },
         )
 
         client.newCall(Request.Builder().url(server.url("users/me")).build()).execute().close()
@@ -183,7 +188,7 @@ class AuthInterceptorTest {
             isDebug = false,
             tokenRefresher = AuthTokenRefresher {
                 refreshes.incrementAndGet()
-                null
+                AuthRefreshOutcome.TransientFailure
             },
         )
         val done = CountDownLatch(1)
@@ -209,7 +214,7 @@ class AuthInterceptorTest {
             isDebug = false,
             tokenRefresher = AuthTokenRefresher {
                 AuthSession.save("external-access", "external-refresh")
-                null
+                AuthRefreshOutcome.TransientFailure
             },
         )
 
@@ -226,13 +231,27 @@ class AuthInterceptorTest {
         val client = createOkHttpClient(
             isDebug = false,
             tokenRefresher = AuthTokenRefresher {
-                AuthTokens("new-access", "new-refresh")
+                AuthRefreshOutcome.Rotated(AuthTokens("new-access", "new-refresh"))
             },
         )
 
         client.newCall(Request.Builder().url(server.url("users/me")).build()).execute().close()
 
         assertNull(AuthSession.tokens.value)
+    }
+
+    @Test
+    fun `transient refresh failure preserves current session`() {
+        AuthSession.save("access-value", "refresh-value")
+        server.enqueue(MockResponse().setResponseCode(401))
+        val client = createOkHttpClient(
+            isDebug = false,
+            tokenRefresher = AuthTokenRefresher { AuthRefreshOutcome.TransientFailure },
+        )
+
+        client.newCall(Request.Builder().url(server.url("users/me")).build()).execute().close()
+
+        assertEquals(AuthTokens("access-value", "refresh-value"), AuthSession.tokens.value)
     }
 
     private fun call(path: String) {

@@ -8,8 +8,15 @@ preference file is cleared during migration, and Android application backup is d
 credentials cannot be copied into device or cloud backups.
 
 The process restores encrypted storage once in `SlowTalkApplication` and then serves token
-reads from an in-memory `StateFlow`; OkHttp interceptors never perform disk I/O. Debug HTTP
-logging uses BASIC level, which excludes request and response bodies and all headers.
+reads from an in-memory `StateFlow`; the request interceptor never performs disk reads.
+Debug HTTP logging uses BASIC level, which excludes request and response bodies and all
+headers.
+
+Token pair writes and removals use synchronous `SharedPreferences.commit()`. The in-memory
+flow is updated only after a successful write; a failed removal still clears the current
+process state so the UI fails closed. Refresh responses distinguish definitive 401/403
+rejection from temporary network, 5xx, or malformed-response failures. Temporary failures
+leave the current session intact and let the original request fail without retry loops.
 
 The signup screen currently has no separate nickname field. Until one is added, the
 normalized username is sent as both `username` and `nickname`. Username validation follows
