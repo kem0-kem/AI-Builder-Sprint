@@ -45,7 +45,9 @@ object ChatApi {
     }
 
     suspend fun getMessages(chatRoomId: String): Result<List<ChatMessage>> = runCatching {
-        RetrofitClient.chatApi.getMessages(chatRoomId).data.orEmpty().map { it.toModel() }.reversed()
+        RetrofitClient.chatApi.getMessages(chatRoomId).data.orEmpty()
+            .sortedBy { it.createdAt }
+            .map { it.toModel() }
     }
 
     suspend fun sendMessage(chatRoomId: String, content: String): Result<ChatMessage> = runCatching {
@@ -57,6 +59,13 @@ object ChatApi {
         requireNotNull(
             RetrofitClient.chatApi.markAsRead(chatRoomId, ChatReadRequest(lastReadMessageId)).data
         ).unreadCount
+    }
+
+    suspend fun leaveRoom(chatRoomId: String): Result<Unit> = runCatching {
+        val response = RetrofitClient.chatApi.leaveChatRoom(chatRoomId)
+        check(response.isSuccessful) {
+            "대화방을 나가지 못했습니다. (HTTP ${response.code()})"
+        }
     }
 }
 

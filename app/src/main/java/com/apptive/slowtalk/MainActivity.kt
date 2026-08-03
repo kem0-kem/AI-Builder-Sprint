@@ -364,6 +364,10 @@ private fun ApptiveApp() {
                 markAsRead = { chatRoomId, lastReadMessageId ->
                     ChatApi.markAsRead(chatRoomId, lastReadMessageId)
                 },
+                leaveRoom = { chatRoomId ->
+                    ChatApi.leaveRoom(chatRoomId)
+                },
+                onLeft = { screen = Screen.Conversations },
                 onBack = { screen = Screen.Conversations }
             )
             Screen.CreateGroup -> CreateGroupScreen(

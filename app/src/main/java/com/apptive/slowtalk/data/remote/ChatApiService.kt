@@ -1,7 +1,9 @@
 package com.apptive.slowtalk.data.remote
 
 import kotlinx.serialization.Serializable
+import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.PATCH
 import retrofit2.http.POST
@@ -33,6 +35,11 @@ interface ChatApiService {
     suspend fun openCommentAuthorChat(
         @Path("commentId") commentId: String
     ): ApiEnvelope<ChatRoomInfoDto>
+
+    @DELETE("chat-rooms/{chatRoomId}")
+    suspend fun leaveChatRoom(
+        @Path("chatRoomId") chatRoomId: String
+    ): Response<Unit>
 }
 
 @Serializable
