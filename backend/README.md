@@ -21,6 +21,8 @@ python -m pip install -e ".[dev]"
 - Liveness: `http://localhost:8000/api/v1/health`
 - Readiness: `http://localhost:8000/api/v1/ready`
 - 기본 `.env.example`은 matching과 moderation을 비활성화하므로 외부 AI 키 없이 준비 상태가 됩니다.
+- Readiness는 데이터베이스에 `SELECT 1`을 실행하며 연결할 수 없으면 `503`과
+  `databaseReady=false`를 반환합니다. 데이터베이스 주소나 오류 원문은 응답에 포함하지 않습니다.
 
 서버를 중지하려면 실행 중인 PowerShell에서 `Ctrl+C`를 누릅니다. PostgreSQL 컨테이너도
 중지하려면 다른 PowerShell에서 `docker compose stop postgres`를 실행합니다.
@@ -53,7 +55,8 @@ the APK.
 ## Moderation rollout
 
 - `MODERATION_MODE=disabled`: 외부 AI 호출 없이 콘텐츠 CRUD를 실행합니다. 로컬 개발의
-  기본값이며 `/ready`에서 완전한 설정으로 취급합니다.
+  기본값이며 `/ready`에서 완전한 설정으로 취급합니다. production에서는 설정 검증 단계에서
+  거부됩니다.
 - `MODERATION_MODE=shadow`: when `UPSTAGE_API_KEY`, `UPSTAGE_CHAT_MODEL`,
   `MODERATION_ALLOW_CONFIDENCE`, and `MODERATION_BLOCK_CONFIDENCE` are configured,
   classifies content and records only bounded metrics without persisting moderation

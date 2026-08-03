@@ -42,6 +42,8 @@ Invoke-RestMethod http://localhost:8000/api/v1/ready
 ```
 
 두 응답 모두 `ok = true`여야 하고, readiness의 `data.status`는 `ready`여야 합니다.
+Readiness는 실제 데이터베이스에 최소 쿼리를 실행하므로 `data.databaseReady`도 `true`여야
+합니다. 연결 실패 시 민감한 연결 문자열 대신 `databaseReady=false`만 반환합니다.
 서버는 `Ctrl+C`로 종료하고 PostgreSQL은 필요할 때 `docker compose stop postgres`로
 중지합니다.
 

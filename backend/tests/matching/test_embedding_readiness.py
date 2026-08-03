@@ -168,8 +168,12 @@ async def test_app_lifespan_probes_once_and_exposes_redacted_readiness(
         assert actual_settings is settings
         return readiness
 
+    async def fake_database_ready() -> bool:
+        return True
+
     monkeypatch.setattr(main, "get_settings", lambda: settings)
     monkeypatch.setattr(main, "check_embedding_readiness", fake_check)
+    monkeypatch.setattr(main, "database_is_ready", fake_database_ready)
     application = main.create_app()
 
     async with application.router.lifespan_context(application):
@@ -206,8 +210,12 @@ async def test_failed_startup_probe_makes_readiness_unavailable(
             ready=False,
         )
 
+    async def fake_database_ready() -> bool:
+        return True
+
     monkeypatch.setattr(main, "get_settings", lambda: settings)
     monkeypatch.setattr(main, "check_embedding_readiness", fake_check)
+    monkeypatch.setattr(main, "database_is_ready", fake_database_ready)
     application = main.create_app()
 
     async with application.router.lifespan_context(application):

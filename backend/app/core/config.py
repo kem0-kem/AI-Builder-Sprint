@@ -65,6 +65,8 @@ class Settings(BaseSettings):
     def validate_moderation(self) -> "Settings":
         if self.upstage_base_url.scheme != "https":
             raise ValueError("Upstage base URL must use HTTPS")
+        if self.app_environment == "production" and self.moderation_mode == "disabled":
+            raise ValueError("disabled moderation is limited to development and test")
         if self.moderation_mode == "enforce":
             required = (
                 self.upstage_api_key.get_secret_value() if self.upstage_api_key else None,

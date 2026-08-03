@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 
 from app import main
 from app.core.config import Settings, moderation_configuration_complete
@@ -17,9 +17,17 @@ INVALID_ENFORCE_KEYS = (
 
 
 async def system_response(
-    monkeypatch: pytest.MonkeyPatch, settings: Settings, path: str
+    monkeypatch: pytest.MonkeyPatch,
+    settings: Settings,
+    path: str,
+    *,
+    database_ready: bool = True,
 ) -> tuple[int, dict[str, object]]:
+    async def readiness_result() -> bool:
+        return database_ready
+
     monkeypatch.setattr(main, "get_settings", lambda: settings)
+    monkeypatch.setattr(main, "database_is_ready", readiness_result)
     async with AsyncClient(
         transport=ASGITransport(app=main.create_app()), base_url="http://test"
     ) as client:
@@ -81,6 +89,19 @@ def test_env_example_loads_as_ai_optional_local_configuration() -> None:
     assert moderation_configuration_complete(settings) is True
 
 
+def test_production_rejects_disabled_moderation() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="disabled moderation is limited to development and test",
+    ):
+        Settings(
+            _env_file=None,
+            app_environment="production",
+            matching_mode="disabled",
+            moderation_mode="disabled",
+        )
+
+
 async def test_health_uses_common_envelope(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -120,10 +141,44 @@ async def test_default_development_without_external_ai_is_ready(
             "moderationMode": "disabled",
             "moderationConfigured": True,
             "fallbackActive": False,
+            "databaseReady": True,
         },
         "error": None,
         "meta": None,
     }
+
+
+async def test_ready_reports_database_unavailable_without_details(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        app_environment="development",
+        matching_mode="disabled",
+        moderation_mode="disabled",
+    )
+
+    status_code, body = await system_response(
+        monkeypatch,
+        settings,
+        "/api/v1/ready",
+        database_ready=False,
+    )
+
+    assert status_code == 503
+    assert body == {
+        "ok": True,
+        "data": {
+            "status": "not_ready",
+            "moderationMode": "disabled",
+            "moderationConfigured": True,
+            "fallbackActive": False,
+            "databaseReady": False,
+        },
+        "error": None,
+        "meta": None,
+    }
+    assert "databaseUrl" not in str(body)
 
 
 async def test_default_incomplete_development_is_not_ready(
@@ -139,6 +194,7 @@ async def test_default_incomplete_development_is_not_ready(
         "moderationMode": "shadow",
         "moderationConfigured": False,
         "fallbackActive": False,
+        "databaseReady": True,
     }
 
 
@@ -160,6 +216,7 @@ async def test_incomplete_nonproduction_opt_in_allows_fallback(
         "moderationMode": "shadow",
         "moderationConfigured": False,
         "fallbackActive": True,
+        "databaseReady": True,
     }
 
 
@@ -179,6 +236,7 @@ async def test_incomplete_production_cannot_opt_in_to_fallback(
         "moderationMode": "shadow",
         "moderationConfigured": False,
         "fallbackActive": False,
+        "databaseReady": True,
     }
 
 
@@ -199,6 +257,7 @@ async def test_complete_shadow_is_ready_without_crypto(
         "moderationMode": "shadow",
         "moderationConfigured": True,
         "fallbackActive": False,
+        "databaseReady": True,
     }
 
 
@@ -219,4 +278,5 @@ async def test_invalid_enforce_encryption_key_is_not_ready(
         "moderationMode": "enforce",
         "moderationConfigured": False,
         "fallbackActive": False,
+        "databaseReady": True,
     }

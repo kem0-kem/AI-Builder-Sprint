@@ -26,6 +26,7 @@ from app.core.errors import (
     http_error_handler,
     validation_error_handler,
 )
+from app.db.session import database_is_ready
 from app.feeds.router import router as feed_router
 from app.letters.router import router as letter_router
 from app.matching.dependencies import (
@@ -118,6 +119,7 @@ def create_app() -> FastAPI:
         },
     )
     async def ready() -> JSONResponse:
+        database_ready = await database_is_ready()
         moderation_configured = moderation_configuration_complete(settings)
         fallback_allowed = (
             settings.app_environment in {"development", "test"}
@@ -135,12 +137,13 @@ def create_app() -> FastAPI:
                 ready=settings.matching_mode == "disabled",
             ),
         )
-        is_ready = moderation_ready and matching_readiness.ready
+        is_ready = database_ready and moderation_ready and matching_readiness.ready
         data: dict[str, object] = {
             "status": "ready" if is_ready else "not_ready",
             "moderationMode": settings.moderation_mode,
             "moderationConfigured": moderation_configured,
             "fallbackActive": fallback_active,
+            "databaseReady": database_ready,
         }
         if settings.matching_mode != "disabled":
             data["matching"] = matching_readiness.model_dump()
