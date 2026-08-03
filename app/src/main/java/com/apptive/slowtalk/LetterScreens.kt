@@ -39,6 +39,7 @@ import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.People
+import androidx.compose.material.icons.outlined.PersonOutline
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material.icons.outlined.Verified
@@ -757,12 +758,20 @@ fun ProfileEditScreen(
                 }
                 item {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                        androidx.compose.foundation.Image(
-                            painter = painterResource(R.drawable.profile_avatar),
-                            contentDescription = "프로필 사진",
-                            modifier = Modifier.size(108.dp).clip(CircleShape),
-                            contentScale = ContentScale.Crop
-                        )
+                        Surface(
+                            modifier = Modifier.size(108.dp),
+                            shape = CircleShape,
+                            color = Color(0xFFF0F1F4)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Outlined.PersonOutline,
+                                    contentDescription = "프로필 사진",
+                                    tint = Color(0xFF62666B),
+                                    modifier = Modifier.size(66.dp)
+                                )
+                            }
+                        }
                         Text("따뜻한 이웃", color = SubtleInk, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
                     }
                 }
@@ -804,9 +813,21 @@ fun ProfileEditScreen(
                             Modifier.fillMaxWidth().padding(18.dp),
                             horizontalArrangement = Arrangement.SpaceAround
                         ) {
-                            Stat(Icons.Outlined.MailOutline, "12", "받은 편지")
-                            Stat(Icons.Outlined.Send, "8", "보낸 편지")
-                            Stat(Icons.Outlined.People, "5", "매칭한 사람")
+                            Stat(
+                                Icons.Outlined.MailOutline,
+                                (currentProfile?.statistics?.receivedLetters ?: 0).toString(),
+                                "받은 편지"
+                            )
+                            Stat(
+                                Icons.Outlined.Send,
+                                (currentProfile?.statistics?.sentLetters ?: 0).toString(),
+                                "보낸 편지"
+                            )
+                            Stat(
+                                Icons.Outlined.People,
+                                (currentProfile?.statistics?.matchCount ?: 0).toString(),
+                                "매칭한 사람"
+                            )
                         }
                     }
                 }

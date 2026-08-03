@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.People
+import androidx.compose.material.icons.outlined.PersonOutline
 import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -42,8 +43,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -122,14 +121,20 @@ fun ProfileOverviewScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            androidx.compose.foundation.Image(
-                                painter = painterResource(R.drawable.profile_avatar),
-                                contentDescription = "${profile.nickname} 프로필 사진",
-                                modifier = Modifier
-                                    .size(128.dp)
-                                    .clip(CircleShape),
-                                contentScale = ContentScale.Crop
-                            )
+                            Surface(
+                                modifier = Modifier.size(128.dp),
+                                shape = CircleShape,
+                                color = Color(0xFFF0F1F4)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Outlined.PersonOutline,
+                                        contentDescription = "${profile.nickname} 프로필 사진",
+                                        tint = Color(0xFF62666B),
+                                        modifier = Modifier.size(78.dp)
+                                    )
+                                }
+                            }
                             Spacer(Modifier.height(12.dp))
                             Text(profile.nickname, fontSize = 27.sp, fontWeight = FontWeight.ExtraBold, color = Ink)
                             Spacer(Modifier.height(6.dp))
