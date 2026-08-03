@@ -1,55 +1,69 @@
 package com.apptive.slowtalk.data.repository
 
+import com.apptive.slowtalk.data.remote.ApiEnvelope
 import com.apptive.slowtalk.data.remote.RegionApi
+import com.apptive.slowtalk.data.remote.RegionItemDto
+import com.apptive.slowtalk.data.remote.RegionPatchDto
 import com.apptive.slowtalk.data.remote.RetrofitClient
 
 class RegionRepository(private val api: RegionApi = RetrofitClient.regionApi) {
+    private val provinceCodes = mutableMapOf<String, String>()
+    private val districtCodes = mutableMapOf<String, String>()
 
-    // API가 완성되기 전까지 true로 설정하여 테스트합니다.
-    private val MOCK_MODE = true
-
-    suspend fun getProvinces(): Result<List<String>> {
-        if (MOCK_MODE) {
-            return Result.success(listOf("서울특별시", "경기도", "부산광역시", "강원특별자치도"))
-        }
-        return try {
-            Result.success(api.getProvinces())
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+    suspend fun getProvinces(): Result<List<String>> = runCatching {
+        api.getProvinces().requireRegionData().also { items ->
+            provinceCodes.replaceWith(items)
+        }.map { it.name }
     }
 
-    suspend fun getDistricts(province: String): Result<List<String>> {
-        if (MOCK_MODE) {
-            val districts = when (province) {
-                "서울특별시" -> listOf("강남구", "강동구", "마포구", "송파구")
-                "경기도" -> listOf("수원시", "성남시", "고양시", "용인시")
-                "부산광역시" -> listOf("해운대구", "수영구", "부산진구")
-                else -> listOf("기타 시/군/구")
+    suspend fun getDistricts(province: String): Result<List<String>> = runCatching {
+        val provinceCode = provinceCodes[province]
+            ?: api.getProvinces().requireRegionData().also { provinceCodes.replaceWith(it) }
+                .firstOrNull { it.name == province }?.code
+            ?: error("선택한 시·도를 찾을 수 없습니다.")
+        api.getDistricts(provinceCode).requireRegionData().also { items ->
+            districtCodes.replaceWith(items)
+        }.map { it.name }
+    }
+
+    suspend fun getSubDistricts(province: String, district: String): Result<List<String>> = runCatching {
+        val districtCode = districtCodes[district]
+            ?: run {
+                val provinceCode = provinceCodes[province]
+                    ?: api.getProvinces().requireRegionData().also { provinceCodes.replaceWith(it) }
+                        .firstOrNull { it.name == province }?.code
+                    ?: error("선택한 시·도를 찾을 수 없습니다.")
+                api.getDistricts(provinceCode).requireRegionData().also { districtCodes.replaceWith(it) }
+                    .firstOrNull { it.name == district }?.code
             }
-            return Result.success(districts)
-        }
-        return try {
-            Result.success(api.getDistricts(province))
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+            ?: error("선택한 시·군·구를 찾을 수 없습니다.")
+        api.getSubDistricts(districtCode).requireRegionData().map { it.name }
     }
 
-    suspend fun getSubDistricts(province: String, district: String): Result<List<String>> {
-        if (MOCK_MODE) {
-            val subs = when (district) {
-                "마포구" -> listOf("합정동", "상암동", "연남동", "망원동", "성산동")
-                "강남구" -> listOf("역삼동", "삼성동", "청담동")
-                "수원시" -> listOf("인계동", "매탄동", "영통동")
-                else -> listOf("기타 동/읍/면")
-            }
-            return Result.success(subs)
+    suspend fun getRegionPatch(province: String, district: String, subDistrict: String?): Result<RegionPatchDto> = runCatching {
+        val provinceCode = api.getProvinces().requireRegionData()
+            .firstOrNull { it.name == province }?.code
+            ?: error("Selected province was not found.")
+        val districtCode = api.getDistricts(provinceCode).requireRegionData()
+            .firstOrNull { it.name == district }?.code
+            ?: error("Selected district was not found.")
+        val subDistrictCode = subDistrict?.let { name ->
+            api.getSubDistricts(districtCode).requireRegionData()
+                .firstOrNull { it.name == name }?.code
+                ?: error("Selected sub-district was not found.")
         }
-        return try {
-            Result.success(api.getSubDistricts(province, district))
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        RegionPatchDto(provinceCode, districtCode, subDistrictCode)
     }
+}
+
+private fun MutableMap<String, String>.replaceWith(items: List<RegionItemDto>) {
+    clear()
+    putAll(items.associate { it.name to it.code })
+}
+
+private fun <T> ApiEnvelope<T>.requireRegionData(): T {
+    if (!ok || data == null) {
+        throw IllegalStateException(error?.message ?: "지역 정보를 불러오지 못했습니다.")
+    }
+    return data
 }

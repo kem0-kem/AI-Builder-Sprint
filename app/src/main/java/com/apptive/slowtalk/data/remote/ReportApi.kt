@@ -1,5 +1,6 @@
 package com.apptive.slowtalk.data.remote
 
+import kotlinx.serialization.Serializable
 import okhttp3.MultipartBody
 import retrofit2.http.Body
 import retrofit2.http.Multipart
@@ -8,35 +9,42 @@ import retrofit2.http.Part
 
 interface ReportApi {
     @POST("reports")
-    suspend fun createReport(@Body request: ReportCreateRequest): ReportCreateResponse
+    suspend fun createReport(@Body request: ReportCreateRequest): ApiEnvelope<ReportCreateResponse>
 
     @Multipart
     @POST("reports/ocr")
-    suspend fun performOcr(@Part image: MultipartBody.Part): OcrResponse
+    suspend fun performOcr(@Part image: MultipartBody.Part): ApiEnvelope<OcrTextDto>
 
     @POST("reports/feedback")
-    suspend fun getReportFeedback(@Body request: ReportFeedbackRequest): ReportFeedbackResponse
+    suspend fun getReportFeedback(@Body request: ReportFeedbackRequest): ApiEnvelope<ReportAnalysisDto>
 }
 
-@kotlinx.serialization.Serializable
-data class ReportCreateRequest(val content: String)
+@Serializable
+data class ReportCreateRequest(val content: String, val analysisId: String)
 
-@kotlinx.serialization.Serializable
-data class ReportCreateResponse(val reportId: Int)
+@Serializable
+data class ReportCreateResponse(val id: String)
 
-@kotlinx.serialization.Serializable
-data class OcrResponse(val content: String)
-
-@kotlinx.serialization.Serializable
+@Serializable
 data class ReportFeedbackRequest(val content: String)
 
-@kotlinx.serialization.Serializable
+@Serializable
+data class ReportAnalysisDto(
+    val analysisId: String,
+    val summary: String,
+    val feedback: List<ReportCardDto>
+)
+
+@Serializable
+data class ReportCardDto(val type: String, val content: String)
+
+@Serializable
 data class ReportFeedbackResponse(
     val summary: String,
     val feedback: List<FeedbackItemDto>
 )
 
-@kotlinx.serialization.Serializable
+@Serializable
 data class FeedbackItemDto(
     val type: String,
     val title: String,

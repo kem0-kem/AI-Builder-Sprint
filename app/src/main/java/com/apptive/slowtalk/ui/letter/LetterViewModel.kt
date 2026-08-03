@@ -5,15 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.apptive.slowtalk.data.remote.LetterFeedbackResponse
 import com.apptive.slowtalk.data.remote.RegionDto
 import com.apptive.slowtalk.data.repository.LetterRepository
-import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -25,7 +19,6 @@ sealed class LetterUiState {
     data class Error(val message: String) : LetterUiState()
 }
 
-@OptIn(FlowPreview::class)
 class LetterViewModel(
     private val repository: LetterRepository = LetterRepository()
 ) : ViewModel() {
@@ -39,24 +32,26 @@ class LetterViewModel(
     private val _aiFeedback = MutableStateFlow<LetterFeedbackResponse?>(null)
     val aiFeedback: StateFlow<LetterFeedbackResponse?> = _aiFeedback.asStateFlow()
 
-    init {
-        // Debounce logic for AI Feedback
-        _content
-            .debounce(1500)
-            .filter { it.length >= 10 }
-            .distinctUntilChanged()
-            .onEach { fetchAiFeedback(it) }
-            .launchIn(viewModelScope)
-    }
+    private val _isFeedbackLoading = MutableStateFlow(false)
+    val isFeedbackLoading: StateFlow<Boolean> = _isFeedbackLoading.asStateFlow()
 
     fun updateContent(newContent: String) {
+        if (_content.value != newContent) {
+            _aiFeedback.value = null
+        }
         _content.value = newContent
     }
 
-    private fun fetchAiFeedback(text: String) {
+    fun analyzeContent() {
+        val text = _content.value.trim()
+        if (text.isBlank() || _isFeedbackLoading.value) return
         viewModelScope.launch {
+            _isFeedbackLoading.value = true
             repository.getLetterFeedback(text)
-                .onSuccess { _aiFeedback.value = it }
+                .onSuccess {
+                    if (_content.value.trim() == text) _aiFeedback.value = it
+                }
+            _isFeedbackLoading.value = false
         }
     }
 

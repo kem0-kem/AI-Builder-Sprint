@@ -8,3 +8,19 @@
 .cxx
 app/build
 log.txt
+/.worktrees/
+/.android-sdk/
+
+# Shared AI collaboration configuration is intentionally versioned.
+!.claude/
+!.claude/**
+!.agents/
+!.agents/**
+
+# Personal AI-tool state and secrets stay local.
+.claude/settings.local.json
+.agents/local/
+.omc/
+.env
+*.keystore
+*.jks

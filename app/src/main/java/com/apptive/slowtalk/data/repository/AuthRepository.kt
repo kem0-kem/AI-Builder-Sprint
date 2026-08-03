@@ -1,74 +1,48 @@
 package com.apptive.slowtalk.data.repository
 
+import com.apptive.slowtalk.data.auth.AuthSession
+import com.apptive.slowtalk.data.remote.ApiEnvelope
 import com.apptive.slowtalk.data.remote.AuthApi
 import com.apptive.slowtalk.data.remote.EmailCheckResponse
 import com.apptive.slowtalk.data.remote.LoginRequest
 import com.apptive.slowtalk.data.remote.LoginResponse
+import com.apptive.slowtalk.data.remote.RefreshRequest
 import com.apptive.slowtalk.data.remote.RetrofitClient
 import com.apptive.slowtalk.data.remote.SignupRequest
 import com.apptive.slowtalk.data.remote.SignupResponse
 
 class AuthRepository(private val api: AuthApi = RetrofitClient.authApi) {
+    suspend fun signup(request: SignupRequest): Result<SignupResponse> = runCatching {
+        api.signup(request).requireData()
+    }
 
-    private val MOCK_MODE = true
-
-    suspend fun signup(request: SignupRequest): Result<SignupResponse> {
-        if (MOCK_MODE) {
-            return Result.success(SignupResponse(1, "회원가입이 완료되었습니다."))
-        }
-        return try {
-            Result.success(api.signup(request))
-        } catch (e: Exception) {
-            Result.failure(e)
+    suspend fun login(request: LoginRequest): Result<LoginResponse> = runCatching {
+        api.login(request).requireData().also {
+            AuthSession.save(it.accessToken, it.refreshToken)
         }
     }
 
-    suspend fun login(request: LoginRequest): Result<LoginResponse> {
-        if (MOCK_MODE) {
-            return Result.success(LoginResponse("mock-access-token", "mock-refresh-token"))
-        }
-        return try {
-            Result.success(api.login(request))
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+    suspend fun checkEmail(email: String): Result<Boolean> = runCatching {
+        api.checkEmail(email.trim()).requireData().available
     }
 
-    suspend fun checkEmail(email: String): Result<Boolean> {
-        if (MOCK_MODE) {
-            // "test@example.com"만 중복된 것으로 처리
-            return Result.success(email != "test@example.com")
-        }
-        return try {
-            val response = api.checkEmail(email)
-            Result.success(response.available)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+    suspend fun checkUsername(username: String): Result<Boolean> = runCatching {
+        api.checkUsername(username.trim().lowercase()).requireData().available
     }
 
-    suspend fun checkUsername(username: String): Result<Boolean> {
-        if (MOCK_MODE) {
-            // "admin"만 중복된 것으로 처리
-            return Result.success(username != "admin")
+    suspend fun logout(): Result<String> = runCatching {
+        val refreshToken = AuthSession.refreshToken
+        if (refreshToken != null) {
+            api.logout(RefreshRequest(refreshToken))
         }
-        return try {
-            val response = api.checkUsername(username)
-            Result.success(response.available)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        AuthSession.clear()
+        "로그아웃했습니다."
     }
+}
 
-    suspend fun logout(): Result<String> {
-        if (MOCK_MODE) {
-            return Result.success("로그아웃 되었습니다.")
-        }
-        return try {
-            val response = api.logout()
-            Result.success(response.message)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+private fun <T> ApiEnvelope<T>.requireData(): T {
+    if (!ok || data == null) {
+        throw IllegalStateException(error?.message ?: "서버 요청을 처리하지 못했습니다.")
     }
+    return data
 }

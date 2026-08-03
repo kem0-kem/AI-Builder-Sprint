@@ -304,6 +304,17 @@ fun WriteReflectionScreen(
                         Text("작성 완료", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     }
                 }
+
+                (uiState as? ReflectionUiState.Error)?.let { error ->
+                    Text(
+                        text = error.message,
+                        color = Color(0xFFD95C55),
+                        fontSize = 13.sp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp),
+                    )
+                }
                 
                 Spacer(Modifier.height(12.dp))
                 

@@ -88,9 +88,11 @@ private enum class FeedIndex { ALL, MINE }
 @Composable
 fun FeedScreen(
     feeds: List<FeedPost>,
-    onOpenFeed: (Int) -> Unit,
-    isLiked: (Int) -> Boolean,
-    onToggleLike: (Int) -> Unit,
+    selectedMine: Boolean,
+    onSelectedMineChange: (Boolean) -> Unit,
+    onOpenFeed: (String) -> Unit,
+    isLiked: (String) -> Boolean,
+    onToggleLike: (String) -> Unit,
     loadFeeds: suspend () -> Result<List<MyFeedResult>>,
     onFeedsLoaded: (List<MyFeedResult>) -> Unit,
     loadMyFeeds: suspend () -> Result<List<MyFeedResult>>,
@@ -101,7 +103,7 @@ fun FeedScreen(
     showBottomBar: Boolean = true
 ) {
     var isRefreshing by remember { mutableStateOf(false) }
-    var selectedIndex by remember { mutableStateOf(FeedIndex.ALL) }
+    val selectedIndex = if (selectedMine) FeedIndex.MINE else FeedIndex.ALL
     var isAllFeedsLoading by remember { mutableStateOf(false) }
     var allFeedsLoadFailed by remember { mutableStateOf(false) }
     var isMyFeedsLoading by remember { mutableStateOf(false) }
@@ -110,7 +112,7 @@ fun FeedScreen(
     val visibleFeeds = when (selectedIndex) {
         FeedIndex.ALL -> feeds.filterNot { it.isMine }
         FeedIndex.MINE -> feeds.filter { it.isMine }
-    }
+    }.distinctBy { it.id }
 
     suspend fun refreshAllFeeds() {
         isAllFeedsLoading = true
@@ -190,7 +192,7 @@ fun FeedScreen(
                     stickyHeader {
                         FeedIndexSelector(
                             selected = selectedIndex,
-                            onSelected = { selectedIndex = it }
+                            onSelected = { onSelectedMineChange(it == FeedIndex.MINE) }
                         )
                     }
                     if (visibleFeeds.isEmpty()) {
@@ -360,7 +362,7 @@ private fun EmptyFeedMessage(
 @Composable
 private fun FeedCard(
     post: FeedPost,
-    onOpenFeed: (Int) -> Unit,
+    onOpenFeed: (String) -> Unit,
     isLiked: Boolean,
     onToggleLike: () -> Unit
 ) {
@@ -382,7 +384,7 @@ private fun FeedCard(
                     val categoryIcon = when (post.category) {
                         "일상 이야기" -> Icons.Outlined.Eco
                         "마음과 고민" -> Icons.Outlined.FavoriteBorder
-                        "취미 생활" -> Icons.Outlined.Palette
+                        "취미 생활", "배움과 성장" -> Icons.Outlined.Palette
                         "질문" -> Icons.AutoMirrored.Outlined.HelpOutline
                         else -> Icons.Outlined.AutoAwesome
                     }
@@ -453,7 +455,7 @@ private fun FeedCard(
                         tint = SubtleInk,
                         modifier = Modifier.size(19.dp)
                     )
-                    Text("  댓글 ${post.comments.size}", color = SubtleInk, fontSize = 13.sp)
+                    Text("  댓글 ${post.commentCount}", color = SubtleInk, fontSize = 13.sp)
                 }
             }
         }
@@ -467,8 +469,8 @@ fun WriteFeedScreen(
     initialPost: FeedPost? = null,
     loadCategories: suspend () -> Result<List<FeedCategoryResult>>,
     requestFeedback: suspend (String, String) -> Result<FeedFeedbackResult>,
-    onSubmit: suspend (Int, String, String, String) -> Result<Int>,
-    onSuccess: (Int, String, String, String) -> Unit
+    onSubmit: suspend (String, String, String, String) -> Result<String>,
+    onSuccess: (String, String, String, String) -> Unit
 ) {
     var categories by remember { mutableStateOf(feedCategoryVisuals) }
     var category by remember(initialPost?.id) {
@@ -491,19 +493,6 @@ fun WriteFeedScreen(
                     ?.takeIf { current -> categories.any { it.name == current } }
                     ?: categories.first().name
             }
-        }
-    }
-
-    LaunchedEffect(title, body) {
-        if (title.isBlank() || body.isBlank()) {
-            aiFeedback = null
-            isFeedbackLoading = false
-        } else {
-            delay(700)
-            isFeedbackLoading = true
-            requestFeedback(title.trim(), body.trim())
-                .onSuccess { aiFeedback = it }
-            isFeedbackLoading = false
         }
     }
 
@@ -589,7 +578,10 @@ fun WriteFeedScreen(
                             Spacer(Modifier.height(6.dp))
                             OutlinedTextField(
                                 value = title,
-                                onValueChange = { title = it.take(60) },
+                                onValueChange = {
+                                    title = it.take(60)
+                                    aiFeedback = null
+                                },
                                 modifier = Modifier.fillMaxWidth(),
                                 placeholder = { Text("오늘 어떤 일이 있었나요?") },
                                 singleLine = true
@@ -599,7 +591,10 @@ fun WriteFeedScreen(
                             Spacer(Modifier.height(6.dp))
                             OutlinedTextField(
                                 value = body,
-                                onValueChange = { body = it.take(1000) },
+                                onValueChange = {
+                                    body = it.take(1000)
+                                    aiFeedback = null
+                                },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(280.dp),
@@ -677,17 +672,42 @@ fun WriteFeedScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Surface(
+                                    modifier = Modifier.clickable(
+                                        enabled = title.isNotBlank() &&
+                                            body.isNotBlank() &&
+                                            !isFeedbackLoading
+                                    ) {
+                                        val requestedTitle = title.trim()
+                                        val requestedBody = body.trim()
+                                        submitScope.launch {
+                                            isFeedbackLoading = true
+                                            requestFeedback(requestedTitle, requestedBody)
+                                                .onSuccess {
+                                                    if (
+                                                        title.trim() == requestedTitle &&
+                                                        body.trim() == requestedBody
+                                                    ) {
+                                                        aiFeedback = it
+                                                    }
+                                                }
+                                            isFeedbackLoading = false
+                                        }
+                                    },
                                     shape = RoundedCornerShape(12.dp),
-                                    color = Purple.copy(alpha = 0.1f)
+                                    color = if (title.isNotBlank() && body.isNotBlank()) {
+                                        Purple.copy(alpha = 0.12f)
+                                    } else {
+                                        LineColor.copy(alpha = 0.7f)
+                                    }
                                 ) {
                                     Text(
                                         when {
-                                            isFeedbackLoading -> "분석 중"
-                                            aiFeedback != null -> "분석 완료"
-                                            else -> "입력 대기"
+                                            isFeedbackLoading -> "분석 중..."
+                                            aiFeedback != null -> "다시 분석"
+                                            else -> "분석하기"
                                         },
                                         modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
-                                        color = Purple,
+                                        color = if (title.isNotBlank() && body.isNotBlank()) Purple else SubtleInk,
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.SemiBold
                                     )
@@ -717,6 +737,7 @@ fun WriteFeedScreen(
                                         Column(Modifier.padding(start = 9.dp)) {
                                             Text(
                                                 aiFeedback?.warningMessage
+                                                    ?: aiFeedback?.summary
                                                     ?: if (body.length < 30) {
                                                         "조금 더 들려주세요"
                                                     } else {
@@ -727,7 +748,7 @@ fun WriteFeedScreen(
                                                 } else if (body.length < 30) {
                                                     Purple
                                                 } else {
-                                                    Color(0xFF2FAE68)
+                                                    Purple
                                                 },
                                                 fontWeight = FontWeight.Bold
                                             )
@@ -815,7 +836,10 @@ fun WriteFeedScreen(
                                 isSubmitting = false
                             }
                         },
-                        enabled = title.isNotBlank() && body.isNotBlank() && !isSubmitting,
+                        enabled = title.isNotBlank() &&
+                            body.isNotBlank() &&
+                            categories.firstOrNull { it.name == category }?.id?.isNotBlank() == true &&
+                            !isSubmitting,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(54.dp),
@@ -859,7 +883,7 @@ fun WriteFeedScreen(
 }
 
 private data class FeedCategoryVisual(
-    val id: Int,
+    val id: String,
     val name: String,
     val icon: ImageVector,
     val tint: Color,
@@ -867,10 +891,10 @@ private data class FeedCategoryVisual(
 )
 
 private val feedCategoryVisuals = listOf(
-    FeedCategoryVisual(1, "일상 이야기", Icons.Outlined.Eco, Color(0xFF54B978), Color(0xFFEAF7ED)),
-    FeedCategoryVisual(2, "마음과 고민", Icons.Outlined.FavoriteBorder, Color(0xFFE76E91), Color(0xFFFFEFF3)),
-    FeedCategoryVisual(3, "취미 생활", Icons.Outlined.Palette, Purple, PurpleSoft),
-    FeedCategoryVisual(4, "질문", Icons.AutoMirrored.Outlined.HelpOutline, SubtleInk, Color(0xFFF4F1ED))
+    FeedCategoryVisual("", "일상 이야기", Icons.Outlined.Eco, Color(0xFF54B978), Color(0xFFEAF7ED)),
+    FeedCategoryVisual("", "마음과 고민", Icons.Outlined.FavoriteBorder, Color(0xFFE76E91), Color(0xFFFFEFF3)),
+    FeedCategoryVisual("", "배움과 성장", Icons.Outlined.Palette, Purple, PurpleSoft),
+    FeedCategoryVisual("", "질문", Icons.AutoMirrored.Outlined.HelpOutline, SubtleInk, Color(0xFFF4F1ED))
 )
 
 private fun FeedCategoryResult.toVisual(): FeedCategoryVisual = when (name) {
@@ -931,12 +955,13 @@ private fun FeedCategoryOption(
 fun FeedDetailScreen(
     post: FeedPost,
     isLiked: Boolean,
-    loadFeed: suspend (Int) -> Result<FeedDetailResult>,
+    loadFeed: suspend (String) -> Result<FeedDetailResult>,
     onFeedLoaded: (FeedDetailResult) -> Unit,
     onToggleLike: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onReport: () -> Unit,
+    onOpenAnonymousChat: (String) -> Unit,
     onBack: () -> Unit
 ) {
     var comment by remember { mutableStateOf("") }
@@ -970,11 +995,14 @@ fun FeedDetailScreen(
     }
 
     fun commitComments(updated: List<Comment>) {
+        val updatedCount = updated.sumOf { 1 + it.replies.size }
         comments = updated
         displayedPost.comments.clear()
         displayedPost.comments.addAll(updated)
+        displayedPost.commentCount = updatedCount
         post.comments.clear()
         post.comments.addAll(updated)
+        post.commentCount = updatedCount
     }
 
     fun editCommentAt(parentIndex: Int, replyIndex: Int?, content: String) {
@@ -1051,7 +1079,27 @@ fun FeedDetailScreen(
         }
     }
 
-    fun assignCommentId(parentIndex: Int, replyIndex: Int?, commentId: Int) {
+    fun openAnonymousChatAt(parentIndex: Int, replyIndex: Int?) {
+        val target = if (replyIndex == null) {
+            comments[parentIndex]
+        } else {
+            comments[parentIndex].replies[replyIndex]
+        }
+        val commentId = target.id
+        if (commentId == null) {
+            Toast.makeText(context, "댓글 정보를 불러온 뒤 다시 시도해주세요.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        refreshScope.launch {
+            ChatApi.openCommentAuthorChat(commentId)
+                .onSuccess { room -> onOpenAnonymousChat(room.id) }
+                .onFailure {
+                    Toast.makeText(context, "익명 대화를 시작하지 못했습니다.", Toast.LENGTH_SHORT).show()
+                }
+        }
+    }
+
+    fun assignCommentId(parentIndex: Int, replyIndex: Int?, commentId: String) {
         val updated = comments.mapIndexed { index, parent ->
             if (index != parentIndex) {
                 parent
@@ -1224,7 +1272,11 @@ fun FeedDetailScreen(
                                             updatedComments[it].replies.lastIndex
                                         }
                                         refreshScope.launch {
-                                            FeedApi.createComment(post.id, message)
+                                            FeedApi.createComment(
+                                                post.id,
+                                                message,
+                                                targetIndex?.let { comments[it].id }
+                                            )
                                                 .onSuccess { commentId ->
                                                     assignCommentId(
                                                         createdParentIndex,
@@ -1333,14 +1385,14 @@ fun FeedDetailScreen(
                     item {
                         FeedDetailCard(
                             post = displayedPost,
-                            commentCount = comments.size,
+                            commentCount = comments.sumOf { 1 + it.replies.size },
                             isLiked = isLiked,
                             onToggleLike = onToggleLike
                         )
                     }
                     item {
                         Text(
-                            "댓글 ${comments.size}",
+                            "댓글 ${comments.sumOf { 1 + it.replies.size }}",
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(top = 4.dp)
                         )
@@ -1352,11 +1404,13 @@ fun FeedDetailScreen(
                             onEditRoot = { content -> editCommentAt(index, null, content) },
                             onDeleteRoot = { deleteCommentAt(index, null) },
                             onReportRoot = { reportCommentAt(index, null) },
+                            onAnonymousChatRoot = { openAnonymousChatAt(index, null) },
                             onEditReply = { replyIndex, content ->
                                 editCommentAt(index, replyIndex, content)
                             },
                             onDeleteReply = { replyIndex -> deleteCommentAt(index, replyIndex) },
-                            onReportReply = { replyIndex -> reportCommentAt(index, replyIndex) }
+                            onReportReply = { replyIndex -> reportCommentAt(index, replyIndex) },
+                            onAnonymousChatReply = { replyIndex -> openAnonymousChatAt(index, replyIndex) }
                         )
                     }
                 }
@@ -1372,9 +1426,11 @@ private fun CommentThread(
     onEditRoot: (String) -> Unit,
     onDeleteRoot: () -> Unit,
     onReportRoot: () -> Unit,
+    onAnonymousChatRoot: () -> Unit,
     onEditReply: (Int, String) -> Unit,
     onDeleteReply: (Int) -> Unit,
-    onReportReply: (Int) -> Unit
+    onReportReply: (Int) -> Unit,
+    onAnonymousChatReply: (Int) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         CommentCard(
@@ -1383,7 +1439,8 @@ private fun CommentThread(
             onReply = { onReply(comment.author) },
             onEdit = onEditRoot,
             onDelete = onDeleteRoot,
-            onReport = onReportRoot
+            onReport = onReportRoot,
+            onAnonymousChat = onAnonymousChatRoot
         )
         comment.replies.forEachIndexed { replyIndex, reply ->
             Row(
@@ -1407,6 +1464,7 @@ private fun CommentThread(
                     onEdit = { content -> onEditReply(replyIndex, content) },
                     onDelete = { onDeleteReply(replyIndex) },
                     onReport = { onReportReply(replyIndex) },
+                    onAnonymousChat = { onAnonymousChatReply(replyIndex) },
                     isReply = true
                 )
             }
@@ -1422,6 +1480,7 @@ private fun CommentCard(
     onEdit: (String) -> Unit,
     onDelete: () -> Unit,
     onReport: () -> Unit,
+    onAnonymousChat: () -> Unit,
     isReply: Boolean = false
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -1600,6 +1659,16 @@ private fun CommentCard(
                                 }
                             )
                         } else {
+                            DropdownMenuItem(
+                                text = { Text("익명 대화하기") },
+                                leadingIcon = {
+                                    Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null)
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onAnonymousChat()
+                                }
+                            )
                             DropdownMenuItem(
                                 text = { Text("신고") },
                                 leadingIcon = {

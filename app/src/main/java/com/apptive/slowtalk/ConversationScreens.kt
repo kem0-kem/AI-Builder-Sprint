@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -29,10 +30,13 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -44,6 +48,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -260,8 +265,10 @@ private fun ConversationRow(item: Conversation, onClick: () -> Unit) {
 fun ChatScreen(
     title: String,
     isGroup: Boolean,
-    chatRoomId: Int?,
-    markAsRead: suspend (chatRoomId: Int, lastReadMessageId: Int) -> Result<Int>,
+    chatRoomId: String?,
+    markAsRead: suspend (chatRoomId: String, lastReadMessageId: String) -> Result<Int>,
+    leaveRoom: suspend (chatRoomId: String) -> Result<Unit>,
+    onLeft: () -> Unit,
     onBack: () -> Unit
 ) {
     val messages = remember { mutableStateListOf<ChatMessage>() }
@@ -269,7 +276,12 @@ fun ChatScreen(
     var roomInfo by remember { mutableStateOf<ChatRoomInfo?>(null) }
     var socketConnection by remember { mutableStateOf<ChatSocketConnection?>(null) }
     var messagesLoading by remember { mutableStateOf(chatRoomId != null) }
+    var roomMenuExpanded by remember { mutableStateOf(false) }
+    var showLeaveDialog by remember { mutableStateOf(false) }
+    var isLeaving by remember { mutableStateOf(false) }
+    var leaveError by remember { mutableStateOf<String?>(null) }
     val chatScope = rememberCoroutineScope()
+    val messageListState = rememberLazyListState()
 
     LaunchedEffect(chatRoomId) {
         messages.clear()
@@ -279,8 +291,7 @@ fun ChatScreen(
             ChatApi.getMessages(roomId)
                 .onSuccess { loaded ->
                     messages.addAll(loaded)
-                    loaded.maxOfOrNull { it.id ?: Int.MIN_VALUE }
-                        ?.takeIf { it != Int.MIN_VALUE }
+                    loaded.lastOrNull()?.id
                         ?.let { lastMessageId ->
                             markAsRead(roomId, lastMessageId)
                         }
@@ -315,6 +326,12 @@ fun ChatScreen(
         }
     }
 
+    LaunchedEffect(messages.size, messagesLoading) {
+        if (!messagesLoading && messages.isNotEmpty()) {
+            messageListState.scrollToItem(messages.lastIndex)
+        }
+    }
+
     PaperBackground {
         Scaffold(
             containerColor = Color.Transparent,
@@ -343,7 +360,30 @@ fun ChatScreen(
                                     fontSize = 11.sp
                                 )
                             }
-                            IconButton(onClick = {}) { Icon(Icons.Outlined.MoreVert, "더보기") }
+                            Box {
+                                IconButton(onClick = { roomMenuExpanded = true }) {
+                                    Icon(Icons.Outlined.MoreVert, "더보기")
+                                }
+                                DropdownMenu(
+                                    expanded = roomMenuExpanded,
+                                    onDismissRequest = { roomMenuExpanded = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                "대화방 나가기",
+                                                color = Color(0xFFD95C55),
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        },
+                                        onClick = {
+                                            roomMenuExpanded = false
+                                            leaveError = null
+                                            showLeaveDialog = true
+                                        }
+                                    )
+                                }
+                            }
                         }
                         Card(
                             modifier = Modifier.padding(horizontal = 18.dp, vertical = 4.dp),
@@ -383,17 +423,14 @@ fun ChatScreen(
                             val content = text.trim()
                             if (content.isNotBlank()) {
                                 text = ""
-                                val sentBySocket = socketConnection?.send(content) == true
-                                if (!sentBySocket) {
-                                    chatRoomId?.let { roomId ->
-                                        chatScope.launch {
-                                            ChatApi.sendMessage(roomId, content)
-                                                .onSuccess { sent ->
-                                                    if (messages.none { it.id == sent.id }) {
-                                                        messages.add(sent)
-                                                    }
+                                chatRoomId?.let { roomId ->
+                                    chatScope.launch {
+                                        ChatApi.sendMessage(roomId, content)
+                                            .onSuccess { sent ->
+                                                if (messages.none { it.id == sent.id }) {
+                                                    messages.add(sent)
                                                 }
-                                        }
+                                            }
                                     }
                                 }
                             }
@@ -403,6 +440,7 @@ fun ChatScreen(
             }
         ) { padding ->
             LazyColumn(
+                state = messageListState,
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(14.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -426,6 +464,72 @@ fun ChatScreen(
                 items(messages) { message -> MessageBubble(message) }
             }
         }
+    }
+
+    if (showLeaveDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!isLeaving) showLeaveDialog = false
+            },
+            title = {
+                Text(
+                    if (isGroup) "모임 대화에서 나갈까요?" else "익명 대화에서 나갈까요?",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column {
+                    Text("나가면 이 대화방이 내 대화 목록에서 사라집니다.")
+                    leaveError?.let { message ->
+                        Spacer(Modifier.height(10.dp))
+                        Text(message, color = Color(0xFFD95C55), fontSize = 12.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = !isLeaving && chatRoomId != null,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD95C55)),
+                    onClick = {
+                        val roomId = chatRoomId ?: return@Button
+                        chatScope.launch {
+                            isLeaving = true
+                            leaveError = null
+                            leaveRoom(roomId).fold(
+                                onSuccess = {
+                                    socketConnection?.close()
+                                    socketConnection = null
+                                    showLeaveDialog = false
+                                    onLeft()
+                                },
+                                onFailure = { error ->
+                                    leaveError = error.message ?: "대화방을 나가지 못했습니다."
+                                }
+                            )
+                            isLeaving = false
+                        }
+                    }
+                ) {
+                    if (isLeaving) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("나가기")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !isLeaving,
+                    onClick = { showLeaveDialog = false }
+                ) {
+                    Text("취소")
+                }
+            }
+        )
     }
 }
 
@@ -467,13 +571,13 @@ private fun MessageBubble(message: ChatMessage) {
 @Composable
 fun CreateGroupScreen(
     loadInviteUsers: suspend (String?) -> Result<List<MeetingInviteUser>>,
-    createMeeting: suspend (String, String, List<Int>) -> Result<MeetingCreation>,
+    createMeeting: suspend (String, String, List<String>) -> Result<MeetingCreation>,
     onBack: () -> Unit,
-    onCreated: (String, Int) -> Unit
+    onCreated: (String, String) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var intro by remember { mutableStateOf("") }
-    val selectedPeople = remember { mutableStateListOf<Int>() }
+    val selectedPeople = remember { mutableStateListOf<String>() }
     var showPeoplePicker by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var remotePeople by remember { mutableStateOf(emptyList<MeetingInviteUser>()) }
@@ -648,17 +752,17 @@ fun CreateGroupScreen(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        items(shownPeople, key = { it.userId }) { person ->
-                            val isSelected = person.userId in selectedPeople
+                        items(shownPeople, key = { it.candidateId }) { person ->
+                            val isSelected = person.candidateId in selectedPeople
                             val canSelect = isSelected || selectedPeople.size < 9
                             Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable(enabled = canSelect) {
                                         if (isSelected) {
-                                            selectedPeople.remove(person.userId)
+                                            selectedPeople.remove(person.candidateId)
                                         } else {
-                                            selectedPeople.add(person.userId)
+                                            selectedPeople.add(person.candidateId)
                                         }
                                     },
                                 shape = RoundedCornerShape(15.dp),
@@ -700,11 +804,11 @@ fun CreateGroupScreen(
                                         enabled = canSelect,
                                         onCheckedChange = { checked ->
                                             if (checked) {
-                                                if (person.userId !in selectedPeople && selectedPeople.size < 9) {
-                                                    selectedPeople.add(person.userId)
+                                                if (person.candidateId !in selectedPeople && selectedPeople.size < 9) {
+                                                    selectedPeople.add(person.candidateId)
                                                 }
                                             } else {
-                                                selectedPeople.remove(person.userId)
+                                                selectedPeople.remove(person.candidateId)
                                             }
                                         }
                                     )

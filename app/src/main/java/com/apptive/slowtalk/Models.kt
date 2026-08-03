@@ -7,19 +7,19 @@ sealed interface Screen {
     data object SignUp : Screen
     data object Feed : Screen
     data object WriteFeed : Screen
-    data class EditFeed(val feedId: Int) : Screen
-    data class FeedDetail(val feedId: Int) : Screen
+    data class EditFeed(val feedId: String) : Screen
+    data class FeedDetail(val feedId: String) : Screen
     data object Conversations : Screen
     data class Chat(
         val title: String,
         val isGroup: Boolean = false,
-        val chatRoomId: Int? = null
+        val chatRoomId: String? = null
     ) : Screen
     data object CreateGroup : Screen
     data object LetterHome : Screen
     data object WriteLetter : Screen
     data object LetterHistory : Screen
-    data class LetterDetail(val letterId: Int?, val title: String) : Screen
+    data class LetterDetail(val letterId: String?, val title: String) : Screen
     data object Profile : Screen
     data object EditProfile : Screen
     data object Interests : Screen
@@ -28,11 +28,12 @@ sealed interface Screen {
 }
 
 data class FeedPost(
-    val id: Int,
+    val id: String,
     val category: String,
     val title: String,
     val body: String,
     val comments: MutableList<Comment> = mutableListOf(),
+    var commentCount: Int = comments.sumOf { 1 + it.replies.size },
     val accent: Color,
     val isMine: Boolean = false
 )
@@ -43,7 +44,7 @@ data class Comment(
     val time: String,
     val isMine: Boolean = false,
     val replies: List<Comment> = emptyList(),
-    val id: Int? = null
+    val id: String? = null
 )
 
 data class Conversation(
@@ -53,7 +54,7 @@ data class Conversation(
     val unread: Boolean = false,
     val isGroup: Boolean = false,
     val members: Int = 1,
-    val chatRoomId: Int? = null
+    val chatRoomId: String? = null
 )
 
 data class ChatMessage(
@@ -61,18 +62,18 @@ data class ChatMessage(
     val body: String,
     val time: String,
     val mine: Boolean,
-    val id: Int? = null,
+    val id: String? = null,
     val type: String = "CHAT"
 )
 
 data class MeetingInviteUser(
-    val userId: Int,
+    val candidateId: String,
     val nickname: String
 )
 
 data class MeetingCreation(
-    val meetingId: Int,
-    val chatRoomId: Int
+    val meetingId: String,
+    val chatRoomId: String
 )
 
 data class Letter(
@@ -80,7 +81,7 @@ data class Letter(
     val preview: String,
     val date: String,
     val received: Boolean,
-    val id: Int? = null,
+    val id: String? = null,
     val content: String = preview
 )
 

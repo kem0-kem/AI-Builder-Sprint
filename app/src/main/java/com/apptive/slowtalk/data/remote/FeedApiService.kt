@@ -7,150 +7,125 @@ import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.PATCH
 import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 interface FeedApiService {
     @GET("feeds")
-    suspend fun getFeeds(): List<FeedTimelineDto>
+    suspend fun getFeeds(@Query("scope") scope: String = "all"): ApiEnvelope<List<FeedItemDto>>
 
     @GET("feed-categories")
-    suspend fun getFeedCategories(): List<FeedWriteCategoryDto>
+    suspend fun getFeedCategories(): ApiEnvelope<List<FeedWriteCategoryDto>>
 
     @POST("feeds")
-    suspend fun createFeed(@Body request: FeedCreateRequest): FeedCreateResponse
+    suspend fun createFeed(@Body request: FeedCreateRequest): ApiEnvelope<FeedItemDto>
 
     @POST("feeds/feedback")
-    suspend fun getFeedFeedback(@Body request: FeedFeedbackRequest): FeedFeedbackResponse
-
-    @GET("feeds/mine")
-    suspend fun getMyFeeds(): List<MyFeedDto>
+    suspend fun getFeedFeedback(@Body request: FeedFeedbackRequest): ApiEnvelope<FeedFeedbackResponse>
 
     @GET("feeds/{feedId}")
-    suspend fun getFeed(@Path("feedId") feedId: Int): FeedDetailDto
+    suspend fun getFeed(@Path("feedId") feedId: String): ApiEnvelope<FeedItemDto>
+
+    @GET("feeds/{feedId}/comments")
+    suspend fun getComments(@Path("feedId") feedId: String): ApiEnvelope<List<FeedCommentDto>>
 
     @PATCH("feeds/{feedId}")
     suspend fun updateFeed(
-        @Path("feedId") feedId: Int,
+        @Path("feedId") feedId: String,
         @Body request: FeedUpdateRequest
-    ): Response<Unit>
+    ): ApiEnvelope<FeedItemDto>
 
     @DELETE("feeds/{feedId}")
-    suspend fun deleteFeed(@Path("feedId") feedId: Int): Response<Unit>
+    suspend fun deleteFeed(@Path("feedId") feedId: String): Response<Unit>
 
-    @POST("feeds/{feedId}/report")
-    suspend fun reportFeed(@Path("feedId") feedId: Int): Response<Unit>
+    @POST("feeds/{feedId}/reports")
+    suspend fun reportFeed(
+        @Path("feedId") feedId: String,
+        @Body request: FeedReportRequest
+    ): ApiEnvelope<ReportedResponse>
 
-    @POST("feeds/{feedId}/like")
-    suspend fun likeFeed(@Path("feedId") feedId: Int): FeedLikeResponse
+    @PUT("feeds/{feedId}/like")
+    suspend fun likeFeed(@Path("feedId") feedId: String): ApiEnvelope<FeedLikeResponse>
 
     @DELETE("feeds/{feedId}/like")
-    suspend fun unlikeFeed(@Path("feedId") feedId: Int): FeedLikeResponse
+    suspend fun unlikeFeed(@Path("feedId") feedId: String): ApiEnvelope<FeedLikeResponse>
 
     @POST("feeds/{feedId}/comments")
     suspend fun createComment(
-        @Path("feedId") feedId: Int,
+        @Path("feedId") feedId: String,
         @Body request: CommentContentRequest
-    ): CommentCreateResponse
+    ): ApiEnvelope<FeedCommentDto>
 
-    @PATCH("feeds/{feedId}/comments/{commentId}")
+    @PATCH("comments/{commentId}")
     suspend fun updateComment(
-        @Path("feedId") feedId: Int,
-        @Path("commentId") commentId: Int,
-        @Body request: CommentContentRequest
-    ): Response<Unit>
+        @Path("commentId") commentId: String,
+        @Body request: CommentPatchRequest
+    ): ApiEnvelope<FeedCommentDto>
 
-    @DELETE("feeds/{feedId}/comments/{commentId}")
-    suspend fun deleteComment(
-        @Path("feedId") feedId: Int,
-        @Path("commentId") commentId: Int
-    ): Response<Unit>
+    @DELETE("comments/{commentId}")
+    suspend fun deleteComment(@Path("commentId") commentId: String): Response<Unit>
 
-    @POST("feeds/{feedId}/comments/{commentId}/report")
+    @POST("comments/{commentId}/reports")
     suspend fun reportComment(
-        @Path("feedId") feedId: Int,
-        @Path("commentId") commentId: Int
-    ): Response<Unit>
+        @Path("commentId") commentId: String,
+        @Body request: FeedReportRequest
+    ): ApiEnvelope<ReportedResponse>
 }
 
 @Serializable
-data class MyFeedDto(
-    val feedId: Int,
-    val category: FeedCategoryDto,
-    val title: String,
-    val content: String,
-    val liked: Boolean = false
-)
-
-@Serializable
-data class FeedTimelineDto(
-    val feedId: Int,
-    val category: FeedCategoryDto,
-    val author: FeedAuthorDto,
-    val title: String,
-    val content: String,
-    val liked: Boolean = false
-)
-
-@Serializable
-data class FeedCategoryDto(
-    val id: Int,
-    val name: String
-)
-
-@Serializable
-data class FeedDetailDto(
-    val feedId: Int,
-    val category: FeedCategoryDto,
-    val author: FeedAuthorDto,
+data class FeedItemDto(
+    val id: String,
+    val categoryId: String,
     val title: String,
     val content: String,
     val liked: Boolean = false,
     val isMine: Boolean = false,
-    val comments: List<FeedDetailCommentDto> = emptyList()
+    val likeCount: Int = 0,
+    val commentCount: Int = 0
 )
 
 @Serializable
-data class FeedAuthorDto(val nickname: String)
-
-@Serializable
-data class FeedDetailCommentDto(
-    val commentId: Int,
-    val author: FeedAuthorDto,
+data class FeedCommentDto(
+    val id: String,
+    val feedId: String,
+    val parentCommentId: String? = null,
     val content: String,
-    val isMine: Boolean = false
+    val isMine: Boolean = false,
+    val createdAt: String = ""
 )
 
 @Serializable
 data class FeedUpdateRequest(
-    val categoryId: Int,
+    val categoryId: String,
     val title: String,
     val content: String
 )
 
 @Serializable
-data class CommentContentRequest(val content: String)
+data class CommentContentRequest(
+    val content: String,
+    val parentCommentId: String? = null
+)
 
 @Serializable
-data class CommentCreateResponse(val commentId: Int)
+data class CommentPatchRequest(val content: String)
 
 @Serializable
 data class FeedLikeResponse(val liked: Boolean)
 
 @Serializable
 data class FeedWriteCategoryDto(
-    val categoryId: Int,
+    val id: String,
     val name: String
 )
 
 @Serializable
 data class FeedCreateRequest(
-    val categoryId: Int,
+    val categoryId: String,
     val title: String,
     val content: String
 )
-
-@Serializable
-data class FeedCreateResponse(val feedId: Int)
 
 @Serializable
 data class FeedFeedbackRequest(
@@ -160,12 +135,12 @@ data class FeedFeedbackRequest(
 
 @Serializable
 data class FeedFeedbackResponse(
-    val warning: FeedFeedbackWarning = FeedFeedbackWarning(),
-    val tips: List<String> = emptyList()
+    val summary: String = "",
+    val suggestions: List<String> = emptyList()
 )
 
 @Serializable
-data class FeedFeedbackWarning(
-    val exists: Boolean = false,
-    val message: String? = null
-)
+data class FeedReportRequest(val reason: String)
+
+@Serializable
+data class ReportedResponse(val reported: Boolean = true)

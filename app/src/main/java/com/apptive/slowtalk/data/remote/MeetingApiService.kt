@@ -7,28 +7,28 @@ import retrofit2.http.POST
 import retrofit2.http.Query
 
 interface MeetingApiService {
-    @GET("meetings/invite-users")
-    suspend fun getInviteUsers(@Query("keyword") keyword: String? = null): List<MeetingInviteUserDto>
+    @GET("meeting-invite-candidates")
+    suspend fun getInviteUsers(@Query("keyword") keyword: String? = null): ApiEnvelope<List<MeetingInviteUserDto>>
 
     @POST("meetings")
-    suspend fun createMeeting(@Body request: CreateMeetingRequest): CreateMeetingResponse
+    suspend fun createMeeting(@Body request: CreateMeetingRequest): ApiEnvelope<CreateMeetingResponse>
 }
 
 @Serializable
 data class MeetingInviteUserDto(
-    val userId: Int,
-    val nickname: String
+    val candidateId: String,
+    val displayName: String
 )
 
 @Serializable
 data class CreateMeetingRequest(
     val title: String,
-    val description: String,
-    val inviteUserIds: List<Int>
+    val description: String?,
+    val inviteCandidateIds: List<String>
 )
 
 @Serializable
 data class CreateMeetingResponse(
-    val meetingId: Int,
-    val chatRoomId: Int
+    val id: String,
+    val chatRoom: ChatRoomInfoDto
 )
