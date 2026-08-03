@@ -411,7 +411,6 @@ fun ChatScreen(
                     shadowElevation = 4.dp
                 ) {
                     Row(Modifier.padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        if (isGroup) IconButton(onClick = {}) { Icon(Icons.Outlined.Add, "첨부") }
                         OutlinedTextField(
                             value = text,
                             onValueChange = { text = it },

@@ -13,7 +13,10 @@ import java.io.File
 sealed class ReflectionUiState {
     object Idle : ReflectionUiState()
     object Loading : ReflectionUiState()
-    data class Success(val reportId: String) : ReflectionUiState()
+    data class Success(
+        val reportId: String,
+        val feedback: ReportFeedbackResponse,
+    ) : ReflectionUiState()
     data class OcrSuccess(val content: String) : ReflectionUiState()
     data class FeedbackSuccess(val feedback: ReportFeedbackResponse) : ReflectionUiState()
     data class Error(val message: String) : ReflectionUiState()
@@ -30,10 +33,13 @@ class ReflectionViewModel(
         viewModelScope.launch {
             _uiState.value = ReflectionUiState.Loading
             runCatching {
-                repository.getReportFeedback(content).getOrThrow()
-                repository.createReport(content).getOrThrow()
+                val feedback = repository.getReportFeedback(content).getOrThrow()
+                val reportId = repository.createReport(content).getOrThrow()
+                reportId to feedback
             }
-                .onSuccess { _uiState.value = ReflectionUiState.Success(it) }
+                .onSuccess { (reportId, feedback) ->
+                    _uiState.value = ReflectionUiState.Success(reportId, feedback)
+                }
                 .onFailure { _uiState.value = ReflectionUiState.Error(it.message ?: "Failed to create report") }
         }
     }

@@ -7,7 +7,7 @@ import retrofit2.http.POST
 import retrofit2.http.Query
 
 interface MeetingApiService {
-    @GET("meetings/invite-users")
+    @GET("meeting-invite-candidates")
     suspend fun getInviteUsers(@Query("keyword") keyword: String? = null): ApiEnvelope<List<MeetingInviteUserDto>>
 
     @POST("meetings")
