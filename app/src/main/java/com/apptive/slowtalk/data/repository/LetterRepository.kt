@@ -18,7 +18,8 @@ class LetterRepository(private val api: LetterApiService = RetrofitClient.letter
     suspend fun getLetterFeedback(content: String): Result<LetterFeedbackResponse> = runCatching {
         val feedback = api.getLetterFeedback(LetterFeedbackRequest(content)).requireLetterData()
         LetterFeedbackResponse(
-            warning = AiWarningDto(exists = false, message = feedback.summary),
+            summary = feedback.summary,
+            warning = AiWarningDto(exists = false),
             tips = feedback.suggestions
         )
     }
