@@ -291,7 +291,7 @@ fun ChatScreen(
             ChatApi.getMessages(roomId)
                 .onSuccess { loaded ->
                     messages.addAll(loaded)
-                    loaded.firstNotNullOfOrNull { it.id }
+                    loaded.lastOrNull()?.id
                         ?.let { lastMessageId ->
                             markAsRead(roomId, lastMessageId)
                         }
