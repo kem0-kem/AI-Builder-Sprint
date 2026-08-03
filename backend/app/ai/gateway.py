@@ -140,23 +140,25 @@ class UpstageWritingAssistant:
                 },
             ],
         }
-        try:
-            response = await self.client.post(
-                "/chat/completions",
-                headers={"Authorization": f"Bearer {self.api_key}"},
-                json=request_json,
-            )
-            response.raise_for_status()
-            completion = _UpstageChatCompletion.model_validate(response.json())
-            return WritingFeedback.model_validate_json(completion.choices[0].message.content)
-        except (
-            httpx.HTTPError,
-            json.JSONDecodeError,
-            UnicodeDecodeError,
-            UnicodeEncodeError,
-            ValidationError,
-        ):
-            raise TimeoutError("Upstage writing feedback request failed") from None
+        for _attempt in range(2):
+            try:
+                response = await self.client.post(
+                    "/chat/completions",
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    json=request_json,
+                )
+                response.raise_for_status()
+                completion = _UpstageChatCompletion.model_validate(response.json())
+                return WritingFeedback.model_validate_json(completion.choices[0].message.content)
+            except (
+                httpx.HTTPError,
+                json.JSONDecodeError,
+                UnicodeDecodeError,
+                UnicodeEncodeError,
+                ValidationError,
+            ):
+                continue
+        raise TimeoutError("Upstage writing feedback request failed") from None
 
 
 def _document_text(payload: object) -> str:

@@ -173,6 +173,49 @@ async def test_feedback_varies_with_the_submitted_draft() -> None:
 
 
 @pytest.mark.asyncio
+async def test_feedback_retries_once_after_malformed_model_output() -> None:
+    calls = 0
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(200, json={"choices": []})
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "summary": "두 번째 시도에서 본문의 산책 장면을 분석했어요.",
+                                    "suggestions": ["산책 중 들었던 소리를 한 가지 덧붙여 보세요."],
+                                },
+                                ensure_ascii=False,
+                            )
+                        }
+                    }
+                ]
+            },
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="https://api.upstage.ai/v1"
+    ) as client:
+        assistant = UpstageWritingAssistant(
+            client=client,
+            api_key="test-key",
+            document_model="document-parse",
+            chat_model="solar-pro",
+        )
+        result = await assistant.feedback(WritingContext.LETTER, None, "저녁에 천천히 산책했다.")
+
+    assert calls == 2
+    assert "산책" in result.summary
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "response",
     [
