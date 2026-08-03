@@ -1310,6 +1310,52 @@
         }
       }
     },
+    "/api/v1/moderation/check": {
+      "post": {
+        "tags": [
+          "moderation"
+        ],
+        "summary": "Check Content Safety",
+        "operationId": "check_content_safety_api_v1_moderation_check_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SafetyCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SafetyCheckEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/moderation-submissions/{submission_id}": {
       "get": {
         "tags": [
@@ -2576,6 +2622,18 @@
         ],
         "title": "CommentPatch"
       },
+      "ContentType": {
+        "type": "string",
+        "enum": [
+          "LETTER",
+          "CHAT_MESSAGE",
+          "FEED",
+          "COMMENT",
+          "REPORT",
+          "OCR_TEXT"
+        ],
+        "title": "ContentType"
+      },
       "FeedCreate": {
         "properties": {
           "categoryId": {
@@ -2953,6 +3011,129 @@
           "content"
         ],
         "title": "ReportAnalyzeRequest"
+      },
+      "SafetyCheckEnvelope": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/SafetyCheckResult"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
+          },
+          "meta": {
+            "type": "null",
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "SafetyCheckEnvelope"
+      },
+      "SafetyCheckRequest": {
+        "properties": {
+          "contentType": {
+            "$ref": "#/components/schemas/ContentType"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Text"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "contentType",
+          "text"
+        ],
+        "title": "SafetyCheckRequest"
+      },
+      "SafetyCheckResult": {
+        "properties": {
+          "level": {
+            "$ref": "#/components/schemas/SafetyInterventionLevel"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "canOverride": {
+            "type": "boolean",
+            "title": "Canoverride"
+          },
+          "delaySeconds": {
+            "type": "integer",
+            "maximum": 30.0,
+            "minimum": 0.0,
+            "title": "Delayseconds"
+          },
+          "operatorReviewRecommended": {
+            "type": "boolean",
+            "title": "Operatorreviewrecommended"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available",
+            "default": true
+          },
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/ModerationCategory"
+            },
+            "type": "array",
+            "title": "Categories",
+            "default": []
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "level",
+          "title",
+          "message",
+          "canOverride",
+          "delaySeconds",
+          "operatorReviewRecommended",
+          "severity"
+        ],
+        "title": "SafetyCheckResult"
+      },
+      "SafetyInterventionLevel": {
+        "type": "string",
+        "enum": [
+          "SAFE",
+          "CAUTION",
+          "INTERVENTION",
+          "BLOCK",
+          "EMERGENCY"
+        ],
+        "title": "SafetyInterventionLevel"
+      },
+      "Severity": {
+        "type": "string",
+        "enum": [
+          "NONE",
+          "LOW",
+          "MEDIUM",
+          "HIGH",
+          "CRITICAL"
+        ],
+        "title": "Severity"
       },
       "SignupRequest": {
         "properties": {

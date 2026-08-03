@@ -1,5 +1,7 @@
 package com.apptive.slowtalk
 
+import android.widget.Toast
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -62,6 +64,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -271,6 +274,7 @@ fun ChatScreen(
     onLeft: () -> Unit,
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
     val messages = remember { mutableStateListOf<ChatMessage>() }
     var text by remember { mutableStateOf("") }
     var roomInfo by remember { mutableStateOf<ChatRoomInfo?>(null) }
@@ -280,8 +284,64 @@ fun ChatScreen(
     var showLeaveDialog by remember { mutableStateOf(false) }
     var isLeaving by remember { mutableStateOf(false) }
     var leaveError by remember { mutableStateOf<String?>(null) }
+    var safetyIntervention by remember { mutableStateOf<SafetyIntervention?>(null) }
+    var pendingMessage by remember { mutableStateOf<String?>(null) }
+    var safetyChecking by remember { mutableStateOf(false) }
+    var messageSending by remember { mutableStateOf(false) }
     val chatScope = rememberCoroutineScope()
     val messageListState = rememberLazyListState()
+
+    fun sendMessageNow(content: String) {
+        val roomId = chatRoomId ?: run {
+            Toast.makeText(context, "대화방 정보를 확인하지 못했습니다.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (messageSending) return
+        messageSending = true
+        chatScope.launch {
+            ChatApi.sendMessage(roomId, content).fold(
+                onSuccess = { sent ->
+                    if (messages.none { it.id == sent.id }) {
+                        messages.add(sent)
+                    }
+                    if (text.trim() == content) text = ""
+                },
+                onFailure = {
+                    Toast.makeText(
+                        context,
+                        "메시지를 전송하지 못했습니다.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            )
+            messageSending = false
+        }
+    }
+
+    fun checkSafetyAndSend(content: String) {
+        if (safetyChecking || messageSending || safetyIntervention != null) return
+        chatScope.launch {
+            safetyChecking = true
+            SafetyApi.check("CHAT_MESSAGE", content).fold(
+                onSuccess = { result ->
+                    if (result.level == SafetyLevel.SAFE) {
+                        sendMessageNow(content)
+                    } else {
+                        pendingMessage = content
+                        safetyIntervention = result
+                    }
+                },
+                onFailure = {
+                    Toast.makeText(
+                        context,
+                        "안전 확인에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            )
+            safetyChecking = false
+        }
+    }
 
     LaunchedEffect(chatRoomId) {
         messages.clear()
@@ -417,24 +477,27 @@ fun ChatScreen(
                             onValueChange = { text = it },
                             modifier = Modifier.weight(1f),
                             placeholder = { Text("메시지를 입력해주세요", fontSize = 12.sp) },
-                            singleLine = true
+                            singleLine = true,
+                            enabled = !messageSending
                         )
-                        IconButton(onClick = {
-                            val content = text.trim()
-                            if (content.isNotBlank()) {
-                                text = ""
-                                chatRoomId?.let { roomId ->
-                                    chatScope.launch {
-                                        ChatApi.sendMessage(roomId, content)
-                                            .onSuccess { sent ->
-                                                if (messages.none { it.id == sent.id }) {
-                                                    messages.add(sent)
-                                                }
-                                            }
-                                    }
-                                }
+                        IconButton(
+                            onClick = { checkSafetyAndSend(text.trim()) },
+                            enabled = text.isNotBlank() &&
+                                chatRoomId != null &&
+                                !safetyChecking &&
+                                !messageSending &&
+                                safetyIntervention == null
+                        ) {
+                            if (safetyChecking || messageSending) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = Purple,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(Icons.Outlined.Send, "전송", tint = Purple)
                             }
-                        }) { Icon(Icons.Outlined.Send, "전송", tint = Purple) }
+                        }
                     }
                 }
             }
@@ -464,6 +527,27 @@ fun ChatScreen(
                 items(messages) { message -> MessageBubble(message) }
             }
         }
+    }
+
+    safetyIntervention?.let { intervention ->
+        SafetyInterventionDialog(
+            intervention = intervention,
+            onEdit = {
+                safetyIntervention = null
+                pendingMessage = null
+            },
+            onProceed = {
+                val content = pendingMessage
+                safetyIntervention = null
+                pendingMessage = null
+                if (
+                    content != null &&
+                    intervention.level in setOf(SafetyLevel.CAUTION, SafetyLevel.INTERVENTION)
+                ) {
+                    sendMessageNow(content)
+                }
+            }
+        )
     }
 
     if (showLeaveDialog) {

@@ -56,7 +56,8 @@ object RetrofitClient {
             if (BuildConfig.DEBUG) {
                 addInterceptor(HttpLoggingInterceptor().apply {
                     redactHeader("Authorization")
-                    level = HttpLoggingInterceptor.Level.BODY
+                    // Safety checks and writing APIs contain private user text.
+                    level = HttpLoggingInterceptor.Level.BASIC
                 })
             }
         }
@@ -77,6 +78,7 @@ object RetrofitClient {
     val authApi: AuthApi = retrofit.create(AuthApi::class.java)
     val meetingApi: MeetingApiService = retrofit.create(MeetingApiService::class.java)
     val reportApi: ReportApi = retrofit.create(ReportApi::class.java)
+    val safetyApi: SafetyApiService = retrofit.create(SafetyApiService::class.java)
 
     fun openChatWebSocket(chatRoomId: String, listener: WebSocketListener): WebSocket {
         val socketBaseUrl = baseUrl

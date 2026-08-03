@@ -12,12 +12,14 @@ from app.chat.service import ChatCommandHandler
 from app.common.responses import success
 from app.core.config import get_settings
 from app.core.errors import ApiError
+from app.core.rate_limit import ai_limiter
 from app.feeds.service import FeedCommandHandler
 from app.letters.service import LetterCommandHandler
 from app.matching.dependencies import get_matching_service
 from app.matching.service import MatchingService
 from app.moderation.command_handlers import ModeratedCommandRegistry
 from app.moderation.crypto import CommandCipher
+from app.moderation.dependencies import SafetyCheck
 from app.moderation.models import ContentSubmission, SubmissionStatus
 from app.moderation.repository import DecisionProvenance, ModerationRepository
 from app.moderation.schemas import (
@@ -25,11 +27,32 @@ from app.moderation.schemas import (
     ModerationAssessment,
     ModerationCategory,
     ModerationDecision,
+    SafetyCheckEnvelope,
+    SafetyCheckRequest,
     Severity,
 )
+from app.moderation.service import unavailable_safety_check
 from app.reports.service import ReportCommandHandler
 
 router = APIRouter(tags=["moderation"])
+
+
+@router.post(
+    "/moderation/check",
+    dependencies=[Depends(ai_limiter)],
+    response_model=SafetyCheckEnvelope,
+)
+async def check_content_safety(
+    request: SafetyCheckRequest,
+    user_id: CurrentUserId,
+    safety_check: SafetyCheck,
+) -> dict[str, object]:
+    result = (
+        unavailable_safety_check(request.content_type)
+        if safety_check is None
+        else await safety_check.check(user_id, request.content_type, request.text)
+    )
+    return success(result.model_dump(mode="json", by_alias=True))
 
 
 class ManualDecisionRequest(BaseModel):

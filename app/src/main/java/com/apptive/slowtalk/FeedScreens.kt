@@ -472,6 +472,7 @@ fun WriteFeedScreen(
     onSubmit: suspend (String, String, String, String) -> Result<String>,
     onSuccess: (String, String, String, String) -> Unit
 ) {
+    val context = LocalContext.current
     var categories by remember { mutableStateOf(feedCategoryVisuals) }
     var category by remember(initialPost?.id) {
         mutableStateOf(initialPost?.category ?: categories.first().name)
@@ -482,8 +483,54 @@ fun WriteFeedScreen(
     var isFeedbackLoading by remember { mutableStateOf(false) }
     var isSubmitting by remember { mutableStateOf(false) }
     var submitFailed by remember { mutableStateOf(false) }
+    var safetyIntervention by remember { mutableStateOf<SafetyIntervention?>(null) }
+    var safetyChecking by remember { mutableStateOf(false) }
     val submitScope = rememberCoroutineScope()
     val isEditing = initialPost != null
+
+    fun submitFeedNow() {
+        val selectedCategory = categories.first { it.name == category }
+        submitScope.launch {
+            isSubmitting = true
+            submitFailed = false
+            onSubmit(
+                selectedCategory.id,
+                category,
+                title.trim(),
+                body.trim()
+            ).fold(
+                onSuccess = { feedId ->
+                    onSuccess(feedId, category, title.trim(), body.trim())
+                },
+                onFailure = { submitFailed = true }
+            )
+            isSubmitting = false
+        }
+    }
+
+    fun checkSafetyAndSubmit() {
+        if (safetyChecking || safetyIntervention != null) return
+        submitScope.launch {
+            safetyChecking = true
+            SafetyApi.check("FEED", "${title.trim()}\n${body.trim()}").fold(
+                onSuccess = { result ->
+                    if (result.level == SafetyLevel.SAFE) {
+                        submitFeedNow()
+                    } else {
+                        safetyIntervention = result
+                    }
+                },
+                onFailure = {
+                    Toast.makeText(
+                        context,
+                        "안전 확인에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            )
+            safetyChecking = false
+        }
+    }
 
     LaunchedEffect(initialPost?.id) {
         loadCategories().onSuccess { remoteCategories ->
@@ -817,29 +864,12 @@ fun WriteFeedScreen(
                 }
                 item {
                     Button(
-                        onClick = {
-                            val selectedCategory = categories.first { it.name == category }
-                            submitScope.launch {
-                                isSubmitting = true
-                                submitFailed = false
-                                onSubmit(
-                                    selectedCategory.id,
-                                    category,
-                                    title.trim(),
-                                    body.trim()
-                                ).fold(
-                                    onSuccess = { feedId ->
-                                        onSuccess(feedId, category, title.trim(), body.trim())
-                                    },
-                                    onFailure = { submitFailed = true }
-                                )
-                                isSubmitting = false
-                            }
-                        },
+                        onClick = ::checkSafetyAndSubmit,
                         enabled = title.isNotBlank() &&
                             body.isNotBlank() &&
                             categories.firstOrNull { it.name == category }?.id?.isNotBlank() == true &&
-                            !isSubmitting,
+                            !isSubmitting &&
+                            !safetyChecking,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(54.dp),
@@ -849,6 +879,7 @@ fun WriteFeedScreen(
                         Icon(Icons.Outlined.Send, null)
                         Text(
                             when {
+                                safetyChecking -> "  안전 확인 중..."
                                 isSubmitting -> "  전송 중..."
                                 isEditing -> "  수정 완료"
                                 else -> "  피드 올리기 (익명)"
@@ -879,6 +910,17 @@ fun WriteFeedScreen(
                 }
             }
         }
+    }
+
+    safetyIntervention?.let { intervention ->
+        SafetyInterventionDialog(
+            intervention = intervention,
+            onEdit = { safetyIntervention = null },
+            onProceed = {
+                safetyIntervention = null
+                submitFeedNow()
+            }
+        )
     }
 }
 

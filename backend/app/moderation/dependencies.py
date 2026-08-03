@@ -17,6 +17,7 @@ from app.moderation.service import (
     ModerationOrchestrator,
     ModerationOutcome,
     RecordingModerationOrchestrator,
+    SafetyCheckService,
     ShadowModerationOrchestrator,
 )
 from app.moderation.upstage_gateway import UpstageModerationGateway
@@ -84,6 +85,36 @@ Moderation = Annotated[
     | ShadowModerationOrchestrator
     | None,
     Depends(get_moderation_orchestrator),
+]
+
+
+async def get_safety_check_service() -> AsyncIterator[SafetyCheckService | None]:
+    settings = get_settings()
+    if not moderation_configuration_complete(settings):
+        yield None
+        return
+
+    assert settings.upstage_api_key is not None
+    assert settings.upstage_chat_model is not None
+    assert settings.moderation_allow_confidence is not None
+    assert settings.moderation_block_confidence is not None
+    async with httpx.AsyncClient(
+        base_url=str(settings.upstage_base_url), timeout=10.0
+    ) as client:
+        yield SafetyCheckService(
+            UpstageModerationGateway(
+                client=client,
+                api_key=settings.upstage_api_key,
+                model=settings.upstage_chat_model,
+            ),
+            settings.moderation_allow_confidence,
+            settings.moderation_block_confidence,
+        )
+
+
+SafetyCheck = Annotated[
+    SafetyCheckService | None,
+    Depends(get_safety_check_service),
 ]
 
 

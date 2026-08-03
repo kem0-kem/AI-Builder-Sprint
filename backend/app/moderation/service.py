@@ -20,6 +20,8 @@ from app.moderation.schemas import (
     ModerationAssessment,
     ModerationCategory,
     ModerationDecision,
+    SafetyCheckResult,
+    SafetyInterventionLevel,
     Severity,
 )
 
@@ -106,6 +108,156 @@ class ModerationConfidencePolicy:
         ):
             return ModerationDecision.ALLOW
         return ModerationDecision.REVIEW
+
+
+class SafetyCheckService:
+    """Classify text for user-facing intervention without retaining the text."""
+
+    def __init__(
+        self,
+        gateway: ModerationGateway,
+        allow_confidence: float,
+        block_confidence: float,
+        local_rules: LocalRuleEngine | None = None,
+    ) -> None:
+        self._gateway = gateway
+        self._confidence_policy = ModerationConfidencePolicy(
+            allow_confidence, block_confidence
+        )
+        self._local_rules = local_rules or LocalRuleEngine()
+
+    async def check(
+        self, owner_id: UUID, content_type: ContentType, text: str
+    ) -> SafetyCheckResult:
+        command = _normalize_command(
+            ModerationCommand(
+                owner_id=owner_id,
+                content_type=content_type,
+                operation="SAFETY_CHECK",
+                text=text,
+                payload={},
+                idempotency_key=str(uuid4()),
+            )
+        )
+        try:
+            assessment = await classify_normalized(
+                self._gateway, self._local_rules, command
+            )
+        except ModerationClassificationUnavailable:
+            return unavailable_safety_check(content_type)
+        return safety_intervention_for(
+            assessment, self._confidence_policy.resolve(assessment)
+        )
+
+
+def safety_intervention_for(
+    assessment: ModerationAssessment,
+    effective_decision: ModerationDecision,
+) -> SafetyCheckResult:
+    emergency_categories = {
+        ModerationCategory.SELF_HARM,
+        ModerationCategory.VIOLENCE,
+    }
+    if (
+        assessment.severity is Severity.CRITICAL
+        and assessment.categories & emergency_categories
+    ):
+        return SafetyCheckResult(
+            level=SafetyInterventionLevel.EMERGENCY,
+            title="긴급한 도움이 필요할 수 있어요",
+            message=(
+                "즉각적인 위험 가능성이 감지되었습니다. 전송하지 말고 주변의 "
+                "신뢰할 수 있는 사람이나 긴급기관에 도움을 요청해 주세요."
+            ),
+            can_override=False,
+            delay_seconds=0,
+            operator_review_recommended=True,
+            categories=_sorted_categories(assessment.categories),
+            severity=assessment.severity,
+        )
+    if effective_decision is ModerationDecision.BLOCK:
+        return SafetyCheckResult(
+            level=SafetyInterventionLevel.BLOCK,
+            title="이 메시지는 전송할 수 없어요",
+            message=(
+                "협박, 성희롱 또는 반복적인 괴롭힘으로 해석될 수 있는 표현이 "
+                "감지되었습니다. 내용을 수정해 주세요."
+            ),
+            can_override=False,
+            delay_seconds=0,
+            operator_review_recommended=True,
+            categories=_sorted_categories(assessment.categories),
+            severity=assessment.severity,
+        )
+    if effective_decision is ModerationDecision.REVIEW:
+        if assessment.severity is Severity.LOW:
+            return SafetyCheckResult(
+                level=SafetyInterventionLevel.CAUTION,
+                title="표현을 다시 확인해 주세요",
+                message=(
+                    "상대방이 불편하게 느낄 수 있는 표현이 있을 수 있어요. "
+                    "한 번 더 확인한 뒤 전송해 주세요."
+                ),
+                can_override=True,
+                delay_seconds=0,
+                operator_review_recommended=False,
+                categories=_sorted_categories(assessment.categories),
+                severity=assessment.severity,
+            )
+        return SafetyCheckResult(
+            level=SafetyInterventionLevel.INTERVENTION,
+            title="잠시 멈추고 확인해 주세요",
+            message=(
+                "욕설, 강한 압박 또는 개인정보 노출 가능성이 감지되었습니다. "
+                "내용을 수정하거나 잠시 기다린 뒤 전송해 주세요."
+            ),
+            can_override=True,
+            delay_seconds=5,
+            operator_review_recommended=False,
+            categories=_sorted_categories(assessment.categories),
+            severity=assessment.severity,
+        )
+    return SafetyCheckResult(
+        level=SafetyInterventionLevel.SAFE,
+        title="안전 확인 완료",
+        message="전송할 수 있는 내용입니다.",
+        can_override=True,
+        delay_seconds=0,
+        operator_review_recommended=False,
+        categories=(),
+        severity=Severity.NONE,
+    )
+
+
+def unavailable_safety_check(
+    content_type: ContentType | None = None,
+) -> SafetyCheckResult:
+    fail_closed = content_type is ContentType.CHAT_MESSAGE
+    return SafetyCheckResult(
+        level=(
+            SafetyInterventionLevel.INTERVENTION
+            if fail_closed
+            else SafetyInterventionLevel.CAUTION
+        ),
+        title="안전 확인을 완료하지 못했어요",
+        message=(
+            "대화 안전 확인을 완료할 때까지 전송할 수 없습니다. 잠시 후 다시 시도해 주세요."
+            if fail_closed
+            else "내용을 한 번 더 직접 확인한 뒤 전송해 주세요."
+        ),
+        can_override=not fail_closed,
+        delay_seconds=0,
+        operator_review_recommended=False,
+        available=False,
+        categories=(),
+        severity=Severity.NONE,
+    )
+
+
+def _sorted_categories(
+    categories: set[ModerationCategory] | frozenset[ModerationCategory],
+) -> tuple[ModerationCategory, ...]:
+    return tuple(sorted(categories, key=lambda category: category.value))
 
 
 async def classify_normalized(
