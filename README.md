@@ -1,5 +1,10 @@
 # AI Builder Sprint 2026
 
+## SlowTalk 제출 자료
+
+- [AI 활용 증빙 — Upstage Document Parse, Solar Chat, Solar Embedding](AI_USAGE_EVIDENCE.md)
+- [Android 앱 시연 영상](docs/demo/slowtalk-demo.mp4)
+
 > 총 168시간, AI와 함께 만드는 도전
 
 ## 대회 소개
