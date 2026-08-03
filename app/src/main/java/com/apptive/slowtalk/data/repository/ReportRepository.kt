@@ -30,7 +30,7 @@ class ReportRepository(private val api: ReportApi = RetrofitClient.reportApi) {
 
     suspend fun performOcr(imageFile: File): Result<String> {
         return runCatching {
-            val requestFile = imageFile.asRequestBody("image/*".toMediaTypeOrNull())
+            val requestFile = imageFile.asRequestBody(imageFile.ocrMediaType())
             val body = MultipartBody.Part.createFormData("image", imageFile.name, requestFile)
             apiModerated(OcrResponse.serializer()) {
                 api.performOcr(body)
@@ -46,3 +46,10 @@ class ReportRepository(private val api: ReportApi = RetrofitClient.reportApi) {
         }
     }
 }
+
+private fun File.ocrMediaType() = when (extension.lowercase()) {
+    "jpg", "jpeg" -> "image/jpeg"
+    "png" -> "image/png"
+    "webp" -> "image/webp"
+    else -> error("지원하지 않는 이미지 형식입니다: .$extension")
+}.toMediaTypeOrNull()
