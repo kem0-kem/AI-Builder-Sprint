@@ -36,6 +36,44 @@ class Severity(StrEnum):
     CRITICAL = "CRITICAL"
 
 
+class SafetyInterventionLevel(StrEnum):
+    SAFE = "SAFE"
+    CAUTION = "CAUTION"
+    INTERVENTION = "INTERVENTION"
+    BLOCK = "BLOCK"
+    EMERGENCY = "EMERGENCY"
+
+
+class SafetyCheckRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    content_type: ContentType = Field(alias="contentType")
+    text: str = Field(min_length=1, max_length=5_000)
+
+
+class SafetyCheckResult(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    level: SafetyInterventionLevel
+    title: str
+    message: str
+    can_override: bool = Field(alias="canOverride")
+    delay_seconds: int = Field(alias="delaySeconds", ge=0, le=30)
+    operator_review_recommended: bool = Field(
+        alias="operatorReviewRecommended"
+    )
+    available: bool = True
+    categories: tuple[ModerationCategory, ...] = ()
+    severity: Severity
+
+
+class SafetyCheckEnvelope(BaseModel):
+    ok: bool = True
+    data: SafetyCheckResult
+    error: None = None
+    meta: None = None
+
+
 class ModerationAssessment(BaseModel):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 

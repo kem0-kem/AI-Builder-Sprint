@@ -45,12 +45,38 @@ flowchart LR
 
 ## 2. Upstage Solar Chat 안전성 분류
 
-Solar Chat에는 원문을 생성시키는 대신 엄격한 JSON 분류를 요청합니다. 결과는 `ALLOW`, `REVIEW`, `BLOCK`으로 정규화하며 혐오, 괴롭힘, 성적 콘텐츠, 폭력, 자해, 개인정보, 스팸 범주와 심각도·신뢰도·사유를 함께 처리합니다.
+Solar Chat에는 원문을 생성시키는 대신 엄격한 JSON 분류를 요청합니다. 모델 출력은 `decision`, `categories`, `severity`, `confidence`, `reason` 구조로 검증한 뒤 `ALLOW`, `REVIEW`, `BLOCK`으로 정규화합니다. 분류 범주는 혐오, 괴롭힘, 성적 콘텐츠, 폭력, 자해, 개인정보, 스팸이며 심각도와 신뢰도 임계값도 함께 적용합니다.
+
+### 앱의 4단계 안전 개입
+
+Android 앱은 편지, 피드와 채팅 메시지의 최종 작성 API를 호출하기 전에 `POST /api/v1/moderation/check`로 사전검사를 수행합니다. 이 엔드포인트는 분류 결과를 반환할 뿐 입력 원문이나 제출 상태를 마음잇기 데이터베이스에 저장하지 않으며, 실제 콘텐츠 생성도 수행하지 않습니다. 입력 원문은 안전성 분류 목적으로 Upstage API에 전송되므로 “서비스 DB 비저장”과 “외부 처리 없음”을 구분합니다.
+
+| 사용자 단계 | 구조화 분류 매핑 | 앱 동작 |
+| --- | --- | --- |
+| **주의 (`CAUTION`)** | 낮은 심각도의 `REVIEW` | 표현 재확인 안내. 즉시 수정하거나 그대로 전송 가능 |
+| **개입 (`INTERVENTION`)** | 낮음보다 높은 심각도의 `REVIEW` | 5초 숙려 후 전송 가능, 또는 수정 |
+| **차단 (`BLOCK`)** | 신뢰도 정책 적용 후 `BLOCK` | 그대로 전송 불가, 수정만 가능 |
+| **긴급 (`EMERGENCY`)** | `SELF_HARM` 또는 `VIOLENCE`와 `CRITICAL`의 조합 | 전송 불가. 자살예방상담전화 **109**, 경찰 **112**, 구급·소방 **119** 안내 표시 |
+
+```mermaid
+flowchart LR
+    A["편지·피드·채팅 입력"] --> B["비저장 /moderation/check"]
+    B --> C["Solar Chat 구조화 JSON 분류"]
+    C --> D["주의 / 개입 / 차단 / 긴급 UI"]
+    D --> E["사용자의 수정 또는 허용된 경우 최종 전송"]
+    E --> F["원래 작성 API의 별도 모더레이션 정책"]
+```
+
+이 개입은 콘텐츠 위험도를 조절하기 위한 장치입니다. AI 판정만으로 계정을 자동 정지·탈퇴시키거나 사용자에게 자동 제재를 누적하지 않습니다. `BLOCK`과 `EMERGENCY` 응답의 `operatorReviewRecommended`는 앱에서 “운영자 검토가 권고됨”을 알리는 신호이며, **비저장 사전검사 자체가 운영자 검토 제출을 생성하지는 않습니다.**
 
 - [Solar Chat 호출과 구조화 응답 파싱](backend/app/moderation/upstage_gateway.py#L12-L154)
+- [비저장 사전검사 API와 응답 스키마](backend/app/moderation/router.py)
+- [4단계 판정 매핑](backend/app/moderation/service.py)
+- [Android 공통 개입 UI](app/src/main/java/com/apptive/slowtalk/Components.kt)
 - [모더레이션 처리 워커](backend/app/moderation/worker.py)
 - [민감정보 로그 마스킹](backend/app/core/redaction.py)
 - [Solar Chat 응답·오류·프라이버시 테스트](backend/tests/moderation/test_upstage_gateway.py)
+- [비저장 사전검사와 4단계 매핑 테스트](backend/tests/moderation/test_safety_check.py)
 - [OCR 결과 모더레이션 테스트](backend/tests/moderation/test_ocr_moderation.py)
 
 운영 준비 상태 API의 2026-08-03 응답은 다음과 같습니다. 즉, Solar Chat 모더레이션이 설정된 `shadow` 상태이며 로컬 fallback으로 대체되지 않았습니다.
@@ -64,7 +90,9 @@ Solar Chat에는 원문을 생성시키는 대신 엄격한 JSON 분류를 요�
 }
 ```
 
-`shadow` 모드는 사용자 요청을 차단하지 않으면서 실제 분류 결과를 관찰하는 안전한 도입 단계입니다. 검증 후 `enforce`로 전환할 수 있습니다.
+`shadow` 모드는 사용자 요청을 차단하지 않으면서 실제 분류 결과를 관찰하는 안전한 도입 단계입니다. 현재도 앱의 비저장 사전검사와 4단계 UI는 동작하지만, 사전검사 후 사용자가 보낸 원래 작성 요청은 서버에서 모더레이션 결과 때문에 보류되거나 차단되지 않습니다.
+
+실제 서버 강제는 `MODERATION_MODE=enforce`에서만 적용됩니다. 이때 원래 작성 API에서 `REVIEW`로 판정된 명령은 암호화 저장되고 `202 PENDING_REVIEW`로 보류되며, `BLOCK`은 `422 CONTENT_POLICY_VIOLATION`으로 거절됩니다. 즉, 앱의 사전 안내와 서버의 저장·보류·차단은 서로 다른 요청 경계입니다. 운영자 검토 대기열도 `enforce`의 실제 제출 흐름에서 생성되며, 사전검사 호출만으로는 생성되지 않습니다.
 
 ### Solar Chat 글쓰기 피드백
 

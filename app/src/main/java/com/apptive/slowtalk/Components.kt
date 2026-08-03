@@ -22,13 +22,23 @@ import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.PersonOutline
+import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -37,6 +47,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 
 @Composable
 fun PaperBackground(content: @Composable () -> Unit) {
@@ -200,4 +211,91 @@ fun SectionTitle(title: String, action: String? = null, onAction: (() -> Unit)? 
             )
         }
     }
+}
+
+@Composable
+fun SafetyInterventionDialog(
+    intervention: SafetyIntervention,
+    onEdit: () -> Unit,
+    onProceed: () -> Unit
+) {
+    var secondsRemaining by remember(intervention) {
+        mutableIntStateOf(intervention.delaySeconds)
+    }
+    LaunchedEffect(intervention) {
+        while (secondsRemaining > 0) {
+            delay(1_000)
+            secondsRemaining--
+        }
+    }
+    val accent = when (intervention.level) {
+        SafetyLevel.CAUTION -> Color(0xFFD79224)
+        SafetyLevel.INTERVENTION -> Color(0xFFE06B38)
+        SafetyLevel.BLOCK -> Color(0xFFD95C55)
+        SafetyLevel.EMERGENCY -> Color(0xFFB72D46)
+        SafetyLevel.SAFE -> Purple
+    }
+
+    AlertDialog(
+        onDismissRequest = onEdit,
+        icon = { Icon(Icons.Outlined.WarningAmber, null, tint = accent) },
+        title = { Text(intervention.title, fontWeight = FontWeight.ExtraBold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(intervention.message, color = Ink)
+                if (!intervention.available) {
+                    Text(
+                        "AI 안전 확인이 일시적으로 불가능합니다.",
+                        color = accent,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                if (intervention.operatorReviewRecommended) {
+                    Text(
+                        "중대한 위험 표현은 운영자 검토 대상이 될 수 있습니다.",
+                        color = accent,
+                        fontSize = 12.sp
+                    )
+                }
+                if (intervention.level == SafetyLevel.EMERGENCY) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFFFFF0F2)
+                    ) {
+                        Text(
+                            "지금 위험한 상황이라면 112 또는 119에 연락하세요. " +
+                                "자살예방상담전화 109에서도 24시간 도움을 받을 수 있습니다.",
+                            modifier = Modifier.padding(12.dp),
+                            color = Color(0xFF8E2235),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (intervention.canOverride) {
+                Button(
+                    onClick = onProceed,
+                    enabled = secondsRemaining == 0,
+                    colors = ButtonDefaults.buttonColors(containerColor = accent)
+                ) {
+                    Text(
+                        if (secondsRemaining > 0) {
+                            "${secondsRemaining}초 후 전송"
+                        } else {
+                            "그래도 전송"
+                        }
+                    )
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onEdit) {
+                Text("수정하기", color = Ink, fontWeight = FontWeight.Bold)
+            }
+        }
+    )
 }

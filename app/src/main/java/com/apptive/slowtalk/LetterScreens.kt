@@ -68,6 +68,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -86,6 +87,7 @@ import com.apptive.slowtalk.ui.profile.ProfileUiState
 import com.apptive.slowtalk.ui.profile.ProfileViewModel
 import java.io.File
 import java.io.FileOutputStream
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -116,9 +118,45 @@ fun WriteLetterScreen(
     var selectedDistrict by remember { mutableStateOf(currentProfile?.region?.district ?: "마포구") }
     var selectedNeighborhood by remember { mutableStateOf(currentProfile?.region?.subDistrict) }
     var showCompletionDialog by remember { mutableStateOf(false) }
+    var safetyIntervention by remember { mutableStateOf<SafetyIntervention?>(null) }
+    var safetyChecking by remember { mutableStateOf(false) }
+    val safetyScope = rememberCoroutineScope()
     
     var expandedLevel by remember { mutableStateOf<ResidenceLevel?>(null) }
     val locationSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    fun createLetterNow() {
+        viewModel.createLetter(
+            match = matchEnabled,
+            province = selectedProvince,
+            district = selectedDistrict,
+            subDistrict = selectedNeighborhood
+        )
+    }
+
+    fun checkSafetyAndCreateLetter() {
+        if (safetyChecking || safetyIntervention != null) return
+        safetyScope.launch {
+            safetyChecking = true
+            SafetyApi.check("LETTER", body.trim()).fold(
+                onSuccess = { result ->
+                    if (result.level == SafetyLevel.SAFE) {
+                        createLetterNow()
+                    } else {
+                        safetyIntervention = result
+                    }
+                },
+                onFailure = {
+                    Toast.makeText(
+                        context,
+                        "안전 확인에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            )
+            safetyChecking = false
+        }
+    }
 
     // OCR Launchers
     val galleryLauncher = rememberLauncherForActivityResult(
@@ -404,22 +442,21 @@ fun WriteLetterScreen(
                 }
                 item {
                     Button(
-                        onClick = { 
-                            viewModel.createLetter(
-                                match = matchEnabled,
-                                province = selectedProvince,
-                                district = selectedDistrict,
-                                subDistrict = selectedNeighborhood
-                            )
-                        },
-                        enabled = body.isNotBlank() && uiState !is LetterUiState.Loading,
+                        onClick = ::checkSafetyAndCreateLetter,
+                        enabled = body.isNotBlank() &&
+                            uiState !is LetterUiState.Loading &&
+                            !safetyChecking,
                         modifier = Modifier.fillMaxWidth().height(58.dp),
                         shape = RoundedCornerShape(28.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Purple)
                     ) {
                         Icon(Icons.Outlined.Send, null)
                         Text(
-                            text = if (matchEnabled) "  편지 보내기" else "  편지 기록하기",
+                            text = when {
+                                safetyChecking -> "  안전 확인 중..."
+                                matchEnabled -> "  편지 보내기"
+                                else -> "  편지 기록하기"
+                            },
                             fontWeight = FontWeight.Bold,
                             fontSize = 17.sp
                         )
@@ -526,6 +563,17 @@ fun WriteLetterScreen(
                 }
             }
         }
+    }
+
+    safetyIntervention?.let { intervention ->
+        SafetyInterventionDialog(
+            intervention = intervention,
+            onEdit = { safetyIntervention = null },
+            onProceed = {
+                safetyIntervention = null
+                createLetterNow()
+            }
+        )
     }
 
     if (showCompletionDialog) {
