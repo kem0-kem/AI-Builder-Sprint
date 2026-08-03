@@ -17,7 +17,7 @@
 | Upstage 기능 | SlowTalk 적용 지점 | 모델/호출 | 현재 상태 |
 | --- | --- | --- | --- |
 | **Document Parse** | 편지 쓰기·회고 리포트에서 카메라/갤러리 이미지의 문자를 입력란에 반영 | `POST /v1/document-digitization`, `document-parse`, `ocr=force` | **앱-운영 백엔드 연결 완료** |
-| **Solar Chat** | 편지, 피드, 댓글, 채팅, OCR 결과 등 사용자 생성 콘텐츠 안전성 분류 | `POST /v1/chat/completions`, `UPSTAGE_CHAT_MODEL` | **운영 `shadow` 모드**, Upstage 설정 확인, fallback 미사용 |
+| **Solar Chat** | 편지·피드·회고의 내용별 글쓰기 피드백 및 사용자 생성 콘텐츠 안전성 분류 | `POST /v1/chat/completions`, `UPSTAGE_CHAT_MODEL` | 글쓰기 피드백 연결 완료, 모더레이션은 **운영 `shadow` 모드** |
 | **Solar Embedding** | 편지와 사용자 선호 벡터를 만들어 의미적으로 가까운 이웃 후보 검색 | `POST /v1/embeddings`, `embedding-query` / `embedding-passage`, 1,024차원 | 구현·테스트 완료, `MATCHING_MODE`로 `disabled/shadow/enforce` 제어 |
 
 API 키 값은 저장소와 로그에 남기지 않고 운영 환경 변수 `UPSTAGE_API_KEY`로만 주입합니다.
@@ -66,6 +66,13 @@ Solar Chat에는 원문을 생성시키는 대신 엄격한 JSON 분류를 요�
 
 `shadow` 모드는 사용자 요청을 차단하지 않으면서 실제 분류 결과를 관찰하는 안전한 도입 단계입니다. 검증 후 `enforce`로 전환할 수 있습니다.
 
+### Solar Chat 글쓰기 피드백
+
+편지·피드·회고 본문과 작성 맥락을 Solar Chat에 전달하고, 해당 글에서 발견한 구체적인 감정·장면·주제를 요약과 1~3개의 수정 제안으로 받습니다. 모델 출력은 엄격한 JSON 스키마로 검증하며, 사용자 글 안의 지시문은 명령이 아닌 분석 대상 텍스트로 취급합니다.
+
+- [Solar Chat 글쓰기 프롬프트·호출·응답 검증](backend/app/ai/gateway.py)
+- [입력 내용별 피드백 및 오류 처리 테스트](backend/tests/ai/test_upstage_writing_assistant.py)
+
 ## 3. Upstage Solar Embedding 의미 매칭
 
 단순 키워드 일치가 아니라 편지 내용과 사용자 선호를 1,024차원 벡터로 표현해 코사인 유사도가 높은 후보를 검색합니다. 쿼리와 문서 목적에 맞춰 Upstage의 `embedding-query`, `embedding-passage` 별칭을 구분하고, 잘못된 차원이나 응답 순서는 즉시 오류로 처리합니다.
@@ -86,7 +93,7 @@ Solar Chat에는 원문을 생성시키는 대신 엄격한 JSON 분류를 요�
 | `UPSTAGE_API_KEY` | 모든 Upstage API 인증 | 값 미포함 |
 | `UPSTAGE_BASE_URL` | Upstage API 주소 | `https://api.upstage.ai/v1` |
 | `UPSTAGE_DOCUMENT_MODEL` | OCR 문서 모델 | `document-parse` |
-| `UPSTAGE_CHAT_MODEL` | 안전성 분류 Solar 모델 | 운영 환경에서 지정 |
+| `UPSTAGE_CHAT_MODEL` | 글쓰기 피드백·안전성 분류 Solar 모델 | 운영 환경에서 지정 |
 | `UPSTAGE_EMBEDDING_MODEL` | 의미 벡터 모델 | `solar-embedding-2` |
 | `MODERATION_MODE` | 모더레이션 관찰/강제 | `shadow` 또는 `enforce` |
 | `MATCHING_MODE` | 의미 매칭 비활성/관찰/강제 | `disabled`, `shadow`, `enforce` |
@@ -105,9 +112,9 @@ backend\.venv\Scripts\pytest.exe `
   backend\tests\moderation\test_ocr_moderation.py -q
 ```
 
-결과: **65 passed**
+결과: **72 passed**
 
-검증 범위에는 multipart 파일 전송, MIME 타입, OCR 응답 정규화, Solar Chat JSON 파싱, Upstage 오류 매핑, 민감정보 비노출, embedding 순서와 1,024차원 검증이 포함됩니다. 시연 영상에서는 실제 Android 앱의 갤러리 이미지를 편지 입력란으로 변환하는 전체 흐름을 확인할 수 있습니다.
+검증 범위에는 multipart 파일 전송, MIME 타입, OCR 응답 정규화, 입력별 Solar Chat 글쓰기 피드백, Solar Chat JSON 파싱, Upstage 오류 매핑, 민감정보 비노출, embedding 순서와 1,024차원 검증이 포함됩니다. 시연 영상에서는 실제 Android 앱의 갤러리 이미지를 편지 입력란으로 변환하는 전체 흐름을 확인할 수 있습니다.
 
 ### 시연 영상 구성
 
@@ -120,8 +127,8 @@ backend\.venv\Scripts\pytest.exe `
 
 ## 6. AI 사용 범위에 대한 명시
 
-- **Upstage 사용으로 산정하는 기능:** Document Parse OCR, Solar Chat 안전성 분류, Solar Embedding 의미 매칭 구현.
-- **Upstage 사용으로 산정하지 않는 기능:** 현재 편지/피드의 문장 피드백 문구는 [로컬 결정적 fallback](backend/app/ai/gateway.py#L31-L46)을 사용합니다. `UpstageWritingAssistant.feedback()`도 현재 이 fallback에 위임하므로, 해당 UI를 Solar LLM 생성 기능으로 주장하지 않습니다.
+- **Upstage 사용으로 산정하는 기능:** Document Parse OCR, Solar Chat 글쓰기 피드백·안전성 분류, Solar Embedding 의미 매칭 구현.
+- **로컬 fallback 범위:** `UPSTAGE_API_KEY` 또는 `UPSTAGE_CHAT_MODEL`이 없는 개발 환경에서만 결정적 fallback을 사용합니다. 운영 설정이 완료된 환경에서는 편지·피드·회고의 실제 본문을 Solar Chat이 분석합니다.
 - 앱의 인증, 피드 CRUD, 댓글, 채팅방, 메시지, 시간 표기 등 일반 기능은 AI가 아닌 제품 백엔드·프론트엔드 기능입니다.
 
 ## 7. AI 개발 도구 활용

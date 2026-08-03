@@ -43,7 +43,12 @@ async def analyze_report(
     session: Session,
     assistant: Assistant,
 ) -> dict[str, object]:
-    result = await assistant.feedback(WritingContext.REPORT, None, request.content)
+    try:
+        result = await assistant.feedback(WritingContext.REPORT, None, request.content)
+    except TimeoutError as exc:
+        raise ApiError(
+            "AI_SERVICE_UNAVAILABLE", "AI 글 분석 서비스를 사용할 수 없습니다.", 503
+        ) from exc
     cards = [
         {"type": "TODAY_LEARNING", "content": result.suggestions[0]},
         {"type": "TOMORROW_PROMISE", "content": "내일 실천할 작은 행동을 정해 보세요."},

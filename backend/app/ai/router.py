@@ -96,7 +96,12 @@ async def report_ocr(
 async def letter_feedback(
     request: TextFeedbackRequest, _: CurrentUserId, assistant: Assistant
 ) -> dict[str, object]:
-    result = await assistant.feedback(WritingContext.LETTER, None, request.content)
+    try:
+        result = await assistant.feedback(WritingContext.LETTER, None, request.content)
+    except TimeoutError as exc:
+        raise ApiError(
+            "AI_SERVICE_UNAVAILABLE", "AI 글 분석 서비스를 사용할 수 없습니다.", 503
+        ) from exc
     return success(result.model_dump())
 
 
@@ -104,5 +109,10 @@ async def letter_feedback(
 async def feed_feedback(
     request: FeedFeedbackRequest, _: CurrentUserId, assistant: Assistant
 ) -> dict[str, object]:
-    result = await assistant.feedback(WritingContext.FEED, request.title, request.content)
+    try:
+        result = await assistant.feedback(WritingContext.FEED, request.title, request.content)
+    except TimeoutError as exc:
+        raise ApiError(
+            "AI_SERVICE_UNAVAILABLE", "AI 글 분석 서비스를 사용할 수 없습니다.", 503
+        ) from exc
     return success(result.model_dump())

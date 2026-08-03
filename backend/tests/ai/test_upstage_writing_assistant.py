@@ -1,7 +1,9 @@
+import json
+
 import httpx
 import pytest
 
-from app.ai.gateway import UpstageWritingAssistant
+from app.ai.gateway import UpstageWritingAssistant, WritingContext
 
 
 @pytest.mark.asyncio
@@ -68,3 +70,168 @@ async def test_ocr_maps_provider_errors_without_leaking_response() -> None:
             await assistant.ocr(b"\xff\xd8\xffcontent", "image/jpeg")
 
     assert marker not in str(caught.value)
+
+
+@pytest.mark.asyncio
+async def test_feedback_sends_draft_to_solar_and_returns_structured_feedback() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/chat/completions"
+        assert request.headers["Authorization"] == "Bearer test-key"
+        payload = json.loads((await request.aread()).decode("utf-8"))
+        assert payload["model"] == "solar-pro"
+        assert payload["temperature"] == 0.3
+        submitted = json.loads(payload["messages"][1]["content"])
+        assert submitted == {
+            "context": "LETTER",
+            "title": None,
+            "draft": "비가 그친 뒤 골목의 풀 냄새가 좋았다.",
+        }
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "summary": "비가 갠 골목에서 발견한 산뜻함이 중심인 편지예요.",
+                                    "suggestions": [
+                                        "풀 냄새를 맡았을 때 떠오른 감정을 한 문장 덧붙여 보세요.",
+                                        "비가 오기 전과 후의 골목 모습을 대비해 보세요.",
+                                    ],
+                                },
+                                ensure_ascii=False,
+                            )
+                        }
+                    }
+                ]
+            },
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="https://api.upstage.ai/v1"
+    ) as client:
+        assistant = UpstageWritingAssistant(
+            client=client,
+            api_key="test-key",
+            document_model="document-parse",
+            chat_model="solar-pro",
+        )
+        result = await assistant.feedback(
+            WritingContext.LETTER,
+            None,
+            "비가 그친 뒤 골목의 풀 냄새가 좋았다.",
+        )
+
+    assert "골목" in result.summary
+    assert len(result.suggestions) == 2
+
+
+@pytest.mark.asyncio
+async def test_feedback_varies_with_the_submitted_draft() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads((await request.aread()).decode("utf-8"))
+        draft = json.loads(payload["messages"][1]["content"])["draft"]
+        topic = "산책" if "산책" in draft else "요리"
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "summary": f"{topic}에서 찾은 기쁨이 잘 드러나요.",
+                                    "suggestions": [f"{topic}의 구체적인 장면을 더 적어 보세요."],
+                                },
+                                ensure_ascii=False,
+                            )
+                        }
+                    }
+                ]
+            },
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="https://api.upstage.ai/v1"
+    ) as client:
+        assistant = UpstageWritingAssistant(
+            client=client,
+            api_key="test-key",
+            document_model="document-parse",
+            chat_model="solar-pro",
+        )
+        walking = await assistant.feedback(
+            WritingContext.LETTER, None, "강변을 산책하니 마음이 가벼워졌다."
+        )
+        cooking = await assistant.feedback(
+            WritingContext.LETTER, None, "가족과 함께 요리해서 즐거웠다."
+        )
+
+    assert walking.summary != cooking.summary
+    assert walking.suggestions != cooking.suggestions
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx.Response(503, text="private-provider-response"),
+        httpx.Response(200, content=b"not-json"),
+        httpx.Response(200, json={"choices": []}),
+        httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {"summary": "분석", "suggestions": []},
+                                ensure_ascii=False,
+                            )
+                        }
+                    }
+                ]
+            },
+        ),
+    ],
+)
+async def test_feedback_maps_provider_failures_without_leaking_content(
+    response: httpx.Response,
+) -> None:
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        return response
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="https://api.upstage.ai/v1"
+    ) as client:
+        assistant = UpstageWritingAssistant(
+            client=client,
+            api_key="test-key",
+            document_model="document-parse",
+            chat_model="solar-pro",
+        )
+        with pytest.raises(TimeoutError) as caught:
+            await assistant.feedback(WritingContext.LETTER, None, "private-draft-marker")
+
+    rendered = str(caught.value) + repr(caught.value)
+    assert "private-draft-marker" not in rendered
+    assert "private-provider-response" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_feedback_uses_local_fallback_only_without_chat_model() -> None:
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        raise AssertionError("Solar must not be called without a configured chat model")
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="https://api.upstage.ai/v1"
+    ) as client:
+        assistant = UpstageWritingAssistant(
+            client=client,
+            api_key="test-key",
+            document_model="document-parse",
+        )
+        result = await assistant.feedback(WritingContext.LETTER, None, "개발 환경 편지")
+
+    assert result.summary == "편지의 흐름이 자연스럽습니다."
