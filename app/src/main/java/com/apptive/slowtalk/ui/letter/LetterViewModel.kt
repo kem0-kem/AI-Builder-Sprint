@@ -14,7 +14,7 @@ import java.io.File
 sealed class LetterUiState {
     object Idle : LetterUiState()
     object Loading : LetterUiState()
-    object Success : LetterUiState()
+    data class Success(val chatRoomId: String?) : LetterUiState()
     data class OcrSuccess(val content: String) : LetterUiState()
     data class Error(val message: String) : LetterUiState()
 }
@@ -62,8 +62,8 @@ class LetterViewModel(
                 content = _content.value,
                 match = match,
                 region = RegionDto(province, district, subDistrict)
-            ).onSuccess {
-                _uiState.value = LetterUiState.Success
+            ).onSuccess { response ->
+                _uiState.value = LetterUiState.Success(response.chatRoom?.id)
             }.onFailure {
                 _uiState.value = LetterUiState.Error(it.message ?: "편지 저장 실패")
             }

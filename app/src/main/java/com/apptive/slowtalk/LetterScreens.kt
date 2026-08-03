@@ -94,7 +94,7 @@ fun WriteLetterScreen(
     profileViewModel: ProfileViewModel,
     onBack: () -> Unit,
     onHistory: () -> Unit,
-    onMatched: () -> Unit,
+    onMatched: (String) -> Unit,
     onTab: (MainTab) -> Unit
 ) {
     val context = LocalContext.current
@@ -112,10 +112,11 @@ fun WriteLetterScreen(
     
     var matchEnabled by remember { mutableStateOf(true) }
     var showLocationSheet by remember { mutableStateOf(false) }
-    var selectedProvince by remember { mutableStateOf(currentProfile?.region?.province?.name ?: "서울특별시") }
-    var selectedDistrict by remember { mutableStateOf(currentProfile?.region?.district?.name ?: "마포구") }
+    var selectedProvince by remember { mutableStateOf(currentProfile?.region?.province?.name.orEmpty()) }
+    var selectedDistrict by remember { mutableStateOf(currentProfile?.region?.district?.name.orEmpty()) }
     var selectedNeighborhood by remember { mutableStateOf(currentProfile?.region?.subDistrict?.name) }
     var showCompletionDialog by remember { mutableStateOf(false) }
+    var matchedChatRoomId by remember { mutableStateOf<String?>(null) }
     
     var expandedLevel by remember { mutableStateOf<ResidenceLevel?>(null) }
     val locationSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -144,6 +145,7 @@ fun WriteLetterScreen(
 
     LaunchedEffect(uiState) {
         if (uiState is LetterUiState.Success) {
+            matchedChatRoomId = (uiState as LetterUiState.Success).chatRoomId
             showCompletionDialog = true
             viewModel.resetState()
         }
@@ -536,7 +538,8 @@ fun WriteLetterScreen(
             confirmButton = {
                 Button(onClick = { 
                     showCompletionDialog = false
-                    if (matchEnabled) onMatched() else onHistory()
+                    val roomId = matchedChatRoomId
+                    if (matchEnabled && roomId != null) onMatched(roomId) else onHistory()
                 }) {
                     Text(if (matchEnabled) "대화방으로 가기" else "보관함으로 가기")
                 }
@@ -685,7 +688,7 @@ fun ProfileEditScreen(
     
     val currentProfile = (uiState as? ProfileUiState.Success)?.profile
 
-    var nickname by remember { mutableStateOf(currentProfile?.nickname ?: "지연") }
+    var nickname by remember { mutableStateOf(currentProfile?.nickname.orEmpty()) }
     var intro by remember { mutableStateOf(currentProfile?.bio ?: "") }
     
     // 지역 정보 파싱 (기존 로직 유지하되 서버 데이터 우선)
@@ -696,14 +699,14 @@ fun ProfileEditScreen(
             append(it.region?.district?.name.orEmpty())
             it.region?.subDistrict?.name?.let { sub -> append(" "); append(sub) }
         }
-    } ?: "서울특별시 마포구"
+    }.orEmpty()
 
     val initialParts = remember(serverLocation) { serverLocation.split(" ") }
     
     var location by remember(serverLocation) { mutableStateOf(serverLocation) }
     var showLocation by remember { mutableStateOf(false) }
-    var selectedProvince by remember(serverLocation) { mutableStateOf(initialParts.getOrNull(0) ?: "서울특별시") }
-    var selectedDistrict by remember(serverLocation) { mutableStateOf(initialParts.getOrNull(1) ?: "마포구") }
+    var selectedProvince by remember(serverLocation) { mutableStateOf(initialParts.getOrNull(0).orEmpty()) }
+    var selectedDistrict by remember(serverLocation) { mutableStateOf(initialParts.getOrNull(1).orEmpty()) }
     var selectedNeighborhood by remember(serverLocation) { mutableStateOf(initialParts.getOrNull(2)) }
     
     var expandedLevel by remember { mutableStateOf<ResidenceLevel?>(null) }
@@ -767,7 +770,7 @@ fun ProfileEditScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                         androidx.compose.foundation.Image(
                             painter = painterResource(R.drawable.profile_avatar),
-                            contentDescription = "지연 프로필 사진",
+                            contentDescription = "프로필 사진",
                             modifier = Modifier.size(108.dp).clip(CircleShape),
                             contentScale = ContentScale.Crop
                         )
@@ -998,41 +1001,6 @@ private enum class ResidenceLevel {
     DISTRICT,
     NEIGHBORHOOD
 }
-
-private val residenceDistricts = linkedMapOf(
-    "서울특별시" to listOf("마포구", "서대문구", "은평구", "종로구", "중구", "용산구", "성동구", "광진구", "강남구", "송파구"),
-    "부산광역시" to listOf("해운대구", "수영구", "부산진구", "동래구", "남구", "북구"),
-    "대구광역시" to listOf("중구", "동구", "서구", "남구", "북구", "수성구", "달서구"),
-    "인천광역시" to listOf("중구", "동구", "미추홀구", "연수구", "남동구", "부평구", "서구"),
-    "광주광역시" to listOf("동구", "서구", "남구", "북구", "광산구"),
-    "대전광역시" to listOf("동구", "중구", "서구", "유성구", "대덕구"),
-    "울산광역시" to listOf("중구", "남구", "동구", "북구", "울주군"),
-    "세종특별자치시" to listOf("세종시"),
-    "경기도" to listOf("수원시", "성남시", "고양시", "용인시", "부천시", "안양시", "남양주시", "화성시"),
-    "강원특별자치도" to listOf("춘천시", "원주시", "강릉시", "속초시", "동해시", "홍천군"),
-    "충청북도" to listOf("청주시", "충주시", "제천시", "음성군", "진천군"),
-    "충청남도" to listOf("천안시", "공주시", "보령시", "아산시", "서산시", "당진시"),
-    "전북특별자치도" to listOf("전주시", "군산시", "익산시", "정읍시", "남원시"),
-    "전라남도" to listOf("목포시", "여수시", "순천시", "나주시", "광양시"),
-    "경상북도" to listOf("포항시", "경주시", "김천시", "안동시", "구미시"),
-    "경상남도" to listOf("창원시", "진주시", "통영시", "사천시", "김해시", "양산시"),
-    "제주특별자치도" to listOf("제주시", "서귀포시")
-)
-
-private val residenceNeighborhoodData = mapOf(
-    "서울특별시|마포구" to listOf("공덕동", "아현동", "도화동", "용강동", "대흥동", "서교동", "합정동", "망원동", "연남동", "상암동"),
-    "서울특별시|서대문구" to listOf("충현동", "천연동", "신촌동", "연희동", "홍제동", "홍은동", "남가좌동", "북가좌동"),
-    "서울특별시|은평구" to listOf("녹번동", "불광동", "갈현동", "구산동", "대조동", "응암동", "역촌동", "진관동"),
-    "부산광역시|해운대구" to listOf("우동", "중동", "좌동", "송정동", "반여동", "반송동", "재송동"),
-    "대전광역시|유성구" to listOf("진잠동", "온천동", "노은동", "신성동", "전민동", "구즉동", "관평동"),
-    "경기도|수원시" to listOf("장안구", "권선구", "팔달구", "영통구"),
-    "경기도|성남시" to listOf("수정구", "중원구", "분당구"),
-    "제주특별자치도|제주시" to listOf("일도동", "이도동", "삼도동", "용담동", "건입동", "화북동", "아라동", "노형동")
-)
-
-private fun residenceNeighborhoods(province: String, district: String): List<String> =
-    residenceNeighborhoodData["$province|$district"]
-        ?: listOf("중앙동", "동부동", "서부동", "남부동", "북부동")
 
 private fun buildResidenceLabel(
     province: String,

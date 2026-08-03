@@ -98,14 +98,7 @@ private fun ApptiveApp() {
             screen = nextScreen
         }
     }
-    val letters = remember {
-        listOf(
-            Letter("천천히 걸었던 하루", "오늘은 평소보다 조금 느리게 걸어봤어요.", "2026.07.22 · 15:40", true),
-            Letter("안녕하세요, 반가워요", "용기내어 편지를 써요.", "2026.07.21 · 21:10", false),
-            Letter("좋아하는 것들", "저는 책 읽는 시간을 정말 좋아해요.", "2026.07.20 · 18:25", true),
-            Letter("주말 잘 보내셨나요?", "저는 오늘 따뜻한 커피 한 잔을 마셨어요.", "2026.07.19 · 14:05", false)
-        )
-    }
+    val letters = remember { emptyList<Letter>() }
     val mainPagerState = rememberPagerState(initialPage = 1, pageCount = { 3 })
     val toggleFeedLike: (String) -> Unit = { feedId ->
         if (likingFeeds[feedId] != true) {
@@ -409,7 +402,10 @@ private fun ApptiveApp() {
                 profileViewModel = profileViewModel,
                 onBack = { screen = Screen.LetterHome },
                 onHistory = { screen = Screen.LetterHistory },
-                onMatched = { screen = Screen.Chat("익명의 이웃 05") },
+                onMatched = { roomId ->
+                    conversationIndex = 0
+                    screen = Screen.Chat("익명의 이웃", chatRoomId = roomId)
+                },
                 onTab = { screen = it.toScreen() }
             )
             Screen.LetterHistory -> LetterHistoryScreen(
