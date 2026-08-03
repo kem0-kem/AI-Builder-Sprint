@@ -38,37 +38,41 @@ internal class FeedCategoryCatalog(
     private val loader: suspend () -> List<FeedCategoryResult>,
 ) {
     private val loadMutex = Mutex()
-    private var loadAttempted = false
-    private var categoriesById: Map<String, FeedCategoryResult> = emptyMap()
+    private var cachedSnapshot: FeedCategorySnapshot? = null
 
-    suspend fun warmUp() {
-        if (loadAttempted) return
-        loadMutex.withLock {
-            if (loadAttempted) return
-            categoriesById = try {
-                loader().associateBy(FeedCategoryResult::id)
-            } catch (exception: CancellationException) {
-                throw exception
-            } catch (_: Exception) {
-                emptyMap()
-            }
-            loadAttempted = true
+    private suspend fun load(): FeedCategorySnapshot = loadMutex.withLock {
+        cachedSnapshot?.let { return@withLock it }
+        FeedCategorySnapshot(loader().associateBy(FeedCategoryResult::id)).also {
+            cachedSnapshot = it
         }
     }
 
     suspend fun categories(): List<FeedCategoryResult> {
-        warmUp()
-        return categoriesById.values.toList()
+        return load().categories
     }
 
-    suspend fun toFeedPost(feed: FeedTimelineDto): FeedPost {
-        warmUp()
-        return feed.toFeedPost(categoriesById[feed.categoryId]?.name)
+    suspend fun snapshotOrEmpty(): FeedCategorySnapshot = try {
+        load()
+    } catch (exception: CancellationException) {
+        throw exception
+    } catch (_: Exception) {
+        FeedCategorySnapshot.EMPTY
     }
+}
 
-    suspend fun categoryName(categoryId: String): String? {
-        warmUp()
-        return categoriesById[categoryId]?.name
+internal class FeedCategorySnapshot(
+    private val categoriesById: Map<String, FeedCategoryResult>,
+) {
+    val categories: List<FeedCategoryResult>
+        get() = categoriesById.values.toList()
+
+    fun toFeedPost(feed: FeedTimelineDto): FeedPost =
+        feed.toFeedPost(categoriesById[feed.categoryId]?.name)
+
+    fun categoryName(categoryId: String): String? = categoriesById[categoryId]?.name
+
+    companion object {
+        val EMPTY = FeedCategorySnapshot(emptyMap())
     }
 }
 
@@ -109,29 +113,29 @@ object FeedApi {
         }
 
     suspend fun getMyFeeds(): Result<List<MyFeedResult>> = runCatching {
-        categoryCatalog.warmUp()
+        val categorySnapshot = categoryCatalog.snapshotOrEmpty()
         apiData { RetrofitClient.feedApi.getMyFeeds() }.map { item ->
             MyFeedResult(
-                post = categoryCatalog.toFeedPost(item).copy(isMine = true),
+                post = categorySnapshot.toFeedPost(item).copy(isMine = true),
                 liked = item.liked
             )
         }
     }
 
     suspend fun getFeeds(): Result<List<MyFeedResult>> = runCatching {
-        categoryCatalog.warmUp()
+        val categorySnapshot = categoryCatalog.snapshotOrEmpty()
         apiData { RetrofitClient.feedApi.getFeeds() }.map { item ->
             MyFeedResult(
-                post = categoryCatalog.toFeedPost(item),
+                post = categorySnapshot.toFeedPost(item),
                 liked = item.liked
             )
         }
     }
 
     suspend fun getFeedDetail(feedId: String): Result<FeedDetailResult> = runCatching {
-        categoryCatalog.warmUp()
+        val categorySnapshot = categoryCatalog.snapshotOrEmpty()
         apiData { RetrofitClient.feedApi.getFeed(feedId) }.let { item ->
-            val category = categoryCatalog.categoryName(item.categoryId)?.let(::appCategoryName) ?: "기타"
+            val category = categorySnapshot.categoryName(item.categoryId)?.let(::appCategoryName) ?: "기타"
             FeedDetailResult(
                 post = FeedPost(
                     id = item.id,
