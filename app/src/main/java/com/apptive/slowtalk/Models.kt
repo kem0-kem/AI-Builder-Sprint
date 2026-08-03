@@ -34,6 +34,7 @@ data class FeedPost(
     val title: String,
     val body: String,
     val comments: MutableList<Comment> = mutableListOf(),
+    val commentCount: Int = 0,
     val accent: Color,
     val isMine: Boolean = false
 )
@@ -46,6 +47,8 @@ data class Comment(
     val replies: List<Comment> = emptyList(),
     val id: String? = null
 )
+
+internal fun List<Comment>.treeCount(): Int = sumOf { 1 + it.replies.treeCount() }
 
 data class Conversation(
     val title: String,

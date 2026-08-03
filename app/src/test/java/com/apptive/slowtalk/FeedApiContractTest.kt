@@ -3,7 +3,9 @@ package com.apptive.slowtalk
 import com.apptive.slowtalk.data.remote.CommentContentRequest
 import com.apptive.slowtalk.data.remote.CommentCreateRequest
 import com.apptive.slowtalk.data.remote.FeedApiService
+import com.apptive.slowtalk.data.remote.FeedCreateRequest
 import com.apptive.slowtalk.data.remote.FeedReportCreateRequest
+import com.apptive.slowtalk.data.remote.FeedUpdateRequest
 import com.apptive.slowtalk.data.remote.apiJson
 import kotlinx.coroutines.runBlocking
 import okhttp3.MediaType.Companion.toMediaType
@@ -44,6 +46,44 @@ class FeedApiContractTest {
             "/api/v1/feeds?scope=mine&cursor=$FEED_ID&limit=10&categoryId=$CATEGORY_ID",
             server.takeRequest().path,
         )
+    }
+
+    @Test
+    fun `feed create detail update and delete use backend contract`() = runBlocking {
+        server.enqueue(jsonResponse(FEED_RESPONSE, 201))
+        server.enqueue(jsonResponse(FEED_RESPONSE))
+        server.enqueue(jsonResponse(FEED_RESPONSE))
+        server.enqueue(MockResponse().setResponseCode(204))
+
+        api.createFeed(FeedCreateRequest(CATEGORY_ID, "hello", "body"))
+        api.getFeed(FEED_ID)
+        api.updateFeed(FEED_ID, FeedUpdateRequest(CATEGORY_ID, "edited", "new body"))
+        api.deleteFeed(FEED_ID)
+
+        server.takeRequest().let {
+            assertEquals("POST", it.method)
+            assertEquals("/api/v1/feeds", it.path)
+            assertEquals(
+                "{\"categoryId\":\"$CATEGORY_ID\",\"title\":\"hello\",\"content\":\"body\"}",
+                it.body.readUtf8(),
+            )
+        }
+        server.takeRequest().let {
+            assertEquals("GET", it.method)
+            assertEquals("/api/v1/feeds/$FEED_ID", it.path)
+        }
+        server.takeRequest().let {
+            assertEquals("PATCH", it.method)
+            assertEquals("/api/v1/feeds/$FEED_ID", it.path)
+            assertEquals(
+                "{\"categoryId\":\"$CATEGORY_ID\",\"title\":\"edited\",\"content\":\"new body\"}",
+                it.body.readUtf8(),
+            )
+        }
+        server.takeRequest().let {
+            assertEquals("DELETE", it.method)
+            assertEquals("/api/v1/feeds/$FEED_ID", it.path)
+        }
     }
 
     @Test
@@ -130,5 +170,6 @@ class FeedApiContractTest {
         const val UNLIKED_RESPONSE = """{"ok":true,"data":{"liked":false},"error":null,"meta":null}"""
         const val REPORTED_RESPONSE = """{"ok":true,"data":{"reported":true},"error":null,"meta":null}"""
         const val COMMENT_RESPONSE = """{"ok":true,"data":{"id":"$COMMENT_ID","feedId":"$FEED_ID","parentCommentId":null,"content":"hello","isMine":true,"createdAt":"2026-08-03T10:00:00Z"},"error":null,"meta":null}"""
+        const val FEED_RESPONSE = """{"ok":true,"data":{"id":"$FEED_ID","categoryId":"$CATEGORY_ID","title":"hello","content":"body","isMine":true,"liked":false,"likeCount":0,"commentCount":3,"createdAt":"2026-08-03T10:00:00Z","updatedAt":"2026-08-03T10:00:00Z"},"error":null,"meta":null}"""
     }
 }

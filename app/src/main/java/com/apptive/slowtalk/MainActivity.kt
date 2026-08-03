@@ -49,6 +49,23 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+internal enum class FeedLoadScope { ALL, MINE }
+
+internal fun mergeFeedPage(
+    existing: List<FeedPost>,
+    incoming: List<MyFeedResult>,
+    scope: FeedLoadScope,
+    append: Boolean,
+): List<FeedPost> {
+    val base = when {
+        append -> existing
+        scope == FeedLoadScope.ALL -> emptyList()
+        else -> existing.filterNot { it.isMine }
+    }
+    val incomingIds = incoming.mapTo(mutableSetOf()) { it.post.id }
+    return base.filterNot { it.id in incomingIds } + incoming.map { it.post }
+}
+
 @Composable
 private fun ApptiveApp() {
     val context = LocalContext.current
@@ -210,20 +227,18 @@ private fun ApptiveApp() {
                             onToggleLike = toggleFeedLike,
                             loadFeeds = { cursor -> FeedApi.getFeeds(cursor = cursor) },
                             onFeedsLoaded = { remoteFeeds, append ->
-                                if (!append) feeds.removeAll { !it.isMine }
-                                val incomingIds = remoteFeeds.mapTo(mutableSetOf()) { it.post.id }
-                                feeds.removeAll { !it.isMine && it.id in incomingIds }
-                                feeds.addAll(remoteFeeds.map { it.post })
+                                val merged = mergeFeedPage(feeds, remoteFeeds, FeedLoadScope.ALL, append)
+                                feeds.clear()
+                                feeds.addAll(merged)
                                 remoteFeeds.forEach { item ->
                                     likedFeeds[item.post.id] = item.liked
                                 }
                             },
                             loadMyFeeds = { cursor -> FeedApi.getMyFeeds(cursor = cursor) },
                             onMyFeedsLoaded = { remoteFeeds, append ->
-                                if (!append) feeds.removeAll { it.isMine }
-                                val incomingIds = remoteFeeds.mapTo(mutableSetOf()) { it.post.id }
-                                feeds.removeAll { it.isMine && it.id in incomingIds }
-                                feeds.addAll(remoteFeeds.map { it.post })
+                                val merged = mergeFeedPage(feeds, remoteFeeds, FeedLoadScope.MINE, append)
+                                feeds.clear()
+                                feeds.addAll(merged)
                                 remoteFeeds.forEach { item ->
                                     likedFeeds[item.post.id] = item.liked
                                 }

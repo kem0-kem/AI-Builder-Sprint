@@ -24,6 +24,7 @@ class FeedApiAdapterTest {
         assertEquals(1, comments.size)
         assertEquals(rootId, comments.single().id)
         assertEquals(replyId, comments.single().replies.single().id)
+        assertEquals(2, comments.treeCount())
     }
 
     @Test
@@ -43,6 +44,40 @@ class FeedApiAdapterTest {
         assertEquals(categoryId, post.categoryId)
         assertEquals("일상 이야기", post.category)
         assertNotEquals(categoryId, post.category)
+    }
+
+    @Test
+    fun `timeline adapter preserves server comment count`() {
+        val dto = feed(
+            "d5d13bf5-2e15-4923-8762-f2b29937ac37",
+            "00000000-0000-4000-8000-000000000001",
+        ).copy(commentCount = 7)
+
+        assertEquals(7, dto.toFeedPost("일상").commentCount)
+    }
+
+    @Test
+    fun `all refresh replaces prior items globally without duplicate ids`() {
+        val id = "00000000-0000-4000-8000-000000000001"
+        val oldMine = post(id, isMine = true, title = "old")
+        val refreshed = MyFeedResult(post(id, isMine = true, title = "new"), false)
+
+        val merged = mergeFeedPage(listOf(oldMine), listOf(refreshed), FeedLoadScope.ALL, append = false)
+
+        assertEquals(1, merged.size)
+        assertEquals("new", merged.single().title)
+    }
+
+    @Test
+    fun `mine pagination deduplicates ids across the shared feed collection`() {
+        val id = "00000000-0000-4000-8000-000000000001"
+        val existing = listOf(post(id, isMine = true, title = "old"))
+        val incoming = listOf(MyFeedResult(post(id, isMine = true, title = "new"), false))
+
+        val merged = mergeFeedPage(existing, incoming, FeedLoadScope.MINE, append = true)
+
+        assertEquals(listOf(id), merged.map { it.id })
+        assertEquals("new", merged.single().title)
     }
 
     @Test
@@ -137,5 +172,14 @@ class FeedApiAdapterTest {
         content = content,
         isMine = true,
         createdAt = "2026-08-03T10:00:00+00:00",
+    )
+
+    private fun post(id: String, isMine: Boolean, title: String) = FeedPost(
+        id = id,
+        category = "일상",
+        title = title,
+        body = "body",
+        accent = Purple,
+        isMine = isMine,
     )
 }

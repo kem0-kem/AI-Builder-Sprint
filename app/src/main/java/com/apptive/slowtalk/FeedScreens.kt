@@ -100,6 +100,7 @@ fun FeedScreen(
     onTab: (MainTab) -> Unit,
     showBottomBar: Boolean = true
 ) {
+    val context = LocalContext.current
     var isRefreshing by remember { mutableStateOf(false) }
     var selectedIndex by remember { mutableStateOf(FeedIndex.ALL) }
     var isAllFeedsLoading by remember { mutableStateOf(false) }
@@ -110,7 +111,7 @@ fun FeedScreen(
     var myNextCursor by remember { mutableStateOf<String?>(null) }
     val refreshScope = rememberCoroutineScope()
     val visibleFeeds = when (selectedIndex) {
-        FeedIndex.ALL -> feeds.filterNot { it.isMine }
+        FeedIndex.ALL -> feeds
         FeedIndex.MINE -> feeds.filter { it.isMine }
     }
 
@@ -124,6 +125,7 @@ fun FeedScreen(
             },
             onFailure = {
                 allFeedsLoadFailed = true
+                Toast.makeText(context, "전체 피드를 불러오지 못했습니다. 아래로 당겨 다시 시도해 주세요.", Toast.LENGTH_SHORT).show()
             }
         )
         isAllFeedsLoading = false
@@ -139,6 +141,7 @@ fun FeedScreen(
             },
             onFailure = {
                 myFeedsLoadFailed = true
+                Toast.makeText(context, "내 피드를 불러오지 못했습니다. 아래로 당겨 다시 시도해 주세요.", Toast.LENGTH_SHORT).show()
             }
         )
         isMyFeedsLoading = false
@@ -231,14 +234,20 @@ fun FeedScreen(
                                             loadMyFeeds(nextCursor).onSuccess { page ->
                                                 onMyFeedsLoaded(page.items, true)
                                                 myNextCursor = page.nextCursor
-                                            }.onFailure { myFeedsLoadFailed = true }
+                                            }.onFailure {
+                                                myFeedsLoadFailed = true
+                                                Toast.makeText(context, "다음 내 피드를 불러오지 못했습니다. 더 보기를 다시 눌러 주세요.", Toast.LENGTH_SHORT).show()
+                                            }
                                             isMyFeedsLoading = false
                                         } else {
                                             isAllFeedsLoading = true
                                             loadFeeds(nextCursor).onSuccess { page ->
                                                 onFeedsLoaded(page.items, true)
                                                 allNextCursor = page.nextCursor
-                                            }.onFailure { allFeedsLoadFailed = true }
+                                            }.onFailure {
+                                                allFeedsLoadFailed = true
+                                                Toast.makeText(context, "다음 피드를 불러오지 못했습니다. 더 보기를 다시 눌러 주세요.", Toast.LENGTH_SHORT).show()
+                                            }
                                             isAllFeedsLoading = false
                                         }
                                     }
@@ -490,7 +499,7 @@ private fun FeedCard(
                         tint = SubtleInk,
                         modifier = Modifier.size(19.dp)
                     )
-                    Text("  댓글 ${post.comments.size}", color = SubtleInk, fontSize = 13.sp)
+                    Text("  댓글 ${post.commentCount}", color = SubtleInk, fontSize = 13.sp)
                 }
             }
         }
@@ -1017,10 +1026,14 @@ fun FeedDetailScreen(
 
     fun commitComments(updated: List<Comment>) {
         comments = updated
-        displayedPost.comments.clear()
-        displayedPost.comments.addAll(updated)
+        val commentCount = updated.treeCount()
+        displayedPost = displayedPost.copy(
+            comments = updated.toMutableList(),
+            commentCount = commentCount,
+        )
         post.comments.clear()
         post.comments.addAll(updated)
+        onFeedLoaded(FeedDetailResult(displayedPost, isLiked))
     }
 
     fun editCommentAt(parentIndex: Int, replyIndex: Int?, content: String) {
@@ -1374,14 +1387,14 @@ fun FeedDetailScreen(
                     item {
                         FeedDetailCard(
                             post = displayedPost,
-                            commentCount = comments.size,
+                            commentCount = displayedPost.commentCount,
                             isLiked = isLiked,
                             onToggleLike = onToggleLike
                         )
                     }
                     item {
                         Text(
-                            "댓글 ${comments.size}",
+                            "댓글 ${displayedPost.commentCount}",
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(top = 4.dp)
                         )

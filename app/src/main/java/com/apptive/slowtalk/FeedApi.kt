@@ -157,6 +157,7 @@ object FeedApi {
                     title = item.title,
                     body = item.content,
                     comments = flatComments.toUiComments(),
+                    commentCount = item.commentCount,
                     accent = categoryAccent(category),
                     isMine = item.isMine
                 ),
@@ -258,6 +259,7 @@ internal fun FeedTimelineDto.toFeedPost(categoryName: String?): FeedPost {
         category = displayCategory,
         title = title,
         body = content,
+        commentCount = commentCount,
         accent = categoryAccent(displayCategory),
         isMine = isMine,
     )
