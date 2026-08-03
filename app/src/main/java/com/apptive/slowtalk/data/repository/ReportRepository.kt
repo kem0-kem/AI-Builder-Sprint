@@ -7,7 +7,6 @@ import com.apptive.slowtalk.data.remote.ReportCreateRequest
 import com.apptive.slowtalk.data.remote.ReportFeedbackRequest
 import com.apptive.slowtalk.data.remote.ReportFeedbackResponse
 import com.apptive.slowtalk.data.remote.RetrofitClient
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import java.io.File
@@ -24,7 +23,7 @@ class ReportRepository(private val api: ReportApi = RetrofitClient.reportApi) {
     }
 
     suspend fun performOcr(imageFile: File): Result<String> = runCatching {
-        val requestFile = imageFile.asRequestBody("image/*".toMediaTypeOrNull())
+        val requestFile = imageFile.asRequestBody(imageFile.detectOcrMediaType())
         val body = MultipartBody.Part.createFormData("image", imageFile.name, requestFile)
         api.performOcr(body).requireReportData().text
     }
