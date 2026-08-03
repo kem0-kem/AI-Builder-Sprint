@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Rank eligible SlowTalk users with Solar query embeddings, enforce the configured similarity threshold, and fall back to the profile policy without exposing scores, content, or vectors.
+**Goal:** Rank eligible 마음잇기 users with Solar query embeddings, enforce the configured similarity threshold, and fall back to the profile policy without exposing scores, content, or vectors.
 
 **Architecture:** `SemanticMatchingPolicy` orchestrates the existing embedding gateway, a pgvector search method on `MatchingRepository`, and the profile fallback policy. The repository owns SQL ordering and model-version filtering; the policy owns threshold and failure decisions; Task 7 remains responsible for final locking, persistence, and public response serialization.
 

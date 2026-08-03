@@ -16,7 +16,7 @@ class Settings(BaseSettings):
         hide_input_in_errors=True,
     )
 
-    app_name: str = "SlowTalk API"
+    app_name: str = "마음잇기 API"
     app_environment: Literal["development", "test", "production"] = "development"
     allow_development_moderation_fallback: bool = False
     api_prefix: str = "/api/v1"

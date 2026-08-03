@@ -1,6 +1,6 @@
-# SlowTalk API
+# 마음잇기 API
 
-FastAPI와 PostgreSQL로 구현한 SlowTalk 백엔드입니다. Android 앱 코드는 변경하지 않습니다.
+FastAPI와 PostgreSQL로 구현한 마음잇기 백엔드입니다. Android 앱 코드는 변경하지 않습니다.
 
 ## 로컬 실행
 

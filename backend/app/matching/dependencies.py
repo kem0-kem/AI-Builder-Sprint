@@ -20,7 +20,7 @@ from app.matching.semantic_policy import SemanticMatchingPolicy
 from app.matching.service import MatchingService
 from app.matching.upstage_gateway import UpstageEmbeddingGateway
 
-EMBEDDING_READINESS_PROBE = "SlowTalk 임베딩 준비 상태 확인"
+EMBEDDING_READINESS_PROBE = "마음잇기 임베딩 준비 상태 확인"
 
 
 class MetricsSemanticObserver:

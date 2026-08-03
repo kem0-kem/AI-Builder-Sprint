@@ -3,7 +3,7 @@
 ## Goal
 
 Add a public username-availability endpoint based on the supplied API reference while
-introducing usernames without breaking existing SlowTalk accounts or clients that still
+introducing usernames without breaking existing 마음잇기 accounts or clients that still
 sign up with only email, password, and nickname.
 
 ## Scope
@@ -11,7 +11,7 @@ sign up with only email, password, and nickname.
 - Add an optional, unique username to `users`.
 - Accept an optional username during signup.
 - Add `GET /api/v1/auth/check-username?username=...`.
-- Return availability through the existing SlowTalk success envelope.
+- Return availability through the existing 마음잇기 success envelope.
 - Document and test the API, validation, migration, and duplicate-signup behavior.
 
 This change does not replace email login, make username mandatory, or change nickname

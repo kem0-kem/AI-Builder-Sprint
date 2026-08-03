@@ -1,9 +1,9 @@
 ---
 name: slowtalk-development
-description: Implement, diagnose, test, and document SlowTalk features across Android Jetpack Compose, FastAPI, PostgreSQL/pgvector, Upstage, and Railway. Use when changing app/backend contracts, AI OCR or feedback or matching or moderation, local startup, deployment readiness, or regression fixes in this repository.
+description: Implement, diagnose, test, and document 마음잇기 features across Android Jetpack Compose, FastAPI, PostgreSQL/pgvector, Upstage, and Railway. Use when changing app/backend contracts, AI OCR or feedback or matching or moderation, local startup, deployment readiness, or regression fixes in this repository.
 ---
 
-# SlowTalk Development
+# 마음잇기 Development
 
 ## Establish context
 

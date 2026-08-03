@@ -1,4 +1,4 @@
-"""Create the SlowTalk schema."""
+"""Create the 마음잇기 schema."""
 
 from collections.abc import Sequence
 

@@ -1,4 +1,4 @@
-# Claude Code Guide for SlowTalk
+# Claude Code Guide for 마음잇기
 
 Read [AGENTS.md](AGENTS.md) first; it is the authoritative repository-wide instruction file. For implementation or diagnosis, also load the repository skill at [.agents/skills/slowtalk-development/SKILL.md](.agents/skills/slowtalk-development/SKILL.md).
 
