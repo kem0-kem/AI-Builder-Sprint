@@ -1,3 +1,4 @@
+import java.net.URI
 import java.util.Properties
 
 plugins {
@@ -5,6 +6,46 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose") version "2.2.10"
     id("org.jetbrains.kotlin.plugin.serialization") version "2.2.10"
 }
+
+val localProperties = Properties().apply {
+    val propertiesFile = rootProject.file("local.properties")
+    if (propertiesFile.isFile) {
+        propertiesFile.inputStream().use(::load)
+    }
+}
+
+fun configurationValue(name: String): String =
+    providers.gradleProperty(name).orNull
+        ?: localProperties.getProperty(name).orEmpty()
+
+fun String.asBuildConfigStringLiteral(): String {
+    val escaped = buildString {
+        for (character in this@asBuildConfigStringLiteral) {
+            append(
+                when (character) {
+                    '\\' -> "\\\\"
+                    '"' -> "\\\""
+                    '\n' -> "\\n"
+                    '\r' -> "\\r"
+                    '\t' -> "\\t"
+                    '\u000C' -> "\\f"
+                    '\b' -> "\\b"
+                    else -> character
+                },
+            )
+        }
+    }
+    return "\"$escaped\""
+}
+
+fun isSecureReleaseApiUrl(value: String): Boolean = runCatching {
+    URI(value.trim())
+}.getOrNull()?.let { uri ->
+    uri.scheme.equals("https", ignoreCase = true) && !uri.host.isNullOrBlank()
+} == true
+
+val debugApiBaseUrl = configurationValue("API_BASE_URL")
+val releaseApiBaseUrl = configurationValue("RELEASE_API_BASE_URL")
 
 android {
     namespace = "com.apptive.slowtalk"
@@ -23,24 +64,28 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        val localProperties = Properties().apply {
-            val propertiesFile = rootProject.file("local.properties")
-            if (propertiesFile.isFile) {
-                propertiesFile.inputStream().use(::load)
-            }
+        buildConfigField(
+            "String",
+            "API_AUTH_TOKEN",
+            configurationValue("API_AUTH_TOKEN").asBuildConfigStringLiteral(),
+        )
+    }
+
+    buildTypes {
+        getByName("debug") {
+            buildConfigField(
+                "String",
+                "API_BASE_URL",
+                debugApiBaseUrl.asBuildConfigStringLiteral(),
+            )
         }
-
-        fun configurationValue(name: String): String =
-            providers.gradleProperty(name).orNull
-                ?: localProperties.getProperty(name).orEmpty()
-
-        fun String.asBuildConfigString(): String =
-            replace("\\", "\\\\").replace("\"", "\\\"")
-
-        val apiBaseUrl = configurationValue("API_BASE_URL").asBuildConfigString()
-        val apiAuthToken = configurationValue("API_AUTH_TOKEN").asBuildConfigString()
-        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
-        buildConfigField("String", "API_AUTH_TOKEN", "\"$apiAuthToken\"")
+        getByName("release") {
+            buildConfigField(
+                "String",
+                "API_BASE_URL",
+                releaseApiBaseUrl.asBuildConfigStringLiteral(),
+            )
+        }
     }
 
     buildFeatures {
@@ -57,6 +102,35 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+}
+
+val verifyBuildConfigEscaping by tasks.registering {
+    group = "verification"
+    description = "Verifies BuildConfig string values are valid Java string literals."
+    doLast {
+        val rawValue = "slash\\quote\"newline\nreturn\rtab\tform\u000Cback\b"
+        val expected = "\"slash\\\\quote\\\"newline\\nreturn\\rtab\\tform\\fback\\b\""
+        check(rawValue.asBuildConfigStringLiteral() == expected) {
+            "BuildConfig string escaping did not encode control characters safely."
+        }
+    }
+}
+
+val validateReleaseApiBaseUrl by tasks.registering {
+    group = "verification"
+    description = "Requires a non-blank HTTPS RELEASE_API_BASE_URL for release builds."
+    doLast {
+        check(isSecureReleaseApiUrl(releaseApiBaseUrl)) {
+            "RELEASE_API_BASE_URL must be set to a non-blank HTTPS URL, for example " +
+                "-PRELEASE_API_BASE_URL=https://api.example.org/api/v1/."
+        }
+    }
+}
+
+tasks.configureEach {
+    if (name == "preReleaseBuild") {
+        dependsOn(validateReleaseApiBaseUrl)
     }
 }
 
@@ -81,6 +155,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.1")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

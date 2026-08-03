@@ -16,27 +16,53 @@ private const val DEFAULT_LOCAL_API_BASE_URL = "http://10.0.2.2:8000/api/v1/"
 internal fun normalizeBaseUrl(value: String): String =
     value.trim().trimEnd('/') + "/"
 
-internal fun configuredBaseUrl(value: String): String =
-    normalizeBaseUrl(value.ifBlank { DEFAULT_LOCAL_API_BASE_URL })
+internal fun configuredBaseUrl(value: String, isDebug: Boolean): String {
+    val configuredValue = if (isDebug) {
+        value.ifBlank { DEFAULT_LOCAL_API_BASE_URL }
+    } else {
+        value
+    }
+    require(configuredValue.isNotBlank()) {
+        "A release API base URL must be configured at build time."
+    }
+    val normalizedValue = normalizeBaseUrl(configuredValue)
+    require(isDebug || normalizedValue.startsWith("https://", ignoreCase = true)) {
+        "The release API base URL must use HTTPS."
+    }
+    return normalizedValue
+}
 
 internal fun webSocketBaseUrl(apiBaseUrl: String): String =
     normalizeBaseUrl(apiBaseUrl)
         .replaceFirst("https://", "wss://")
         .replaceFirst("http://", "ws://")
 
+internal fun createOkHttpClient(
+    isDebug: Boolean,
+    logger: HttpLoggingInterceptor.Logger = HttpLoggingInterceptor.Logger.DEFAULT,
+): OkHttpClient =
+    OkHttpClient.Builder()
+        .apply {
+            if (isDebug) {
+                addInterceptor(
+                    HttpLoggingInterceptor(logger).apply {
+                        redactHeader("Authorization")
+                        level = HttpLoggingInterceptor.Level.BODY
+                    },
+                )
+            }
+        }
+        .build()
+
 object RetrofitClient {
-    internal val baseUrl = configuredBaseUrl(BuildConfig.API_BASE_URL)
+    internal val baseUrl = configuredBaseUrl(BuildConfig.API_BASE_URL, BuildConfig.DEBUG)
 
     private val json = Json {
         ignoreUnknownKeys = true
         coerceInputValues = true
     }
 
-    private val okHttpClient = OkHttpClient.Builder()
-        .addInterceptor(HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
-        })
-        .build()
+    private val okHttpClient = createOkHttpClient(BuildConfig.DEBUG)
 
     private val retrofit = Retrofit.Builder()
         .baseUrl(baseUrl)

@@ -69,6 +69,16 @@ API_BASE_URL=http://192.168.0.20:8000/api/v1/
 `local.properties`보다 우선합니다. REST와 WebSocket 연결은 동일한 기준 주소를
 사용하며, 로컬 HTTP cleartext 허용은 debug 빌드에만 적용됩니다.
 
+`API_BASE_URL`과 에뮬레이터 기본값은 debug 전용입니다. release 빌드는 별도의
+`RELEASE_API_BASE_URL`을 사용하며, 비어 있거나 HTTPS가 아니면 빌드 전에 실패합니다.
+
+```powershell
+.\gradlew.bat assembleRelease -PRELEASE_API_BASE_URL=https://api.example.org/api/v1/
+```
+
+release 빌드에는 HTTP BODY 로거가 포함되지 않습니다. debug 로거도
+`Authorization` 헤더 값을 가려서 출력합니다.
+
 연결 설정을 검증하려면 저장소 루트에서 다음 명령을 실행합니다.
 
 ```powershell
