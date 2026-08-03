@@ -40,6 +40,11 @@ data class ChatRoomSummaryDto(
     val id: String,
     val type: String,
     val name: String? = null,
+    val roomName: String? = null,
+    val lastMessage: String? = null,
+    val lastMessageAt: String? = null,
+    val unreadCount: Int = 0,
+    val participantCount: Int? = null,
     val createdAt: String = ""
 )
 

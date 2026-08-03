@@ -23,12 +23,12 @@ object ChatApi {
         RetrofitClient.chatApi.getChatRooms().data.orEmpty().map { room ->
             val isGroup = room.type == "GROUP"
             Conversation(
-                title = room.name ?: if (isGroup) "모임 대화" else "익명의 이웃",
-                preview = "",
-                time = displayTime(room.createdAt),
-                unread = false,
+                title = room.name ?: room.roomName ?: if (isGroup) "모임 대화" else "익명의 이웃",
+                preview = room.lastMessage.orEmpty(),
+                time = displayTime(room.lastMessageAt ?: room.createdAt),
+                unread = room.unreadCount > 0,
                 isGroup = isGroup,
-                members = if (isGroup) 0 else 1,
+                members = if (isGroup) room.participantCount ?: 0 else 1,
                 chatRoomId = room.id
             )
         }
