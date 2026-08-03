@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.PATCH
 import retrofit2.http.POST
@@ -35,6 +36,11 @@ interface ChatApiService {
         @Path("chatRoomId") chatRoomId: String,
         @Body request: ChatReadRequest
     ): ApiEnvelope<ChatReadResponse>
+
+    @DELETE("chat-rooms/{chatRoomId}")
+    suspend fun leaveChatRoom(
+        @Path("chatRoomId") chatRoomId: String
+    ): Response<Unit>
 }
 
 @Serializable
