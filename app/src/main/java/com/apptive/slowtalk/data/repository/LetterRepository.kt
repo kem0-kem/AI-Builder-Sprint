@@ -34,7 +34,7 @@ class LetterRepository(private val api: LetterApiService = RetrofitClient.letter
 
     suspend fun performLetterOcr(imageFile: File): Result<String> {
         return runCatching {
-            val requestFile = imageFile.asRequestBody("image/*".toMediaTypeOrNull())
+            val requestFile = imageFile.asRequestBody(imageFile.ocrMediaType())
             val body = MultipartBody.Part.createFormData("image", imageFile.name, requestFile)
             apiModerated(LetterOcrResponse.serializer()) {
                 api.performLetterOcr(body)
@@ -42,3 +42,10 @@ class LetterRepository(private val api: LetterApiService = RetrofitClient.letter
         }
     }
 }
+
+private fun File.ocrMediaType() = when (extension.lowercase()) {
+    "jpg", "jpeg" -> "image/jpeg"
+    "png" -> "image/png"
+    "webp" -> "image/webp"
+    else -> error("지원하지 않는 이미지 형식입니다: .$extension")
+}.toMediaTypeOrNull()
