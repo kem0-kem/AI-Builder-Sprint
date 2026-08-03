@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query, status
 from sqlalchemy import select
+from sqlalchemy.orm import aliased
 
 from app.auth.dependencies import CurrentUserId, Session
 from app.auth.models import User
@@ -21,7 +22,21 @@ async def list_candidates(
     session: Session,
     keyword: str | None = Query(None, max_length=30),
 ) -> dict[str, object]:
-    statement = select(User).where(User.id != user_id, User.is_active.is_(True))
+    requester_participant = aliased(ChatParticipant)
+    candidate_participant = aliased(ChatParticipant)
+    statement = (
+        select(User)
+        .join(candidate_participant, candidate_participant.user_id == User.id)
+        .join(ChatRoom, ChatRoom.id == candidate_participant.room_id)
+        .join(requester_participant, requester_participant.room_id == ChatRoom.id)
+        .where(
+            requester_participant.user_id == user_id,
+            candidate_participant.user_id != user_id,
+            ChatRoom.type == "DIRECT",
+            User.is_active.is_(True),
+        )
+        .distinct()
+    )
     if keyword:
         statement = statement.where(User.nickname.contains(keyword))
     users = list((await session.execute(statement.order_by(User.created_at).limit(30))).scalars())
