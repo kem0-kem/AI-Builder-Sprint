@@ -7,7 +7,8 @@ import com.apptive.slowtalk.data.remote.apiData
 
 object LetterApi {
     suspend fun getLetters(type: String? = null): Result<List<Letter>> = runCatching {
-        apiData { RetrofitClient.letterApi.getLetters(type) }.map(LetterSummaryDto::toLetter)
+        val direction = if (type.equals("received", ignoreCase = true)) "received" else "sent"
+        apiData { RetrofitClient.letterApi.getLetters(direction) }.map(LetterSummaryDto::toLetter)
     }
 
     suspend fun getLetter(letterId: String): Result<Letter> = runCatching {
@@ -17,10 +18,15 @@ object LetterApi {
 
 private fun LetterSummaryDto.toLetter(): Letter {
     val received = direction.equals("RECEIVED", ignoreCase = true)
+    val normalized = content.trim()
+    val title = normalized.lineSequence().firstOrNull { it.isNotBlank() }
+        ?.take(24)
+        ?.ifBlank { null }
+        ?: if (received) "받은 편지" else "보낸 편지"
     return Letter(
         id = id,
-        title = if (received) "받은 편지 #$id" else "보낸 편지 #$id",
-        preview = content.replace('\n', ' ').take(60),
+        title = title,
+        preview = normalized.replace('\n', ' ').take(60),
         date = createdAt.toLetterDate(),
         received = received,
         content = content

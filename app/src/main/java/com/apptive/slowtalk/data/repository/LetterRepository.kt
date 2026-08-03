@@ -15,6 +15,7 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import java.io.File
+import java.util.UUID
 
 class LetterRepository(private val api: LetterApiService = RetrofitClient.letterApi) {
 
@@ -27,7 +28,10 @@ class LetterRepository(private val api: LetterApiService = RetrofitClient.letter
     suspend fun createLetter(content: String, match: Boolean, region: RegionDto): Result<LetterCreateResponse> {
         return runCatching {
             apiModerated(LetterCreateResponse.serializer()) {
-                api.createLetter(LetterCreateRequest(content, match))
+                api.createLetter(
+                    idempotencyKey = UUID.randomUUID().toString(),
+                    request = LetterCreateRequest(content, match),
+                )
             }.requireResource()
         }
     }
