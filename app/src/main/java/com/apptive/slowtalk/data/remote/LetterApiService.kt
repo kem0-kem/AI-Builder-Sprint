@@ -5,29 +5,32 @@ import kotlinx.serialization.json.JsonElement
 import okhttp3.MultipartBody
 import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.Multipart
 import retrofit2.http.POST
 import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
-import retrofit2.Response
 
 interface LetterApiService {
     @GET("letters")
-    suspend fun getLetters(@Query("type") type: String? = null): ApiEnvelope<List<LetterSummaryDto>>
+    suspend fun getLetters(@Query("direction") direction: String? = null): ApiEnvelope<List<LetterSummaryDto>>
 
     @GET("letters/{letterId}")
     suspend fun getLetter(@Path("letterId") letterId: String): ApiEnvelope<LetterDetailDto>
 
     @POST("letters/feedback")
-    suspend fun getLetterFeedback(@Body request: LetterFeedbackRequest): ApiEnvelope<LetterFeedbackResponse>
+    suspend fun getLetterFeedback(@Body request: LetterFeedbackRequest): ApiEnvelope<WritingFeedbackDto>
 
     @POST("letters")
-    suspend fun createLetter(@Body request: LetterCreateRequest): Response<ApiEnvelope<JsonElement>>
+    suspend fun createLetter(
+        @Header("Idempotency-Key") idempotencyKey: String,
+        @Body request: LetterCreateRequest
+    ): ApiEnvelope<JsonElement>
 
     @Multipart
     @POST("letters/ocr")
-    suspend fun performLetterOcr(@Part image: MultipartBody.Part): Response<ApiEnvelope<JsonElement>>
+    suspend fun performLetterOcr(@Part image: MultipartBody.Part): ApiEnvelope<OcrTextDto>
 }
 
 @Serializable
@@ -57,7 +60,13 @@ data class LetterCreateRequest(
 )
 
 @Serializable
-data class LetterOcrResponse(val text: String)
+data class OcrTextDto(val text: String)
+
+@Serializable
+data class WritingFeedbackDto(
+    val summary: String,
+    val suggestions: List<String>
+)
 
 @Serializable
 data class LetterSummaryDto(
