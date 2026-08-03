@@ -116,7 +116,7 @@ backend\.venv\Scripts\pytest.exe `
 - `00:15` 이후 Upstage Document Parse 처리와 추출된 한글 본문의 입력란 반영
 - 후반부 저장된 대화방과 피드 화면 확인
 
-영상 파일은 1분 36초, 약 2.6MB의 Android 에뮬레이터 실제 화면 녹화본입니다.
+영상 파일은 1분 36초의 Android 에뮬레이터 실제 화면 녹화본입니다. 주요 동작을 설명하는 한글 자막을 영상에 직접 삽입했으며, 원문 자막은 [SRT 파일](docs/demo/slowtalk-demo.srt)로도 제공합니다.
 
 ## 6. AI 사용 범위에 대한 명시
 
