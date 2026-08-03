@@ -6,10 +6,10 @@ import retrofit2.http.PUT
 
 interface InterestApi {
     @GET("interests")
-    suspend fun getInterests(): List<InterestDto>
+    suspend fun getInterests(): ApiEnvelope<List<InterestDto>>
 
     @PUT("users/me/interests")
     suspend fun updateMyInterests(
         @Body request: InterestUpdateRequest
-    ): InterestUpdateResponse
+    ): ApiEnvelope<UserProfileDto>
 }

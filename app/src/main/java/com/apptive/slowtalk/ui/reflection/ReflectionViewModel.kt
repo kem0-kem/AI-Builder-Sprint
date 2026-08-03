@@ -13,7 +13,7 @@ import java.io.File
 sealed class ReflectionUiState {
     object Idle : ReflectionUiState()
     object Loading : ReflectionUiState()
-    data class Success(val reportId: Int) : ReflectionUiState()
+    data class Success(val reportId: String) : ReflectionUiState()
     data class OcrSuccess(val content: String) : ReflectionUiState()
     data class FeedbackSuccess(val feedback: ReportFeedbackResponse) : ReflectionUiState()
     data class Error(val message: String) : ReflectionUiState()

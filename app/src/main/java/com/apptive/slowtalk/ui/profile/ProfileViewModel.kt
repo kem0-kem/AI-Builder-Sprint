@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.apptive.slowtalk.data.remote.InterestDto
 import com.apptive.slowtalk.data.remote.ProfileUpdateRequest
-import com.apptive.slowtalk.data.remote.RegionDto
+import com.apptive.slowtalk.data.remote.RegionPatchDto
 import com.apptive.slowtalk.data.remote.UserProfileDto
 import com.apptive.slowtalk.data.repository.InterestRepository
 import com.apptive.slowtalk.data.repository.ProfileRepository
@@ -56,8 +56,7 @@ class ProfileViewModel(
             val updateDto = ProfileUpdateRequest(
                 nickname = nickname,
                 bio = bio,
-                interest = interest,
-                region = RegionDto(province, district, subDistrict)
+                region = RegionPatchDto(province, district, subDistrict)
             )
             profileRepository.updateProfile(updateDto)
                 .onSuccess { fetchProfile() } // 갱신
@@ -93,7 +92,7 @@ class ProfileViewModel(
         }
     }
 
-    fun updateInterests(interestIds: List<Int>, onComplete: () -> Unit) {
+    fun updateInterests(interestIds: List<String>, onComplete: () -> Unit) {
         viewModelScope.launch {
             interestRepository.updateMyInterests(interestIds)
                 .onSuccess { 

@@ -7,6 +7,7 @@ import com.apptive.slowtalk.data.remote.LetterFeedbackResponse
 import com.apptive.slowtalk.data.remote.AiWarningDto
 import com.apptive.slowtalk.data.remote.RetrofitClient
 import com.apptive.slowtalk.data.remote.RegionDto
+import com.apptive.slowtalk.data.remote.requireData
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
@@ -20,8 +21,8 @@ class LetterRepository(private val api: LetterApiService = RetrofitClient.letter
         if (MOCK_MODE) {
             return Result.success(
                 LetterFeedbackResponse(
-                    warning = AiWarningDto(exists = false),
-                    tips = listOf(
+                    summary = "따뜻한 편지입니다.",
+                    suggestions = listOf(
                         "'예쁘더라고요'처럼 감정을 표현해주셔서 좋아요.",
                         "마지막 인사도 따뜻해서 기분 좋은 편지가 될 것 같아요."
                     )
@@ -29,14 +30,15 @@ class LetterRepository(private val api: LetterApiService = RetrofitClient.letter
             )
         }
         return runCatching {
-            api.getLetterFeedback(LetterFeedbackRequest(content))
+            api.getLetterFeedback(LetterFeedbackRequest(content)).requireData()
         }
     }
 
     suspend fun createLetter(content: String, match: Boolean, region: RegionDto): Result<Unit> {
         if (MOCK_MODE) return Result.success(Unit)
         return runCatching {
-            api.createLetter(LetterCreateRequest(content, match, region))
+            api.createLetter(LetterCreateRequest(content, match)).requireData()
+            Unit
         }
     }
 
@@ -45,7 +47,7 @@ class LetterRepository(private val api: LetterApiService = RetrofitClient.letter
         return runCatching {
             val requestFile = imageFile.asRequestBody("image/*".toMediaTypeOrNull())
             val body = MultipartBody.Part.createFormData("image", imageFile.name, requestFile)
-            api.performLetterOcr(body).content
+            api.performLetterOcr(body).requireData().text
         }
     }
 }

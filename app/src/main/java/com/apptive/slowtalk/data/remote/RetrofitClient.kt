@@ -80,7 +80,7 @@ object RetrofitClient {
     val meetingApi: MeetingApiService = retrofit.create(MeetingApiService::class.java)
     val reportApi: ReportApi = retrofit.create(ReportApi::class.java)
 
-    fun openChatWebSocket(chatRoomId: Int, listener: WebSocketListener): WebSocket {
+    fun openChatWebSocket(chatRoomId: String, listener: WebSocketListener): WebSocket {
         val socketBaseUrl = webSocketBaseUrl(baseUrl).trimEnd('/')
         val request = Request.Builder()
             .url("$socketBaseUrl/ws/chat/$chatRoomId")

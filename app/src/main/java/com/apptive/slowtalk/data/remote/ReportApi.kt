@@ -8,30 +8,37 @@ import retrofit2.http.Part
 
 interface ReportApi {
     @POST("reports")
-    suspend fun createReport(@Body request: ReportCreateRequest): ReportCreateResponse
+    suspend fun createReport(@Body request: ReportCreateRequest): ApiEnvelope<ReportCreateResponse>
 
     @Multipart
     @POST("reports/ocr")
-    suspend fun performOcr(@Part image: MultipartBody.Part): OcrResponse
+    suspend fun performOcr(@Part image: MultipartBody.Part): ApiEnvelope<OcrResponse>
 
     @POST("reports/feedback")
-    suspend fun getReportFeedback(@Body request: ReportFeedbackRequest): ReportFeedbackResponse
+    suspend fun getReportFeedback(@Body request: ReportFeedbackRequest): ApiEnvelope<ReportFeedbackResponse>
 }
 
 @kotlinx.serialization.Serializable
-data class ReportCreateRequest(val content: String)
+data class ReportCreateRequest(val analysisId: String, val content: String)
 
 @kotlinx.serialization.Serializable
-data class ReportCreateResponse(val reportId: Int)
+data class ReportCreateResponse(
+    val id: String,
+    val content: String,
+    val summary: String,
+    val feedback: List<FeedbackItemDto>,
+    val createdAt: String,
+)
 
 @kotlinx.serialization.Serializable
-data class OcrResponse(val content: String)
+data class OcrResponse(val text: String)
 
 @kotlinx.serialization.Serializable
 data class ReportFeedbackRequest(val content: String)
 
 @kotlinx.serialization.Serializable
 data class ReportFeedbackResponse(
+    val analysisId: String,
     val summary: String,
     val feedback: List<FeedbackItemDto>
 )
@@ -39,6 +46,5 @@ data class ReportFeedbackResponse(
 @kotlinx.serialization.Serializable
 data class FeedbackItemDto(
     val type: String,
-    val title: String,
-    val description: String
+    val content: String,
 )

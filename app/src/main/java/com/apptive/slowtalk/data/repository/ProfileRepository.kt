@@ -4,6 +4,10 @@ import com.apptive.slowtalk.data.remote.ProfileApi
 import com.apptive.slowtalk.data.remote.ProfileUpdateRequest
 import com.apptive.slowtalk.data.remote.RetrofitClient
 import com.apptive.slowtalk.data.remote.UserProfileDto
+import com.apptive.slowtalk.data.remote.InterestDto
+import com.apptive.slowtalk.data.remote.ProfileRegionDto
+import com.apptive.slowtalk.data.remote.RegionOptionDto
+import com.apptive.slowtalk.data.remote.requireData
 
 class ProfileRepository(private val api: ProfileApi = RetrofitClient.profileApi) {
 
@@ -13,13 +17,17 @@ class ProfileRepository(private val api: ProfileApi = RetrofitClient.profileApi)
         if (MOCK_MODE) {
             return Result.success(
                 UserProfileDto(
+                    id = "00000000-0000-0000-0000-000000000001",
                     nickname = "지연",
                     bio = "느리게 걷는 것을 좋아하는 평범한 직장인입니다. 함께 따뜻한 이야기를 나누고 싶어요.",
-                    interest = "산책, 독서, 커피",
-                    region = com.apptive.slowtalk.data.remote.RegionDto(
-                        province = "서울특별시",
-                        district = "마포구",
-                        subDistrict = "상암동"
+                    interests = listOf(
+                        InterestDto("00000000-0000-0000-0000-000000000005", "산책"),
+                        InterestDto("00000000-0000-0000-0000-000000000002", "독서"),
+                    ),
+                    region = ProfileRegionDto(
+                        province = RegionOptionDto("11", "서울특별시"),
+                        district = RegionOptionDto("11440", "마포구"),
+                        subDistrict = RegionOptionDto("1144066000", "상암동"),
                     ),
                     statistics = com.apptive.slowtalk.data.remote.StatisticsDto(
                         sentLetters = 12,
@@ -30,7 +38,7 @@ class ProfileRepository(private val api: ProfileApi = RetrofitClient.profileApi)
             )
         }
         return try {
-            val response = api.getMyProfile()
+            val response = api.getMyProfile().requireData()
             Result.success(response)
         } catch (e: Exception) {
             Result.failure(e)
@@ -42,8 +50,8 @@ class ProfileRepository(private val api: ProfileApi = RetrofitClient.profileApi)
             return Result.success("프로필이 성공적으로 업데이트되었습니다. (Mock)")
         }
         return try {
-            val response = api.updateProfile(profile)
-            Result.success(response.message)
+            api.updateProfile(profile).requireData()
+            Result.success("프로필이 성공적으로 업데이트되었습니다.")
         } catch (e: Exception) {
             Result.failure(e)
         }

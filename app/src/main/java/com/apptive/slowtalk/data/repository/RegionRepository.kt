@@ -2,6 +2,7 @@ package com.apptive.slowtalk.data.repository
 
 import com.apptive.slowtalk.data.remote.RegionApi
 import com.apptive.slowtalk.data.remote.RetrofitClient
+import com.apptive.slowtalk.data.remote.requireData
 
 class RegionRepository(private val api: RegionApi = RetrofitClient.regionApi) {
 
@@ -13,7 +14,7 @@ class RegionRepository(private val api: RegionApi = RetrofitClient.regionApi) {
             return Result.success(listOf("서울특별시", "경기도", "부산광역시", "강원특별자치도"))
         }
         return try {
-            Result.success(api.getProvinces())
+            Result.success(api.getProvinces().requireData().map { it.name })
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -30,7 +31,7 @@ class RegionRepository(private val api: RegionApi = RetrofitClient.regionApi) {
             return Result.success(districts)
         }
         return try {
-            Result.success(api.getDistricts(province))
+            Result.success(api.getDistricts(province).requireData().map { it.name })
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -47,7 +48,7 @@ class RegionRepository(private val api: RegionApi = RetrofitClient.regionApi) {
             return Result.success(subs)
         }
         return try {
-            Result.success(api.getSubDistricts(province, district))
+            Result.success(api.getSubDistricts(province, district).requireData().map { it.name })
         } catch (e: Exception) {
             Result.failure(e)
         }

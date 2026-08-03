@@ -260,8 +260,8 @@ private fun ConversationRow(item: Conversation, onClick: () -> Unit) {
 fun ChatScreen(
     title: String,
     isGroup: Boolean,
-    chatRoomId: Int?,
-    markAsRead: suspend (chatRoomId: Int, lastReadMessageId: Int) -> Result<Int>,
+    chatRoomId: String?,
+    markAsRead: suspend (chatRoomId: String, lastReadMessageId: String) -> Result<Int>,
     onBack: () -> Unit
 ) {
     val messages = remember { mutableStateListOf<ChatMessage>() }
@@ -279,8 +279,7 @@ fun ChatScreen(
             ChatApi.getMessages(roomId)
                 .onSuccess { loaded ->
                     messages.addAll(loaded)
-                    loaded.maxOfOrNull { it.id ?: Int.MIN_VALUE }
-                        ?.takeIf { it != Int.MIN_VALUE }
+                    loaded.firstNotNullOfOrNull { it.id }
                         ?.let { lastMessageId ->
                             markAsRead(roomId, lastMessageId)
                         }
@@ -467,13 +466,13 @@ private fun MessageBubble(message: ChatMessage) {
 @Composable
 fun CreateGroupScreen(
     loadInviteUsers: suspend (String?) -> Result<List<MeetingInviteUser>>,
-    createMeeting: suspend (String, String, List<Int>) -> Result<MeetingCreation>,
+    createMeeting: suspend (String, String, List<String>) -> Result<MeetingCreation>,
     onBack: () -> Unit,
-    onCreated: (String, Int) -> Unit
+    onCreated: (String, String) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var intro by remember { mutableStateOf("") }
-    val selectedPeople = remember { mutableStateListOf<Int>() }
+    val selectedPeople = remember { mutableStateListOf<String>() }
     var showPeoplePicker by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var remotePeople by remember { mutableStateOf(emptyList<MeetingInviteUser>()) }

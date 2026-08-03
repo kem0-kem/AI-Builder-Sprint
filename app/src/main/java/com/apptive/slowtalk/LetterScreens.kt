@@ -110,9 +110,9 @@ fun WriteLetterScreen(
     
     var matchEnabled by remember { mutableStateOf(true) }
     var showLocationSheet by remember { mutableStateOf(false) }
-    var selectedProvince by remember { mutableStateOf(currentProfile?.region?.province ?: "서울특별시") }
-    var selectedDistrict by remember { mutableStateOf(currentProfile?.region?.district ?: "마포구") }
-    var selectedNeighborhood by remember { mutableStateOf(currentProfile?.region?.subDistrict) }
+    var selectedProvince by remember { mutableStateOf(currentProfile?.region?.province?.name ?: "서울특별시") }
+    var selectedDistrict by remember { mutableStateOf(currentProfile?.region?.district?.name ?: "마포구") }
+    var selectedNeighborhood by remember { mutableStateOf(currentProfile?.region?.subDistrict?.name) }
     var showCompletionDialog by remember { mutableStateOf(false) }
     
     var expandedLevel by remember { mutableStateOf<ResidenceLevel?>(null) }
@@ -149,9 +149,9 @@ fun WriteLetterScreen(
 
     LaunchedEffect(currentProfile) {
         currentProfile?.let {
-            selectedProvince = it.region.province
-            selectedDistrict = it.region.district
-            selectedNeighborhood = it.region.subDistrict
+            selectedProvince = it.region?.province?.name.orEmpty()
+            selectedDistrict = it.region?.district?.name.orEmpty()
+            selectedNeighborhood = it.region?.subDistrict?.name
         }
     }
 
@@ -601,7 +601,7 @@ fun LetterHistoryScreen(
 @Composable
 fun LetterDetailScreen(
     letter: Letter,
-    loadLetter: suspend (Int) -> Result<Letter>,
+    loadLetter: suspend (String) -> Result<Letter>,
     onBack: () -> Unit
 ) {
     var displayedLetter by remember(letter.id, letter.title) { mutableStateOf(letter) }
@@ -657,10 +657,10 @@ fun ProfileEditScreen(
     // 지역 정보 파싱 (기존 로직 유지하되 서버 데이터 우선)
     val serverLocation = currentProfile?.let { 
         buildString {
-            append(it.region.province)
+            append(it.region?.province?.name.orEmpty())
             append(" ")
-            append(it.region.district)
-            it.region.subDistrict?.let { sub -> append(" "); append(sub) }
+            append(it.region?.district?.name.orEmpty())
+            it.region?.subDistrict?.name?.let { sub -> append(" "); append(sub) }
         }
     } ?: "서울특별시 마포구"
 

@@ -510,8 +510,8 @@ fun ReflectionDetailScreen(
                                 else -> Icons.Outlined.Lightbulb
                             },
                             label = item.type,
-                            content = item.title,
-                            description = item.description
+                            content = item.content,
+                            description = ""
                         )
                     }
                 }

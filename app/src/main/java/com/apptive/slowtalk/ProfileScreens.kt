@@ -134,7 +134,7 @@ fun ProfileOverviewScreen(
                             Text(profile.nickname, fontSize = 27.sp, fontWeight = FontWeight.ExtraBold, color = Ink)
                             Spacer(Modifier.height(6.dp))
                             Text(
-                                profile.bio,
+                                profile.bio.orEmpty(),
                                 textAlign = TextAlign.Center,
                                 color = Ink,
                                 fontSize = 14.sp,
@@ -157,10 +157,10 @@ fun ProfileOverviewScreen(
                                         modifier = Modifier.size(21.dp)
                                     )
                                     val locationText = buildString {
-                                        append(profile.region.province)
+                                        append(profile.region?.province?.name.orEmpty())
                                         append(" ")
-                                        append(profile.region.district)
-                                        profile.region.subDistrict?.let {
+                                        append(profile.region?.district?.name.orEmpty())
+                                        profile.region?.subDistrict?.name?.let {
                                             append(" ")
                                             append(it)
                                         }

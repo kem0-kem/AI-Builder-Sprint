@@ -61,8 +61,8 @@ private fun ApptiveApp() {
     var profileReturnScreen by remember { mutableStateOf<Screen>(Screen.Feed) }
     var conversationIndex by remember { mutableStateOf(0) }
     var lastBackPressTime by remember { mutableLongStateOf(0L) }
-    val likedFeeds = remember { mutableStateMapOf<Int, Boolean>() }
-    val likingFeeds = remember { mutableStateMapOf<Int, Boolean>() }
+    val likedFeeds = remember { mutableStateMapOf<String, Boolean>() }
+    val likingFeeds = remember { mutableStateMapOf<String, Boolean>() }
     val feeds = remember { mutableStateListOf<FeedPost>() }
     val letters = remember {
         listOf(
@@ -73,7 +73,7 @@ private fun ApptiveApp() {
         )
     }
     val mainPagerState = rememberPagerState(initialPage = 1, pageCount = { 3 })
-    val toggleFeedLike: (Int) -> Unit = { feedId ->
+    val toggleFeedLike: (String) -> Unit = { feedId ->
         if (likingFeeds[feedId] != true) {
             val wasLiked = likedFeeds[feedId] == true
             val requestedLike = !wasLiked

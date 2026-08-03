@@ -88,9 +88,9 @@ private enum class FeedIndex { ALL, MINE }
 @Composable
 fun FeedScreen(
     feeds: List<FeedPost>,
-    onOpenFeed: (Int) -> Unit,
-    isLiked: (Int) -> Boolean,
-    onToggleLike: (Int) -> Unit,
+    onOpenFeed: (String) -> Unit,
+    isLiked: (String) -> Boolean,
+    onToggleLike: (String) -> Unit,
     loadFeeds: suspend () -> Result<List<MyFeedResult>>,
     onFeedsLoaded: (List<MyFeedResult>) -> Unit,
     loadMyFeeds: suspend () -> Result<List<MyFeedResult>>,
@@ -360,7 +360,7 @@ private fun EmptyFeedMessage(
 @Composable
 private fun FeedCard(
     post: FeedPost,
-    onOpenFeed: (Int) -> Unit,
+    onOpenFeed: (String) -> Unit,
     isLiked: Boolean,
     onToggleLike: () -> Unit
 ) {
@@ -467,8 +467,8 @@ fun WriteFeedScreen(
     initialPost: FeedPost? = null,
     loadCategories: suspend () -> Result<List<FeedCategoryResult>>,
     requestFeedback: suspend (String, String) -> Result<FeedFeedbackResult>,
-    onSubmit: suspend (Int, String, String, String) -> Result<Int>,
-    onSuccess: (Int, String, String, String) -> Unit
+    onSubmit: suspend (String, String, String, String) -> Result<String>,
+    onSuccess: (String, String, String, String) -> Unit
 ) {
     var categories by remember { mutableStateOf(feedCategoryVisuals) }
     var category by remember(initialPost?.id) {
@@ -859,7 +859,7 @@ fun WriteFeedScreen(
 }
 
 private data class FeedCategoryVisual(
-    val id: Int,
+    val id: String,
     val name: String,
     val icon: ImageVector,
     val tint: Color,
@@ -867,10 +867,10 @@ private data class FeedCategoryVisual(
 )
 
 private val feedCategoryVisuals = listOf(
-    FeedCategoryVisual(1, "일상 이야기", Icons.Outlined.Eco, Color(0xFF54B978), Color(0xFFEAF7ED)),
-    FeedCategoryVisual(2, "마음과 고민", Icons.Outlined.FavoriteBorder, Color(0xFFE76E91), Color(0xFFFFEFF3)),
-    FeedCategoryVisual(3, "취미 생활", Icons.Outlined.Palette, Purple, PurpleSoft),
-    FeedCategoryVisual(4, "질문", Icons.AutoMirrored.Outlined.HelpOutline, SubtleInk, Color(0xFFF4F1ED))
+    FeedCategoryVisual("00000000-0000-0000-0000-000000000001", "일상 이야기", Icons.Outlined.Eco, Color(0xFF54B978), Color(0xFFEAF7ED)),
+    FeedCategoryVisual("00000000-0000-0000-0000-000000000002", "마음과 고민", Icons.Outlined.FavoriteBorder, Color(0xFFE76E91), Color(0xFFFFEFF3)),
+    FeedCategoryVisual("00000000-0000-0000-0000-000000000003", "취미 생활", Icons.Outlined.Palette, Purple, PurpleSoft),
+    FeedCategoryVisual("00000000-0000-0000-0000-000000000004", "질문", Icons.AutoMirrored.Outlined.HelpOutline, SubtleInk, Color(0xFFF4F1ED))
 )
 
 private fun FeedCategoryResult.toVisual(): FeedCategoryVisual = when (name) {
@@ -931,7 +931,7 @@ private fun FeedCategoryOption(
 fun FeedDetailScreen(
     post: FeedPost,
     isLiked: Boolean,
-    loadFeed: suspend (Int) -> Result<FeedDetailResult>,
+    loadFeed: suspend (String) -> Result<FeedDetailResult>,
     onFeedLoaded: (FeedDetailResult) -> Unit,
     onToggleLike: () -> Unit,
     onEdit: () -> Unit,
@@ -1051,7 +1051,7 @@ fun FeedDetailScreen(
         }
     }
 
-    fun assignCommentId(parentIndex: Int, replyIndex: Int?, commentId: Int) {
+    fun assignCommentId(parentIndex: Int, replyIndex: Int?, commentId: String) {
         val updated = comments.mapIndexed { index, parent ->
             if (index != parentIndex) {
                 parent

@@ -54,13 +54,13 @@ fun InterestSettingScreen(
 ) {
     val allInterests by viewModel.allInterests.collectAsState()
     var queryState by remember { mutableStateOf(TextFieldValue("")) }
-    val selectedIds = remember { mutableStateListOf<Int>() }
+    val selectedIds = remember { mutableStateListOf<String>() }
 
     androidx.compose.runtime.LaunchedEffect(Unit) {
         viewModel.fetchAllInterests()
     }
 
-    fun toggle(id: Int) {
+    fun toggle(id: String) {
         if (id in selectedIds) {
             selectedIds.remove(id)
         } else if (selectedIds.size < 3) {
@@ -277,8 +277,8 @@ private fun InterestSectionTitle(
 private fun UnifiedInterestGrid(
     items: List<com.apptive.slowtalk.data.remote.InterestDto>,
     columns: Int,
-    selectedIds: List<Int>,
-    onToggle: (Int) -> Unit
+    selectedIds: List<String>,
+    onToggle: (String) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items.chunked(columns).forEach { rowItems ->

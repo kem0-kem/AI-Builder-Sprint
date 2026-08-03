@@ -3,38 +3,39 @@ package com.apptive.slowtalk
 import com.apptive.slowtalk.data.remote.LetterDetailDto
 import com.apptive.slowtalk.data.remote.LetterSummaryDto
 import com.apptive.slowtalk.data.remote.RetrofitClient
+import com.apptive.slowtalk.data.remote.requireData
 
 object LetterApi {
     suspend fun getLetters(type: String? = null): Result<List<Letter>> = runCatching {
-        RetrofitClient.letterApi.getLetters(type).map(LetterSummaryDto::toLetter)
+        RetrofitClient.letterApi.getLetters(type).requireData().map(LetterSummaryDto::toLetter)
     }
 
-    suspend fun getLetter(letterId: Int): Result<Letter> = runCatching {
-        RetrofitClient.letterApi.getLetter(letterId).toLetter()
+    suspend fun getLetter(letterId: String): Result<Letter> = runCatching {
+        RetrofitClient.letterApi.getLetter(letterId).requireData().toLetter()
     }
 }
 
 private fun LetterSummaryDto.toLetter(): Letter {
-    val received = type.equals("RECEIVED", ignoreCase = true)
+    val received = direction.equals("RECEIVED", ignoreCase = true)
     return Letter(
-        id = letterId,
-        title = if (received) "받은 편지 #$letterId" else "보낸 편지 #$letterId",
-        preview = "편지를 눌러 내용을 확인해보세요.",
+        id = id,
+        title = if (received) "받은 편지 #$id" else "보낸 편지 #$id",
+        preview = content.replace('\n', ' ').take(60),
         date = createdAt.toLetterDate(),
         received = received,
-        content = ""
+        content = content
     )
 }
 
 private fun LetterDetailDto.toLetter(): Letter {
-    val received = type.equals("RECEIVED", ignoreCase = true)
+    val received = direction.equals("RECEIVED", ignoreCase = true)
     val normalized = content.trim()
     val firstLine = normalized.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty()
     val title = firstLine.take(24).ifBlank {
-        if (received) "받은 편지 #$letterId" else "보낸 편지 #$letterId"
+        if (received) "받은 편지 #$id" else "보낸 편지 #$id"
     }
     return Letter(
-        id = letterId,
+        id = id,
         title = title,
         preview = normalized.replace('\n', ' ').take(60),
         date = createdAt.toLetterDate(),

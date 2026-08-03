@@ -12,20 +12,20 @@ import retrofit2.http.Query
 
 interface LetterApiService {
     @GET("letters")
-    suspend fun getLetters(@Query("type") type: String? = null): List<LetterSummaryDto>
+    suspend fun getLetters(@Query("type") type: String? = null): ApiEnvelope<List<LetterSummaryDto>>
 
     @GET("letters/{letterId}")
-    suspend fun getLetter(@Path("letterId") letterId: Int): LetterDetailDto
+    suspend fun getLetter(@Path("letterId") letterId: String): ApiEnvelope<LetterDetailDto>
 
     @POST("letters/feedback")
-    suspend fun getLetterFeedback(@Body request: LetterFeedbackRequest): LetterFeedbackResponse
+    suspend fun getLetterFeedback(@Body request: LetterFeedbackRequest): ApiEnvelope<LetterFeedbackResponse>
 
     @POST("letters")
-    suspend fun createLetter(@Body request: LetterCreateRequest)
+    suspend fun createLetter(@Body request: LetterCreateRequest): ApiEnvelope<LetterCreateResponse>
 
     @Multipart
     @POST("letters/ocr")
-    suspend fun performLetterOcr(@Part image: MultipartBody.Part): LetterOcrResponse
+    suspend fun performLetterOcr(@Part image: MultipartBody.Part): ApiEnvelope<LetterOcrResponse>
 }
 
 @Serializable
@@ -33,9 +33,14 @@ data class LetterFeedbackRequest(val content: String)
 
 @Serializable
 data class LetterFeedbackResponse(
-    val warning: AiWarningDto,
+    val summary: String,
+    val suggestions: List<String>,
+) {
+    val warning: AiWarningDto
+        get() = AiWarningDto(exists = false)
     val tips: List<String>
-)
+        get() = suggestions
+}
 
 @Serializable
 data class AiWarningDto(
@@ -47,23 +52,44 @@ data class AiWarningDto(
 data class LetterCreateRequest(
     val content: String,
     val match: Boolean,
-    val region: RegionDto
 )
 
 @Serializable
-data class LetterOcrResponse(val content: String)
+data class LetterOcrResponse(val text: String)
 
 @Serializable
 data class LetterSummaryDto(
-    val letterId: Int,
-    val type: String,
+    val id: String,
+    val direction: String,
+    val content: String,
     val createdAt: String
 )
 
 @Serializable
 data class LetterDetailDto(
-    val letterId: Int,
-    val type: String,
+    val id: String,
+    val direction: String,
     val content: String,
     val createdAt: String
 )
+
+@Serializable
+data class LetterCreateResponse(
+    val letter: LetterDetailDto,
+    val matching: LetterMatchingDto,
+    val chatRoom: LetterChatRoomDto? = null,
+    val firstMessage: LetterFirstMessageDto? = null,
+)
+
+@Serializable
+data class LetterMatchingDto(
+    val matched: Boolean,
+    val strategy: String? = null,
+    val fallbackReason: String? = null,
+)
+
+@Serializable
+data class LetterChatRoomDto(val id: String, val type: String)
+
+@Serializable
+data class LetterFirstMessageDto(val id: String, val type: String)

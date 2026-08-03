@@ -6,13 +6,17 @@ import kotlinx.serialization.Serializable
 data class SignupRequest(
     val email: String,
     val password: String,
-    val nickname: String
+    val nickname: String,
+    val username: String? = null,
 )
 
 @Serializable
 data class SignupResponse(
-    val userId: Int,
-    val message: String
+    val userId: String,
+    val accessToken: String,
+    val refreshToken: String,
+    val tokenType: String = "Bearer",
+    val expiresIn: Int,
 )
 
 @Serializable
@@ -24,7 +28,9 @@ data class LoginRequest(
 @Serializable
 data class LoginResponse(
     val accessToken: String,
-    val refreshToken: String
+    val refreshToken: String,
+    val tokenType: String = "Bearer",
+    val expiresIn: Int,
 )
 
 @Serializable

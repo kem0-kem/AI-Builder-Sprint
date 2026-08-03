@@ -4,14 +4,16 @@ import com.apptive.slowtalk.data.remote.ChatMessageDto
 import com.apptive.slowtalk.data.remote.ChatMessageRequest
 import com.apptive.slowtalk.data.remote.ChatReadRequest
 import com.apptive.slowtalk.data.remote.RetrofitClient
+import com.apptive.slowtalk.data.remote.requireData
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import java.util.UUID
 
 data class ChatRoomInfo(
-    val id: Int,
+    val id: String,
     val isGroup: Boolean,
     val name: String?,
     val participantCount: Int?
@@ -19,53 +21,47 @@ data class ChatRoomInfo(
 
 object ChatApi {
     suspend fun getRooms(): Result<List<Conversation>> = runCatching {
-        RetrofitClient.chatApi.getChatRooms().map { room ->
+        RetrofitClient.chatApi.getChatRooms().requireData().map { room ->
             val isGroup = room.type == "GROUP"
             Conversation(
-                title = room.roomName ?: "익명의 이웃 ${room.chatRoomId.toString().padStart(2, '0')}",
-                preview = room.lastMessage.orEmpty(),
-                time = displayTime(room.lastMessageAt),
-                unread = room.unreadCount > 0,
+                title = room.name ?: "익명의 이웃",
+                preview = "",
+                time = displayTime(room.createdAt),
+                unread = false,
                 isGroup = isGroup,
                 members = if (isGroup) 0 else 1,
-                chatRoomId = room.chatRoomId
+                chatRoomId = room.id
             )
         }
     }
 
-    suspend fun getRoom(chatRoomId: Int): Result<ChatRoomInfo> = runCatching {
-        RetrofitClient.chatApi.getChatRoom(chatRoomId).let {
+    suspend fun getRoom(chatRoomId: String): Result<ChatRoomInfo> = runCatching {
+        RetrofitClient.chatApi.getChatRoom(chatRoomId).requireData().let {
             ChatRoomInfo(
-                id = it.chatRoomId,
+                id = it.id,
                 isGroup = it.type == "GROUP",
-                name = it.roomName,
-                participantCount = it.participantCount
+                name = it.name,
+                participantCount = null
             )
         }
     }
 
-    suspend fun getMessages(chatRoomId: Int): Result<List<ChatMessage>> = runCatching {
-        RetrofitClient.chatApi.getMessages(chatRoomId).map { it.toModel() }
+    suspend fun getMessages(chatRoomId: String): Result<List<ChatMessage>> = runCatching {
+        RetrofitClient.chatApi.getMessages(chatRoomId).requireData().map { it.toModel() }
     }
 
-    suspend fun sendMessage(chatRoomId: Int, content: String): Result<ChatMessage> = runCatching {
-        RetrofitClient.chatApi.sendMessage(chatRoomId, ChatMessageRequest(content)).let {
-            ChatMessage(
-                sender = "나",
-                body = content,
-                time = displayTime(it.createdAt),
-                mine = true,
-                id = it.messageId
-            )
-        }
+    suspend fun sendMessage(chatRoomId: String, content: String): Result<ChatMessage> = runCatching {
+        RetrofitClient.chatApi.sendMessage(
+            chatRoomId,
+            ChatMessageRequest(UUID.randomUUID().toString(), content),
+        ).requireData().toModel()
     }
 
-    suspend fun markAsRead(chatRoomId: Int, lastReadMessageId: Int): Result<Int> = runCatching {
+    suspend fun markAsRead(chatRoomId: String, lastReadMessageId: String): Result<Int> = runCatching {
         RetrofitClient.chatApi.markAsRead(
             chatRoomId = chatRoomId,
             request = ChatReadRequest(lastReadMessageId)
-        ).let { response ->
-            check(response.success) { "채팅방 읽음 처리에 실패했습니다." }
+        ).requireData().let { response ->
             response.unreadCount
         }
     }
@@ -75,7 +71,7 @@ class ChatSocketConnection(
     private val socket: WebSocket
 ) {
     fun send(content: String): Boolean = socket.send(
-        Json.encodeToString(ChatMessageRequest(content))
+        Json.encodeToString(ChatMessageRequest(UUID.randomUUID().toString(), content))
     )
 
     fun close() {
@@ -87,7 +83,7 @@ object ChatSocket {
     private val json = Json { ignoreUnknownKeys = true }
 
     fun connect(
-        chatRoomId: Int,
+        chatRoomId: String,
         onMessage: (ChatMessage) -> Unit,
         onFailure: () -> Unit
     ): ChatSocketConnection {
@@ -110,11 +106,11 @@ object ChatSocket {
 }
 
 private fun ChatMessageDto.toModel(): ChatMessage = ChatMessage(
-    sender = sender,
+    sender = sender.displayName,
     body = content,
     time = displayTime(createdAt),
-    mine = sender == "나" || sender == "글쓴이",
-    id = messageId,
+    mine = sender.isMe,
+    id = id,
     type = type
 )
 
