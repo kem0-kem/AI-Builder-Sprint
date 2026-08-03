@@ -1,6 +1,6 @@
-# SlowTalk
+# 마음잇기
 
-빠른 관계 맺기에 지친 사람들을 위한 지역 기반 느린 연결 플랫폼입니다. 손편지 OCR, AI 글쓰기 피드백, 의미 기반 매칭, 익명·모임 대화와 회고를 하나의 Android 앱에서 제공합니다.
+지역 기반 연결 플랫폼입니다. 손편지 OCR, AI 글쓰기 피드백, 의미 기반 매칭, 익명·모임 대화와 회고를 하나의 Android 앱에서 제공합니다.
 
 - 운영 API: [backend-production-2f6a.up.railway.app](https://backend-production-2f6a.up.railway.app/docs)
 - [AI 활용 증빙](AI_USAGE_EVIDENCE.md)
@@ -23,7 +23,7 @@ Codex를 코드 탐색, Android–FastAPI API 계약 구현, 장애 재현, 회�
 
 - [AGENTS.md](AGENTS.md): 모든 코딩 에이전트가 따르는 아키텍처·보안·검증 규칙
 - [CLAUDE.md](CLAUDE.md), [.claude/settings.json](.claude/settings.json): Claude Code용 프로젝트 지침과 공유 권한 설정
-- [.agents/skills/slowtalk-development/SKILL.md](.agents/skills/slowtalk-development/SKILL.md): SlowTalk 기능 구현·진단·배포 준비를 위한 저장소 전용 스킬
+- [.agents/skills/slowtalk-development/SKILL.md](.agents/skills/slowtalk-development/SKILL.md): 마음잇기 기능 구현·진단·배포 준비를 위한 저장소 전용 스킬
 - [AI_USAGE_EVIDENCE.md](AI_USAGE_EVIDENCE.md): 제품 내 Upstage 사용과 개발 과정 AI 활용 증빙
 
 `.omc`는 이 프로젝트의 개발 과정에서 사용하지 않아 실제 사용하지 않은 설정을 증빙처럼 만들지 않았습니다. 개인 설정인 `.claude/settings.local.json`, 환경 파일, API 키와 서명 키는 추적하지 않습니다.

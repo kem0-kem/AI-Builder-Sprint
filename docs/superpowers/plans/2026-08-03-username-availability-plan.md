@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a backward-compatible, public username availability API backed by an optional unique username on SlowTalk users.
+**Goal:** Add a backward-compatible, public username availability API backed by an optional unique username on 마음잇기 users.
 
 **Architecture:** Extend the existing auth domain with one canonical username validation type shared by signup and query parsing. Store normalized usernames in a nullable uniquely indexed column, expose availability through the existing success envelope, and retain the database constraint as the concurrency authority.
 
@@ -14,7 +14,7 @@
 - Username input accepts ASCII letters, digits, and underscore; length is 3 to 30; storage and comparison use lowercase.
 - `username` remains optional during signup so existing clients keep working.
 - `nickname` remains the editable display name and email remains the login identifier.
-- API responses use SlowTalk's existing `success(...)` envelope.
+- API responses use 마음잇기의 existing `success(...)` envelope.
 - Availability is advisory; database uniqueness remains authoritative for concurrent signup.
 - The migration is `0005_usernames` with parent `0004_matching_vectors` and leaves legacy usernames `NULL`.
 - Do not modify or stage `.codex-remote-attachments/`.

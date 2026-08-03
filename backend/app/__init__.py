@@ -1,1 +1,1 @@
-"""SlowTalk API application."""
+"""마음잇기 API application."""

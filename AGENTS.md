@@ -1,8 +1,8 @@
-# SlowTalk Repository Instructions
+# 마음잇기 Repository Instructions
 
 ## Scope
 
-These instructions apply to the entire repository. SlowTalk consists of an Android Jetpack Compose client, a FastAPI backend, PostgreSQL/pgvector, and Upstage AI integrations deployed on Railway.
+These instructions apply to the entire repository. 마음잇기 consists of an Android Jetpack Compose client, a FastAPI backend, PostgreSQL/pgvector, and Upstage AI integrations deployed on Railway.
 
 ## Before changing code
 

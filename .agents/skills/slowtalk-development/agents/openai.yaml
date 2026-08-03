@@ -1,4 +1,4 @@
 interface:
-  display_name: "SlowTalk Development"
-  short_description: "Build and verify the SlowTalk Android and FastAPI stack"
-  default_prompt: "Use $slowtalk-development to implement and verify a SlowTalk feature safely."
+  display_name: "마음잇기 Development"
+  short_description: "Build and verify the 마음잇기 Android and FastAPI stack"
+  default_prompt: "Use $slowtalk-development to implement and verify a 마음잇기 feature safely."

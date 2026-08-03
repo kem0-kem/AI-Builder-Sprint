@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "slowtalk-api"
 version = "0.1.0"
-description = "SlowTalk backend API"
+description = "마음잇기 backend API"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.116,<1",

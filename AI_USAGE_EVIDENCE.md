@@ -1,20 +1,20 @@
-# SlowTalk AI 활용 증빙
+# 마음잇기 AI 활용 증빙
 
 > **핵심 AI 제공자: Upstage**  
-> SlowTalk은 Upstage Document Parse로 손글씨·문서 이미지를 편지/회고 입력란의 텍스트로 변환하고, Upstage Solar Chat으로 사용자 콘텐츠를 안전성 분류합니다. Solar Embedding 기반 의미 매칭도 코드와 데이터 계층까지 구현되어 있으며 운영 설정에 따라 단계적으로 활성화할 수 있습니다.
+> 마음잇기는 Upstage Document Parse로 손글씨·문서 이미지를 편지/회고 입력란의 텍스트로 변환하고, Upstage Solar Chat으로 사용자 콘텐츠를 안전성 분류합니다. Solar Embedding 기반 의미 매칭도 코드와 데이터 계층까지 구현되어 있으며 운영 설정에 따라 단계적으로 활성화할 수 있습니다.
 
 ## 제출 정보
 
-- 서비스: 지역 기반 느린 연결 플랫폼 **SlowTalk**
+- 서비스: 지역 기반 연결 플랫폼 **마음잇기**
 - Android 앱 + FastAPI 백엔드 + PostgreSQL/pgvector
 - 운영 API: <https://backend-production-2f6a.up.railway.app>
-- 시연 영상: [SlowTalk Android 시연 영상](docs/demo/slowtalk-demo.mp4)
+- 시연 영상: [마음잇기 Android 시연 영상](docs/demo/slowtalk-demo.mp4)
 - 검증 기준: `codex/semantic-matching-foundation` 브랜치
 - 작성일: 2026-08-03
 
 ## Upstage API 활용 현황
 
-| Upstage 기능 | SlowTalk 적용 지점 | 모델/호출 | 현재 상태 |
+| Upstage 기능 | 마음잇기 적용 지점 | 모델/호출 | 현재 상태 |
 | --- | --- | --- | --- |
 | **Document Parse** | 편지 쓰기·회고 리포트에서 카메라/갤러리 이미지의 문자를 입력란에 반영 | `POST /v1/document-digitization`, `document-parse`, `ocr=force` | **앱-운영 백엔드 연결 완료** |
 | **Solar Chat** | 편지·피드·회고의 내용별 글쓰기 피드백 및 사용자 생성 콘텐츠 안전성 분류 | `POST /v1/chat/completions`, `UPSTAGE_CHAT_MODEL` | 글쓰기 피드백 연결 완료, 모더레이션은 **운영 `shadow` 모드** |
