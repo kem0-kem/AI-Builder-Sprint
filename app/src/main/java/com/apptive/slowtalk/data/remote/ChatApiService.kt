@@ -13,6 +13,11 @@ interface ChatApiService {
     @GET("chat-rooms")
     suspend fun getChatRooms(): ApiEnvelope<List<ChatRoomSummaryDto>>
 
+    @POST("comments/{commentId}/chat-room")
+    suspend fun createFromComment(
+        @Path("commentId") commentId: String,
+    ): ApiEnvelope<ChatRoomInfoDto>
+
     @GET("chat-rooms/{chatRoomId}")
     suspend fun getChatRoom(@Path("chatRoomId") chatRoomId: String): ApiEnvelope<ChatRoomInfoDto>
 

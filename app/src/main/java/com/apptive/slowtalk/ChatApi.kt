@@ -1,5 +1,6 @@
 package com.apptive.slowtalk
 
+import com.apptive.slowtalk.data.remote.ChatApiService
 import com.apptive.slowtalk.data.remote.ChatMessageDto
 import com.apptive.slowtalk.data.remote.ChatMessageRequest
 import com.apptive.slowtalk.data.remote.ChatReadRequest
@@ -22,6 +23,23 @@ data class ChatRoomInfo(
 )
 
 object ChatApi {
+    suspend fun openFromComment(commentId: String): Result<ChatRoomInfo> =
+        openFromComment(commentId, RetrofitClient.chatApi)
+
+    internal suspend fun openFromComment(
+        commentId: String,
+        service: ChatApiService,
+    ): Result<ChatRoomInfo> = runCatching {
+        apiData { service.createFromComment(commentId) }.let {
+            ChatRoomInfo(
+                id = it.id,
+                isGroup = it.type == "GROUP",
+                name = it.name,
+                participantCount = null,
+            )
+        }
+    }
+
     suspend fun getRooms(): Result<List<Conversation>> = runCatching {
         apiData { RetrofitClient.chatApi.getChatRooms() }.map { room ->
             val isGroup = room.type == "GROUP"
