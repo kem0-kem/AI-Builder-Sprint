@@ -4,7 +4,9 @@ import com.apptive.slowtalk.data.remote.ChatMessageDto
 import com.apptive.slowtalk.data.remote.ChatMessageRequest
 import com.apptive.slowtalk.data.remote.ChatReadRequest
 import com.apptive.slowtalk.data.remote.RetrofitClient
-import com.apptive.slowtalk.data.remote.requireData
+import com.apptive.slowtalk.data.remote.apiData
+import com.apptive.slowtalk.data.remote.apiModerated
+import com.apptive.slowtalk.data.remote.requireResource
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.Response
@@ -21,7 +23,7 @@ data class ChatRoomInfo(
 
 object ChatApi {
     suspend fun getRooms(): Result<List<Conversation>> = runCatching {
-        RetrofitClient.chatApi.getChatRooms().requireData().map { room ->
+        apiData { RetrofitClient.chatApi.getChatRooms() }.map { room ->
             val isGroup = room.type == "GROUP"
             Conversation(
                 title = room.name ?: "익명의 이웃",
@@ -36,7 +38,7 @@ object ChatApi {
     }
 
     suspend fun getRoom(chatRoomId: String): Result<ChatRoomInfo> = runCatching {
-        RetrofitClient.chatApi.getChatRoom(chatRoomId).requireData().let {
+        apiData { RetrofitClient.chatApi.getChatRoom(chatRoomId) }.let {
             ChatRoomInfo(
                 id = it.id,
                 isGroup = it.type == "GROUP",
@@ -47,21 +49,25 @@ object ChatApi {
     }
 
     suspend fun getMessages(chatRoomId: String): Result<List<ChatMessage>> = runCatching {
-        RetrofitClient.chatApi.getMessages(chatRoomId).requireData().map { it.toModel() }
+        apiData { RetrofitClient.chatApi.getMessages(chatRoomId) }.map { it.toModel() }
     }
 
     suspend fun sendMessage(chatRoomId: String, content: String): Result<ChatMessage> = runCatching {
-        RetrofitClient.chatApi.sendMessage(
-            chatRoomId,
-            ChatMessageRequest(UUID.randomUUID().toString(), content),
-        ).requireData().toModel()
+        apiModerated(ChatMessageDto.serializer()) {
+            RetrofitClient.chatApi.sendMessage(
+                chatRoomId,
+                ChatMessageRequest(UUID.randomUUID().toString(), content),
+            )
+        }.requireResource().toModel()
     }
 
     suspend fun markAsRead(chatRoomId: String, lastReadMessageId: String): Result<Int> = runCatching {
-        RetrofitClient.chatApi.markAsRead(
-            chatRoomId = chatRoomId,
-            request = ChatReadRequest(lastReadMessageId)
-        ).requireData().let { response ->
+        apiData {
+            RetrofitClient.chatApi.markAsRead(
+                chatRoomId = chatRoomId,
+                request = ChatReadRequest(lastReadMessageId),
+            )
+        }.let { response ->
             response.unreadCount
         }
     }

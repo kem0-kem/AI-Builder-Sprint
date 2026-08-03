@@ -1,6 +1,7 @@
 package com.apptive.slowtalk.data.remote
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 import okhttp3.MultipartBody
 import retrofit2.http.Body
 import retrofit2.http.GET
@@ -9,6 +10,7 @@ import retrofit2.http.POST
 import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
+import retrofit2.Response
 
 interface LetterApiService {
     @GET("letters")
@@ -21,11 +23,11 @@ interface LetterApiService {
     suspend fun getLetterFeedback(@Body request: LetterFeedbackRequest): ApiEnvelope<LetterFeedbackResponse>
 
     @POST("letters")
-    suspend fun createLetter(@Body request: LetterCreateRequest): ApiEnvelope<LetterCreateResponse>
+    suspend fun createLetter(@Body request: LetterCreateRequest): Response<ApiEnvelope<JsonElement>>
 
     @Multipart
     @POST("letters/ocr")
-    suspend fun performLetterOcr(@Part image: MultipartBody.Part): ApiEnvelope<LetterOcrResponse>
+    suspend fun performLetterOcr(@Part image: MultipartBody.Part): Response<ApiEnvelope<JsonElement>>
 }
 
 @Serializable

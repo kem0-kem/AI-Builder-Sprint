@@ -3,15 +3,15 @@ package com.apptive.slowtalk
 import com.apptive.slowtalk.data.remote.LetterDetailDto
 import com.apptive.slowtalk.data.remote.LetterSummaryDto
 import com.apptive.slowtalk.data.remote.RetrofitClient
-import com.apptive.slowtalk.data.remote.requireData
+import com.apptive.slowtalk.data.remote.apiData
 
 object LetterApi {
     suspend fun getLetters(type: String? = null): Result<List<Letter>> = runCatching {
-        RetrofitClient.letterApi.getLetters(type).requireData().map(LetterSummaryDto::toLetter)
+        apiData { RetrofitClient.letterApi.getLetters(type) }.map(LetterSummaryDto::toLetter)
     }
 
     suspend fun getLetter(letterId: String): Result<Letter> = runCatching {
-        RetrofitClient.letterApi.getLetter(letterId).requireData().toLetter()
+        apiData { RetrofitClient.letterApi.getLetter(letterId) }.toLetter()
     }
 }
 

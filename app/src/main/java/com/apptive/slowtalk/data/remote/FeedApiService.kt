@@ -1,6 +1,7 @@
 package com.apptive.slowtalk.data.remote
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
@@ -17,7 +18,7 @@ interface FeedApiService {
     suspend fun getFeedCategories(): ApiEnvelope<List<FeedWriteCategoryDto>>
 
     @POST("feeds")
-    suspend fun createFeed(@Body request: FeedCreateRequest): ApiEnvelope<FeedTimelineDto>
+    suspend fun createFeed(@Body request: FeedCreateRequest): Response<ApiEnvelope<JsonElement>>
 
     @POST("feeds/feedback")
     suspend fun getFeedFeedback(@Body request: FeedFeedbackRequest): ApiEnvelope<FeedFeedbackResponse>
@@ -32,7 +33,7 @@ interface FeedApiService {
     suspend fun updateFeed(
         @Path("feedId") feedId: String,
         @Body request: FeedUpdateRequest
-    ): ApiEnvelope<FeedTimelineDto>
+    ): Response<ApiEnvelope<JsonElement>>
 
     @DELETE("feeds/{feedId}")
     suspend fun deleteFeed(@Path("feedId") feedId: String): Response<Unit>
@@ -50,14 +51,14 @@ interface FeedApiService {
     suspend fun createComment(
         @Path("feedId") feedId: String,
         @Body request: CommentContentRequest
-    ): ApiEnvelope<CommentCreateResponse>
+    ): Response<ApiEnvelope<JsonElement>>
 
     @PATCH("feeds/{feedId}/comments/{commentId}")
     suspend fun updateComment(
         @Path("feedId") feedId: String,
         @Path("commentId") commentId: String,
         @Body request: CommentContentRequest
-    ): ApiEnvelope<CommentCreateResponse>
+    ): Response<ApiEnvelope<JsonElement>>
 
     @DELETE("feeds/{feedId}/comments/{commentId}")
     suspend fun deleteComment(

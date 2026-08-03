@@ -57,17 +57,12 @@ internal fun createOkHttpClient(
 object RetrofitClient {
     internal val baseUrl = configuredBaseUrl(BuildConfig.API_BASE_URL, BuildConfig.DEBUG)
 
-    private val json = Json {
-        ignoreUnknownKeys = true
-        coerceInputValues = true
-    }
-
     private val okHttpClient = createOkHttpClient(BuildConfig.DEBUG)
 
     private val retrofit = Retrofit.Builder()
         .baseUrl(baseUrl)
         .client(okHttpClient)
-        .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+        .addConverterFactory(apiJson.asConverterFactory("application/json".toMediaType()))
         .build()
 
     val profileApi: ProfileApi = retrofit.create(ProfileApi::class.java)

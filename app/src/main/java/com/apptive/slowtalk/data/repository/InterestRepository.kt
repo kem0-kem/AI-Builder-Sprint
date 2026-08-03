@@ -4,7 +4,7 @@ import com.apptive.slowtalk.data.remote.InterestApi
 import com.apptive.slowtalk.data.remote.InterestDto
 import com.apptive.slowtalk.data.remote.InterestUpdateRequest
 import com.apptive.slowtalk.data.remote.RetrofitClient
-import com.apptive.slowtalk.data.remote.requireData
+import com.apptive.slowtalk.data.remote.apiData
 
 class InterestRepository(private val api: InterestApi = RetrofitClient.interestApi) {
 
@@ -30,7 +30,7 @@ class InterestRepository(private val api: InterestApi = RetrofitClient.interestA
             )
         }
         return try {
-            Result.success(api.getInterests().requireData())
+            Result.success(apiData { api.getInterests() })
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -41,7 +41,7 @@ class InterestRepository(private val api: InterestApi = RetrofitClient.interestA
             return Result.success(interestIds)
         }
         return try {
-            api.updateMyInterests(InterestUpdateRequest(interestIds)).requireData()
+            apiData { api.updateMyInterests(InterestUpdateRequest(interestIds)) }
             Result.success(interestIds)
         } catch (e: Exception) {
             Result.failure(e)

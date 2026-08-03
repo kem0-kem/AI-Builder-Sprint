@@ -1,6 +1,8 @@
 package com.apptive.slowtalk.data.remote
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
+import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.PATCH
@@ -21,7 +23,7 @@ interface ChatApiService {
     suspend fun sendMessage(
         @Path("chatRoomId") chatRoomId: String,
         @Body request: ChatMessageRequest
-    ): ApiEnvelope<ChatMessageDto>
+    ): Response<ApiEnvelope<JsonElement>>
 
     @PATCH("chat-rooms/{chatRoomId}/read")
     suspend fun markAsRead(

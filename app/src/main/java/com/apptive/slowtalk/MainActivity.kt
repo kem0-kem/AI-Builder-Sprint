@@ -248,12 +248,13 @@ private fun ApptiveApp() {
                 onSubmit = { categoryId, _, title, body ->
                     FeedApi.createFeed(categoryId, title, body)
                 },
-                onSuccess = { feedId, category, title, body ->
+                onSuccess = { feedId, categoryId, category, title, body ->
                     feeds.add(
                         0,
                         FeedPost(
                             id = feedId,
                             category = category,
+                            categoryId = categoryId,
                             title = title,
                             body = body,
                             accent = Purple,
@@ -285,11 +286,12 @@ private fun ApptiveApp() {
                                 content = body
                             ).map { post.id }
                         },
-                        onSuccess = { _, category, title, body ->
+                        onSuccess = { _, categoryId, category, title, body ->
                             val index = feeds.indexOfFirst { it.id == post.id }
                             if (index >= 0) {
                                 feeds[index] = post.copy(
                                     category = category,
+                                    categoryId = categoryId,
                                     title = title,
                                     body = body
                                 )

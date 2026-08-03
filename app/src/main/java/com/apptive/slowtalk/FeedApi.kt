@@ -5,9 +5,13 @@ import com.apptive.slowtalk.data.remote.FeedUpdateRequest
 import com.apptive.slowtalk.data.remote.CommentContentRequest
 import com.apptive.slowtalk.data.remote.FeedCreateRequest
 import com.apptive.slowtalk.data.remote.FeedFeedbackRequest
+import com.apptive.slowtalk.data.remote.FeedTimelineDto
+import com.apptive.slowtalk.data.remote.CommentCreateResponse
 import com.apptive.slowtalk.data.remote.RetrofitClient
-import com.apptive.slowtalk.data.remote.requireData
-import retrofit2.Response
+import com.apptive.slowtalk.data.remote.apiData
+import com.apptive.slowtalk.data.remote.apiModerated
+import com.apptive.slowtalk.data.remote.apiUnit
+import com.apptive.slowtalk.data.remote.requireResource
 
 data class MyFeedResult(
     val post: FeedPost,
@@ -29,10 +33,13 @@ data class FeedFeedbackResult(
 
 object FeedApi {
     val isConfigured: Boolean = true
+    private val categoryNames = mutableMapOf<String, String>()
 
     suspend fun getFeedCategories(): Result<List<FeedCategoryResult>> = runCatching {
-        RetrofitClient.feedApi.getFeedCategories().requireData().map {
+        apiData { RetrofitClient.feedApi.getFeedCategories() }.map {
             FeedCategoryResult(it.id, appCategoryName(it.name))
+        }.also { categories ->
+            categoryNames.putAll(categories.associate { it.id to it.name })
         }
     }
 
@@ -41,16 +48,16 @@ object FeedApi {
         title: String,
         content: String
     ): Result<String> = runCatching {
-        RetrofitClient.feedApi.createFeed(
-            FeedCreateRequest(categoryId, title, content)
-        ).requireData().id
+        apiModerated(FeedTimelineDto.serializer()) {
+            RetrofitClient.feedApi.createFeed(FeedCreateRequest(categoryId, title, content))
+        }.requireResource().id
     }
 
     suspend fun getFeedFeedback(title: String, content: String): Result<FeedFeedbackResult> =
         runCatching {
-            RetrofitClient.feedApi.getFeedFeedback(
-                FeedFeedbackRequest(title, content)
-            ).requireData().let {
+            apiData {
+                RetrofitClient.feedApi.getFeedFeedback(FeedFeedbackRequest(title, content))
+            }.let {
                 FeedFeedbackResult(
                     hasWarning = false,
                     warningMessage = null,
@@ -60,45 +67,30 @@ object FeedApi {
         }
 
     suspend fun getMyFeeds(): Result<List<MyFeedResult>> = runCatching {
-        RetrofitClient.feedApi.getMyFeeds().requireData().map { item ->
-            val category = item.categoryId
+        apiData { RetrofitClient.feedApi.getMyFeeds() }.map { item ->
             MyFeedResult(
-                post = FeedPost(
-                    id = item.id,
-                    category = category,
-                    title = item.title,
-                    body = item.content,
-                    accent = categoryAccent(category),
-                    isMine = true
-                ),
+                post = item.toFeedPost(categoryNames[item.categoryId]).copy(isMine = true),
                 liked = item.liked
             )
         }
     }
 
     suspend fun getFeeds(): Result<List<MyFeedResult>> = runCatching {
-        RetrofitClient.feedApi.getFeeds().requireData().map { item ->
-            val category = item.categoryId
+        apiData { RetrofitClient.feedApi.getFeeds() }.map { item ->
             MyFeedResult(
-                post = FeedPost(
-                    id = item.id,
-                    category = category,
-                    title = item.title,
-                    body = item.content,
-                    accent = categoryAccent(category),
-                    isMine = item.isMine
-                ),
+                post = item.toFeedPost(categoryNames[item.categoryId]),
                 liked = item.liked
             )
         }
     }
 
     suspend fun getFeedDetail(feedId: String): Result<FeedDetailResult> = runCatching {
-        RetrofitClient.feedApi.getFeed(feedId).requireData().let { item ->
-            val category = item.categoryId
+        apiData { RetrofitClient.feedApi.getFeed(feedId) }.let { item ->
+            val category = categoryNames[item.categoryId]?.let(::appCategoryName) ?: "기타"
             FeedDetailResult(
                 post = FeedPost(
                     id = item.id,
+                    categoryId = item.categoryId,
                     category = category,
                     title = item.title,
                     body = item.content,
@@ -125,55 +117,69 @@ object FeedApi {
         title: String,
         content: String
     ): Result<Unit> = runCatching {
-        RetrofitClient.feedApi.updateFeed(
-            feedId = feedId,
-            request = FeedUpdateRequest(categoryId, title, content)
-        ).requireData()
+        apiModerated(FeedTimelineDto.serializer()) {
+            RetrofitClient.feedApi.updateFeed(
+                feedId = feedId,
+                request = FeedUpdateRequest(categoryId, title, content),
+            )
+        }.requireResource()
     }
 
     suspend fun deleteFeed(feedId: String): Result<Unit> = runCatching {
-        RetrofitClient.feedApi.deleteFeed(feedId).requireSuccess()
+        apiUnit { RetrofitClient.feedApi.deleteFeed(feedId) }
     }
 
     suspend fun reportFeed(feedId: String): Result<Unit> = runCatching {
-        RetrofitClient.feedApi.reportFeed(feedId).requireData()
+        apiData { RetrofitClient.feedApi.reportFeed(feedId) }
+        Unit
     }
 
     suspend fun setFeedLiked(feedId: String, liked: Boolean): Result<Boolean> = runCatching {
         if (liked) {
-            RetrofitClient.feedApi.likeFeed(feedId).requireData().liked
+            apiData { RetrofitClient.feedApi.likeFeed(feedId) }.liked
         } else {
-            RetrofitClient.feedApi.unlikeFeed(feedId).requireData().liked
+            apiData { RetrofitClient.feedApi.unlikeFeed(feedId) }.liked
         }
     }
 
     suspend fun createComment(feedId: String, content: String): Result<String> = runCatching {
-        RetrofitClient.feedApi.createComment(
-            feedId,
-            CommentContentRequest(content)
-        ).requireData().id
+        apiModerated(CommentCreateResponse.serializer()) {
+            RetrofitClient.feedApi.createComment(feedId, CommentContentRequest(content))
+        }.requireResource().id
     }
 
     suspend fun updateComment(feedId: String, commentId: String, content: String): Result<Unit> =
         runCatching {
-            RetrofitClient.feedApi.updateComment(
-                feedId,
-                commentId,
-                CommentContentRequest(content)
-            ).requireData()
+            apiModerated(CommentCreateResponse.serializer()) {
+                RetrofitClient.feedApi.updateComment(
+                    feedId,
+                    commentId,
+                    CommentContentRequest(content),
+                )
+            }.requireResource()
         }
 
     suspend fun deleteComment(feedId: String, commentId: String): Result<Unit> = runCatching {
-        RetrofitClient.feedApi.deleteComment(feedId, commentId).requireSuccess()
+        apiUnit { RetrofitClient.feedApi.deleteComment(feedId, commentId) }
     }
 
     suspend fun reportComment(feedId: String, commentId: String): Result<Unit> = runCatching {
-        RetrofitClient.feedApi.reportComment(feedId, commentId).requireData()
+        apiData { RetrofitClient.feedApi.reportComment(feedId, commentId) }
+        Unit
     }
 }
 
-private fun Response<Unit>.requireSuccess() {
-    check(isSuccessful) { "피드 요청 실패 (${code()})" }
+internal fun FeedTimelineDto.toFeedPost(categoryName: String?): FeedPost {
+    val displayCategory = categoryName?.let(::appCategoryName) ?: "기타"
+    return FeedPost(
+        id = id,
+        categoryId = categoryId,
+        category = displayCategory,
+        title = title,
+        body = content,
+        accent = categoryAccent(displayCategory),
+        isMine = isMine,
+    )
 }
 
 private fun appCategoryName(serverName: String): String = when (serverName.trim()) {

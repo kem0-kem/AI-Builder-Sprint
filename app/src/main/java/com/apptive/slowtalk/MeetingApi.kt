@@ -2,13 +2,13 @@ package com.apptive.slowtalk
 
 import com.apptive.slowtalk.data.remote.CreateMeetingRequest
 import com.apptive.slowtalk.data.remote.RetrofitClient
-import com.apptive.slowtalk.data.remote.requireData
+import com.apptive.slowtalk.data.remote.apiData
 
 object MeetingApi {
     suspend fun getInviteUsers(keyword: String? = null): Result<List<MeetingInviteUser>> = runCatching {
-        RetrofitClient.meetingApi
-            .getInviteUsers(keyword?.trim()?.takeIf { it.isNotEmpty() })
-            .requireData()
+        apiData {
+            RetrofitClient.meetingApi.getInviteUsers(keyword?.trim()?.takeIf { it.isNotEmpty() })
+        }
             .map { MeetingInviteUser(it.candidateId, it.displayName) }
     }
 
@@ -17,14 +17,15 @@ object MeetingApi {
         description: String,
         inviteUserIds: List<String>
     ): Result<MeetingCreation> = runCatching {
-        val response = RetrofitClient.meetingApi.createMeeting(
-            CreateMeetingRequest(
-                title = title.trim(),
-                description = description.trim(),
-                inviteCandidateIds = inviteUserIds
+        val data = apiData {
+            RetrofitClient.meetingApi.createMeeting(
+                CreateMeetingRequest(
+                    title = title.trim(),
+                    description = description.trim(),
+                    inviteCandidateIds = inviteUserIds,
+                ),
             )
-        )
-        val data = response.requireData()
+        }
         MeetingCreation(data.id, data.chatRoom.id)
     }
 }

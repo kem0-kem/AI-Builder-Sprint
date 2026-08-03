@@ -30,6 +30,7 @@ sealed interface Screen {
 data class FeedPost(
     val id: String,
     val category: String,
+    val categoryId: String = category,
     val title: String,
     val body: String,
     val comments: MutableList<Comment> = mutableListOf(),

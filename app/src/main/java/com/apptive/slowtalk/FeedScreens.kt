@@ -468,7 +468,7 @@ fun WriteFeedScreen(
     loadCategories: suspend () -> Result<List<FeedCategoryResult>>,
     requestFeedback: suspend (String, String) -> Result<FeedFeedbackResult>,
     onSubmit: suspend (String, String, String, String) -> Result<String>,
-    onSuccess: (String, String, String, String) -> Unit
+    onSuccess: (String, String, String, String, String) -> Unit
 ) {
     var categories by remember { mutableStateOf(feedCategoryVisuals) }
     var category by remember(initialPost?.id) {
@@ -487,8 +487,7 @@ fun WriteFeedScreen(
         loadCategories().onSuccess { remoteCategories ->
             if (remoteCategories.isNotEmpty()) {
                 categories = remoteCategories.map { it.toVisual() }
-                category = initialPost?.category
-                    ?.takeIf { current -> categories.any { it.name == current } }
+                category = categories.firstOrNull { it.id == initialPost?.categoryId }?.name
                     ?: categories.first().name
             }
         }
@@ -808,7 +807,13 @@ fun WriteFeedScreen(
                                     body.trim()
                                 ).fold(
                                     onSuccess = { feedId ->
-                                        onSuccess(feedId, category, title.trim(), body.trim())
+                                        onSuccess(
+                                            feedId,
+                                            selectedCategory.id,
+                                            category,
+                                            title.trim(),
+                                            body.trim(),
+                                        )
                                     },
                                     onFailure = { submitFailed = true }
                                 )

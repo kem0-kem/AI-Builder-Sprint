@@ -5,7 +5,11 @@ import com.apptive.slowtalk.data.remote.ReportCreateRequest
 import com.apptive.slowtalk.data.remote.ReportFeedbackRequest
 import com.apptive.slowtalk.data.remote.ReportFeedbackResponse
 import com.apptive.slowtalk.data.remote.RetrofitClient
-import com.apptive.slowtalk.data.remote.requireData
+import com.apptive.slowtalk.data.remote.OcrResponse
+import com.apptive.slowtalk.data.remote.ReportCreateResponse
+import com.apptive.slowtalk.data.remote.apiData
+import com.apptive.slowtalk.data.remote.apiModerated
+import com.apptive.slowtalk.data.remote.requireResource
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
@@ -20,7 +24,9 @@ class ReportRepository(private val api: ReportApi = RetrofitClient.reportApi) {
         if (MOCK_MODE) return Result.success("00000000-0000-0000-0000-000000000100")
         return runCatching {
             val analysisId = checkNotNull(latestAnalysisId) { "보고서를 저장하기 전에 피드백 분석이 필요합니다." }
-            api.createReport(ReportCreateRequest(analysisId, content)).requireData().id
+            apiModerated(ReportCreateResponse.serializer()) {
+                api.createReport(ReportCreateRequest(analysisId, content))
+            }.requireResource().id
         }
     }
 
@@ -29,7 +35,9 @@ class ReportRepository(private val api: ReportApi = RetrofitClient.reportApi) {
         return runCatching {
             val requestFile = imageFile.asRequestBody("image/*".toMediaTypeOrNull())
             val body = MultipartBody.Part.createFormData("image", imageFile.name, requestFile)
-            api.performOcr(body).requireData().text
+            apiModerated(OcrResponse.serializer()) {
+                api.performOcr(body)
+            }.requireResource().text
         }
     }
 
@@ -57,7 +65,7 @@ class ReportRepository(private val api: ReportApi = RetrofitClient.reportApi) {
             )
         }
         return runCatching {
-            api.getReportFeedback(ReportFeedbackRequest(content)).requireData().also {
+            apiData { api.getReportFeedback(ReportFeedbackRequest(content)) }.also {
                 latestAnalysisId = it.analysisId
             }
         }

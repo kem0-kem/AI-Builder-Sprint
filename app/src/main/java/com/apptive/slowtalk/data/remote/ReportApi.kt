@@ -1,6 +1,8 @@
 package com.apptive.slowtalk.data.remote
 
 import okhttp3.MultipartBody
+import kotlinx.serialization.json.JsonElement
+import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.Multipart
 import retrofit2.http.POST
@@ -8,11 +10,11 @@ import retrofit2.http.Part
 
 interface ReportApi {
     @POST("reports")
-    suspend fun createReport(@Body request: ReportCreateRequest): ApiEnvelope<ReportCreateResponse>
+    suspend fun createReport(@Body request: ReportCreateRequest): Response<ApiEnvelope<JsonElement>>
 
     @Multipart
     @POST("reports/ocr")
-    suspend fun performOcr(@Part image: MultipartBody.Part): ApiEnvelope<OcrResponse>
+    suspend fun performOcr(@Part image: MultipartBody.Part): Response<ApiEnvelope<JsonElement>>
 
     @POST("reports/feedback")
     suspend fun getReportFeedback(@Body request: ReportFeedbackRequest): ApiEnvelope<ReportFeedbackResponse>

@@ -7,7 +7,8 @@ import com.apptive.slowtalk.data.remote.LoginResponse
 import com.apptive.slowtalk.data.remote.RetrofitClient
 import com.apptive.slowtalk.data.remote.SignupRequest
 import com.apptive.slowtalk.data.remote.SignupResponse
-import com.apptive.slowtalk.data.remote.requireData
+import com.apptive.slowtalk.data.remote.apiData
+import com.apptive.slowtalk.data.remote.apiUnit
 
 class AuthRepository(private val api: AuthApi = RetrofitClient.authApi) {
 
@@ -25,7 +26,7 @@ class AuthRepository(private val api: AuthApi = RetrofitClient.authApi) {
             )
         }
         return try {
-            Result.success(api.signup(request).requireData())
+            Result.success(apiData { api.signup(request) })
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -36,7 +37,7 @@ class AuthRepository(private val api: AuthApi = RetrofitClient.authApi) {
             return Result.success(LoginResponse("mock-access-token", "mock-refresh-token", expiresIn = 3600))
         }
         return try {
-            Result.success(api.login(request).requireData())
+            Result.success(apiData { api.login(request) })
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -48,7 +49,7 @@ class AuthRepository(private val api: AuthApi = RetrofitClient.authApi) {
             return Result.success(email != "test@example.com")
         }
         return try {
-            val response = api.checkEmail(email).requireData()
+            val response = apiData { api.checkEmail(email) }
             Result.success(response.available)
         } catch (e: Exception) {
             Result.failure(e)
@@ -61,7 +62,7 @@ class AuthRepository(private val api: AuthApi = RetrofitClient.authApi) {
             return Result.success(username != "admin")
         }
         return try {
-            val response = api.checkUsername(username).requireData()
+            val response = apiData { api.checkUsername(username) }
             Result.success(response.available)
         } catch (e: Exception) {
             Result.failure(e)
@@ -73,8 +74,7 @@ class AuthRepository(private val api: AuthApi = RetrofitClient.authApi) {
             return Result.success("로그아웃 되었습니다.")
         }
         return try {
-            val response = api.logout()
-            check(response.isSuccessful) { "로그아웃 요청 실패 (${response.code()})" }
+            apiUnit { api.logout() }
             Result.success("로그아웃 되었습니다.")
         } catch (e: Exception) {
             Result.failure(e)

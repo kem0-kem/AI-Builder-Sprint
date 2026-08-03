@@ -7,7 +7,7 @@ import com.apptive.slowtalk.data.remote.UserProfileDto
 import com.apptive.slowtalk.data.remote.InterestDto
 import com.apptive.slowtalk.data.remote.ProfileRegionDto
 import com.apptive.slowtalk.data.remote.RegionOptionDto
-import com.apptive.slowtalk.data.remote.requireData
+import com.apptive.slowtalk.data.remote.apiData
 
 class ProfileRepository(private val api: ProfileApi = RetrofitClient.profileApi) {
 
@@ -38,7 +38,7 @@ class ProfileRepository(private val api: ProfileApi = RetrofitClient.profileApi)
             )
         }
         return try {
-            val response = api.getMyProfile().requireData()
+            val response = apiData { api.getMyProfile() }
             Result.success(response)
         } catch (e: Exception) {
             Result.failure(e)
@@ -50,7 +50,7 @@ class ProfileRepository(private val api: ProfileApi = RetrofitClient.profileApi)
             return Result.success("프로필이 성공적으로 업데이트되었습니다. (Mock)")
         }
         return try {
-            api.updateProfile(profile).requireData()
+            apiData { api.updateProfile(profile) }
             Result.success("프로필이 성공적으로 업데이트되었습니다.")
         } catch (e: Exception) {
             Result.failure(e)

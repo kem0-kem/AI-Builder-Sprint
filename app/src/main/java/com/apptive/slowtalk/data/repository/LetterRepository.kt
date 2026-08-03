@@ -7,7 +7,11 @@ import com.apptive.slowtalk.data.remote.LetterFeedbackResponse
 import com.apptive.slowtalk.data.remote.AiWarningDto
 import com.apptive.slowtalk.data.remote.RetrofitClient
 import com.apptive.slowtalk.data.remote.RegionDto
-import com.apptive.slowtalk.data.remote.requireData
+import com.apptive.slowtalk.data.remote.LetterCreateResponse
+import com.apptive.slowtalk.data.remote.LetterOcrResponse
+import com.apptive.slowtalk.data.remote.apiData
+import com.apptive.slowtalk.data.remote.apiModerated
+import com.apptive.slowtalk.data.remote.requireResource
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
@@ -30,14 +34,16 @@ class LetterRepository(private val api: LetterApiService = RetrofitClient.letter
             )
         }
         return runCatching {
-            api.getLetterFeedback(LetterFeedbackRequest(content)).requireData()
+            apiData { api.getLetterFeedback(LetterFeedbackRequest(content)) }
         }
     }
 
     suspend fun createLetter(content: String, match: Boolean, region: RegionDto): Result<Unit> {
         if (MOCK_MODE) return Result.success(Unit)
         return runCatching {
-            api.createLetter(LetterCreateRequest(content, match)).requireData()
+            apiModerated(LetterCreateResponse.serializer()) {
+                api.createLetter(LetterCreateRequest(content, match))
+            }.requireResource()
             Unit
         }
     }
@@ -47,7 +53,9 @@ class LetterRepository(private val api: LetterApiService = RetrofitClient.letter
         return runCatching {
             val requestFile = imageFile.asRequestBody("image/*".toMediaTypeOrNull())
             val body = MultipartBody.Part.createFormData("image", imageFile.name, requestFile)
-            api.performLetterOcr(body).requireData().text
+            apiModerated(LetterOcrResponse.serializer()) {
+                api.performLetterOcr(body)
+            }.requireResource().text
         }
     }
 }
