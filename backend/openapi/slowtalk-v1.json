@@ -2032,6 +2032,54 @@
         }
       }
     },
+    "/api/v1/comments/{comment_id}/chat-room": {
+      "post": {
+        "tags": [
+          "feeds"
+        ],
+        "summary": "Create Comment Chat Room",
+        "operationId": "create_comment_chat_room_api_v1_comments__comment_id__chat_room_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "comment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Comment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatRoomSuccessResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/comments/{comment_id}/reports": {
       "post": {
         "tags": [
@@ -2544,6 +2592,64 @@
           "lastReadMessageId"
         ],
         "title": "ChatRoomReadUpdate"
+      },
+      "ChatRoomSuccessResponse": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true,
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/ChatRoomView"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "ChatRoomSuccessResponse"
+      },
+      "ChatRoomView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "type": {
+            "type": "string",
+            "const": "DIRECT",
+            "title": "Type"
+          },
+          "name": {
+            "type": "null",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "type"
+        ],
+        "title": "ChatRoomView"
       },
       "CommentCreate": {
         "properties": {
