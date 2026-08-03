@@ -18,6 +18,7 @@ data class FeedDetailResult(val post: FeedPost, val liked: Boolean)
 data class FeedCategoryResult(val id: String, val name: String)
 
 data class FeedFeedbackResult(
+    val summary: String,
     val hasWarning: Boolean,
     val warningMessage: String?,
     val tips: List<String>
@@ -48,6 +49,7 @@ object FeedApi {
                 FeedFeedbackRequest(title, content)
             ).requireFeedData().let {
                 FeedFeedbackResult(
+                    summary = it.summary,
                     hasWarning = false,
                     warningMessage = it.summary.ifBlank { null },
                     tips = it.suggestions

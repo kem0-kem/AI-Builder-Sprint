@@ -306,13 +306,12 @@ fun WriteLetterScreen(
                                 }
                             } else {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Outlined.Verified, null, tint = Color(0xFF51BF86))
+                                    Icon(Icons.Outlined.AutoAwesome, null, tint = Purple)
                                     Column(Modifier.padding(start = 9.dp)) {
-                                        Text("좋은 흐름이에요!", color = Color(0xFF23A664), fontWeight = FontWeight.Bold)
                                         Text(
-                                            feedback.summary ?: "주의가 필요한 표현이 발견되지 않았습니다.",
-                                            color = SubtleInk,
-                                            fontSize = 11.sp
+                                            feedback.summary ?: "AI 분석 결과",
+                                            color = Purple,
+                                            fontWeight = FontWeight.Bold
                                         )
                                     }
                                 }

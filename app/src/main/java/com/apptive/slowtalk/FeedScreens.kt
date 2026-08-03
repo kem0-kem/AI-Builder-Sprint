@@ -737,6 +737,7 @@ fun WriteFeedScreen(
                                         Column(Modifier.padding(start = 9.dp)) {
                                             Text(
                                                 aiFeedback?.warningMessage
+                                                    ?: aiFeedback?.summary
                                                     ?: if (body.length < 30) {
                                                         "조금 더 들려주세요"
                                                     } else {
@@ -747,7 +748,7 @@ fun WriteFeedScreen(
                                                 } else if (body.length < 30) {
                                                     Purple
                                                 } else {
-                                                    Color(0xFF2FAE68)
+                                                    Purple
                                                 },
                                                 fontWeight = FontWeight.Bold
                                             )
