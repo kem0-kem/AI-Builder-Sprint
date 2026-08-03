@@ -47,6 +47,35 @@ Readiness는 실제 데이터베이스에 최소 쿼리를 실행하므로 `data
 서버는 `Ctrl+C`로 종료하고 PostgreSQL은 필요할 때 `docker compose stop postgres`로
 중지합니다.
 
+## Android 로컬 API 연결
+
+Android 에뮬레이터에서 로컬 백엔드에 연결하려면 저장소 루트의 `local.properties`에
+다음 값을 추가합니다. 이 파일은 Git에 커밋하지 않습니다.
+
+```properties
+API_BASE_URL=http://10.0.2.2:8000/api/v1/
+```
+
+`API_BASE_URL`을 생략하거나 빈 값으로 두면 debug 빌드는 위 에뮬레이터 주소를 기본값으로
+사용합니다. 실제 Android 기기에서는 `10.0.2.2` 대신 개발 PC의 LAN IPv4 주소를
+사용합니다. 예를 들어 PC 주소가 `192.168.0.20`이면 다음과 같이 설정합니다.
+
+```properties
+API_BASE_URL=http://192.168.0.20:8000/api/v1/
+```
+
+주소는 `/api/v1/`까지 포함해야 합니다. 끝의 `/`는 빌드된 앱에서 자동으로 하나로
+정규화됩니다. `-PAPI_BASE_URL=...` Gradle 속성을 함께 지정하면 해당 값이
+`local.properties`보다 우선합니다. REST와 WebSocket 연결은 동일한 기준 주소를
+사용하며, 로컬 HTTP cleartext 허용은 debug 빌드에만 적용됩니다.
+
+연결 설정을 검증하려면 저장소 루트에서 다음 명령을 실행합니다.
+
+```powershell
+.\gradlew.bat testDebugUnitTest
+.\gradlew.bat assembleDebug
+```
+
 ### 문제 해결
 
 - Docker 오류: Docker Desktop이 실행 중인지 확인하고 `docker info`를 실행합니다.
@@ -56,3 +85,7 @@ Readiness는 실제 데이터베이스에 최소 쿼리를 실행하므로 `data
   `python -m alembic upgrade head`를 다시 실행합니다.
 - AI 기능: 로컬 기본 설정에서는 의도적으로 비활성화됩니다. 핵심 CRUD 실행에 AI 키는
   필요하지 않습니다.
+- Android SDK를 찾지 못하는 경우: 기존 `local.properties`의 `sdk.dir`을 유지한 채
+  `API_BASE_URL` 줄만 추가하거나 `ANDROID_HOME`을 설치된 SDK 경로로 설정합니다.
+- 실제 기기에서 연결되지 않는 경우: PC와 기기가 같은 네트워크인지, FastAPI가
+  `0.0.0.0:8000`에서 실행 중인지, Windows 방화벽이 8000 포트를 허용하는지 확인합니다.

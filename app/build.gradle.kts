@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose") version "2.2.10"
@@ -21,8 +23,22 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        val apiBaseUrl = providers.gradleProperty("API_BASE_URL").orElse("").get()
-        val apiAuthToken = providers.gradleProperty("API_AUTH_TOKEN").orElse("").get()
+        val localProperties = Properties().apply {
+            val propertiesFile = rootProject.file("local.properties")
+            if (propertiesFile.isFile) {
+                propertiesFile.inputStream().use(::load)
+            }
+        }
+
+        fun configurationValue(name: String): String =
+            providers.gradleProperty(name).orNull
+                ?: localProperties.getProperty(name).orEmpty()
+
+        fun String.asBuildConfigString(): String =
+            replace("\\", "\\\\").replace("\"", "\\\"")
+
+        val apiBaseUrl = configurationValue("API_BASE_URL").asBuildConfigString()
+        val apiAuthToken = configurationValue("API_AUTH_TOKEN").asBuildConfigString()
         buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
         buildConfigField("String", "API_AUTH_TOKEN", "\"$apiAuthToken\"")
     }
@@ -63,6 +79,8 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.1")
+
+    testImplementation("junit:junit:4.13.2")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

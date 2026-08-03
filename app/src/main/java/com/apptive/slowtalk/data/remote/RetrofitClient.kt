@@ -1,5 +1,6 @@
 package com.apptive.slowtalk.data.remote
 
+import com.apptive.slowtalk.BuildConfig
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
@@ -10,9 +11,21 @@ import okhttp3.WebSocketListener
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 
+private const val DEFAULT_LOCAL_API_BASE_URL = "http://10.0.2.2:8000/api/v1/"
+
+internal fun normalizeBaseUrl(value: String): String =
+    value.trim().trimEnd('/') + "/"
+
+internal fun configuredBaseUrl(value: String): String =
+    normalizeBaseUrl(value.ifBlank { DEFAULT_LOCAL_API_BASE_URL })
+
+internal fun webSocketBaseUrl(apiBaseUrl: String): String =
+    normalizeBaseUrl(apiBaseUrl)
+        .replaceFirst("https://", "wss://")
+        .replaceFirst("http://", "ws://")
+
 object RetrofitClient {
-    // API가 완성되지 않았으므로 베이스 URL은 플레이스홀더로 설정합니다.
-    private const val BASE_URL = "https://api.example.com/" 
+    internal val baseUrl = configuredBaseUrl(BuildConfig.API_BASE_URL)
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -26,7 +39,7 @@ object RetrofitClient {
         .build()
 
     private val retrofit = Retrofit.Builder()
-        .baseUrl(BASE_URL)
+        .baseUrl(baseUrl)
         .client(okHttpClient)
         .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
         .build()
@@ -42,10 +55,7 @@ object RetrofitClient {
     val reportApi: ReportApi = retrofit.create(ReportApi::class.java)
 
     fun openChatWebSocket(chatRoomId: Int, listener: WebSocketListener): WebSocket {
-        val socketBaseUrl = BASE_URL
-            .replaceFirst("https://", "wss://")
-            .replaceFirst("http://", "ws://")
-            .trimEnd('/')
+        val socketBaseUrl = webSocketBaseUrl(baseUrl).trimEnd('/')
         val request = Request.Builder()
             .url("$socketBaseUrl/ws/chat/$chatRoomId")
             .build()
